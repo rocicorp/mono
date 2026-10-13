@@ -6,8 +6,16 @@ import {colorConsole} from '../../../../shared/src/logging.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import {normalizeZeroConfig} from '../../config/normalize.ts';
 import {getServerVersion, getZeroConfig} from '../../config/zero-config.ts';
-import {ProcessManager, runUntilKilled} from '../../services/life-cycle.ts';
-import {childWorker, type Worker} from '../../types/processes.ts';
+import {
+  ProcessManager,
+  runUntilKilled,
+  SelfDrain,
+} from '../../services/life-cycle.ts';
+import {
+  childWorker,
+  type DrainRequestedMessage,
+  type Worker,
+} from '../../types/processes.ts';
 import {createLogContext} from '../logging.ts';
 import {MAIN_URL} from '../worker-urls.ts';
 import {getTaskID} from './runtime.ts';
@@ -49,7 +57,7 @@ export async function runWorker(
   const config = normalizeZeroConfig(lc, cfg, env, defaultTaskID);
   const processes = new ProcessManager(lc, parent ?? process);
 
-  const {port, keepaliveTimeoutMs, lazyStartup} = config;
+  const {port, keepaliveTimeoutMs, lazyStartup, selfDrainDelayMs} = config;
   const serverVersion = getServerVersion(config);
   lc.info?.(`starting server${!serverVersion ? '' : `@${serverVersion}`} `, {
     protocolVersion: PROTOCOL_VERSION,
@@ -57,6 +65,18 @@ export async function runWorker(
     app: config.app,
     shard: config.shard,
     port: config.port,
+  });
+
+  const dispatcher = new ZeroDispatcher(
+    config,
+    lc,
+    {port, keepaliveTimeoutMs},
+    startZeroCache,
+    () => printStartupMessage(env),
+  );
+  const selfDrain = new SelfDrain(lc, parent ?? process, {
+    delayMs: selfDrainDelayMs,
+    onRequested: () => dispatcher.failHealthChecks(),
   });
 
   let zeroCache: Resolver<Worker> | undefined;
@@ -72,6 +92,9 @@ export async function runWorker(
           lc.info?.(`zero-cache ready (${performance.now() - startMs} ms)`);
         })
         .once('error', r.reject);
+      w.onMessageType<DrainRequestedMessage>('drainRequested', () =>
+        selfDrain.request(),
+      );
 
       processes.addWorker(w, 'user-facing', 'zero-cache');
     }
@@ -87,17 +110,7 @@ export async function runWorker(
   parent?.send(['ready', {ready: true}]);
 
   try {
-    await runUntilKilled(
-      lc,
-      parent ?? process,
-      new ZeroDispatcher(
-        config,
-        lc,
-        {port, keepaliveTimeoutMs},
-        startZeroCache,
-        () => printStartupMessage(env),
-      ),
-    );
+    await runUntilKilled(lc, parent ?? process, dispatcher);
   } catch (err) {
     processes.logErrorAndExit(err, 'main');
   } finally {

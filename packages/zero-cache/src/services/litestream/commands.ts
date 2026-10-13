@@ -491,6 +491,32 @@ function logRestoreDirectoryContents(
 }
 
 /**
+ * Returns the replica version and watermark of the local replica file, or
+ * `undefined` if it does not exist or cannot be read.
+ */
+export function readLocalReplica(
+  lc: LogContext,
+  replica: string,
+): {replicaVersion: string; watermark: string} | undefined {
+  if (!existsSync(replica)) {
+    return undefined;
+  }
+  let db: Database | undefined;
+  try {
+    db = new Database(lc, replica, {readonly: true});
+    const {replicaVersion, watermark} = getSubscriptionState(
+      new StatementRunner(db),
+    );
+    return {replicaVersion, watermark};
+  } catch (e) {
+    lc.warn?.(`unable to read the subscription state of ${replica}`, e);
+    return undefined;
+  } finally {
+    db?.close();
+  }
+}
+
+/**
  * Opens and validates the restored replica. Returns the open connection if
  * the replica is valid, which the caller must close; otherwise closes it and
  * returns `undefined`.

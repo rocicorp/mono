@@ -4,6 +4,7 @@ import type {Source} from '../../types/streams.ts';
 import type {ReservationFollowup} from '../change-streamer/change-streamer-http.ts';
 import type {ChangeStreamer} from '../change-streamer/change-streamer.ts';
 import type {Service} from '../service.ts';
+import type {SwitchoverOptions} from './drain-handler.ts';
 import {IncrementalSyncer} from './incremental-sync.ts';
 import {
   publishReplicationError,
@@ -105,6 +106,7 @@ export class ReplicatorService implements Replicator, Service {
     // IncrementalSyncer's first subscribe() so the replication-manager that
     // reserved the change log is the one that serves the subscription.
     initialConnection?: ReservationFollowup,
+    switchover?: SwitchoverOptions,
   ) {
     this.id = id;
     this.#lc = lc
@@ -123,6 +125,7 @@ export class ReplicatorService implements Replicator, Service {
       statusPublisher,
       replicationLagReadinessOptions,
       initialConnection,
+      switchover,
     );
   }
 

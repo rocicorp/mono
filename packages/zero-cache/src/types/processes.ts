@@ -25,6 +25,7 @@ export const MESSAGE_TYPES = {
   notify: 'notify',
   ready: 'ready',
   backupWatermarkUpdate: 'backupWatermakUpdate',
+  drainRequested: 'drainRequested',
   profile: 'profile',
   profileResponse: 'profileResponse',
   stop: 'stop',
@@ -56,6 +57,14 @@ export type ProfileResponse = {
 
 export type ProfileMessage = ['profile', ProfileRequest];
 export type ProfileResponseMessage = ['profileResponse', ProfileResponse];
+
+/**
+ * Sent by a worker (and relayed by `main` to the runner) to request that
+ * the server drain itself for a restart, e.g. by a view-syncer's replicator
+ * that has been granted permission to restore a new replica. See
+ * `SelfDrain`.
+ */
+export type DrainRequestedMessage = ['drainRequested', object];
 
 export type Message<Payload> = [keyof typeof MESSAGE_TYPES, Payload];
 

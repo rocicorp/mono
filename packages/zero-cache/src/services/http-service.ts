@@ -28,6 +28,7 @@ export class HttpService implements Service {
   readonly #init: (fastify: FastifyInstance) => void | Promise<void>;
 
   #ready = false;
+  #failHealthChecks = false;
 
   constructor(
     id: string,
@@ -58,13 +59,17 @@ export class HttpService implements Service {
   // run() is the lifecycle method called by the ServiceRunner.
   async start(): Promise<string> {
     this.#fastify.get('/', (_req, res) => {
-      if (this.#ready) {
+      if (this.#failHealthChecks) {
+        res.code(503).send('Draining');
+      } else if (this.#ready) {
         res.send('OK');
       }
     });
     this.#fastify.get('/keepalive', ({headers}, res) => {
       this.#heartbeatMonitor?.onHeartbeat(headers);
-      if (this.#ready) {
+      if (this.#failHealthChecks) {
+        res.code(503).send('Draining');
+      } else if (this.#ready) {
         res.send('OK');
       }
     });
@@ -81,6 +86,16 @@ export class HttpService implements Service {
   async run(): Promise<void> {
     await this.start();
     await this._state.stopped();
+  }
+
+  /**
+   * Responds to subsequent health checks (both "/" and "/keepalive") with a
+   * 503, e.g. to signal the container runner to stop routing to, and shut
+   * down, a server that is draining itself (see {@link SelfDrain}).
+   */
+  failHealthChecks() {
+    this._lc.info?.(`${this.id}: failing health checks to self drain`);
+    this.#failHealthChecks = true;
   }
 
   async stop(): Promise<void> {

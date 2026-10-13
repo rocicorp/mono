@@ -13,7 +13,7 @@ import type {Service} from '../service.ts';
 import type {PreSerializedBatch} from './broadcast.ts';
 import * as ErrorType from './error-type-enum.ts';
 import type {SnapshotMessage} from './snapshot-message.ts';
-import type {SubscribeDownstream} from './subscribe.ts';
+import type {LocalReplica, SubscribeDownstream} from './subscribe.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
 
@@ -178,6 +178,23 @@ export type SubscriberContext = {
    * subscribers as of protocol v8. `undefined` for older subscribers.
    */
   backfills?: BackfillRequest[] | undefined;
+
+  /**
+   * Whether the subscriber understands the `draining` status, i.e. it will
+   * switch over to another replication-manager when the current one shuts
+   * down. A draining replication-manager waits for drainable subscribers to
+   * leave before exiting.
+   */
+  drainable?: boolean | undefined;
+
+  /**
+   * Whether the subscriber is switching over from another subscription with
+   * a replica that it is currently serving. If the replica version is
+   * incompatible, such a subscriber is held (see {@link Status.restore})
+   * rather than being immediately rejected. Subscribers that are booting up
+   * never set this.
+   */
+  switchover?: boolean | undefined;
 };
 
 /**
@@ -192,6 +209,35 @@ export const statusSchema = v.object({
       lastTimings: changeSourceTimingsSchema.optional(),
       nextSendTimeMs: v.number(),
     })
+    .optional(),
+
+  /**
+   * Sent by a replication-manager that is shutting down to its (drainable)
+   * serving subscribers. The subscriber should switch over to another
+   * replication-manager (see {@link SubscriberContext.switchover}) while
+   * continuing to consume this subscription until the switchover succeeds.
+   */
+  draining: v.boolean().optional(),
+
+  /**
+   * Sent on a {@link SubscriberContext.switchover switchover} subscription
+   * to a replication-manager running an incompatible replica version.
+   * Rather than being immediately rejected with
+   * {@link ErrorType.WrongReplicaVersion}, the subscriber is held until it
+   * is granted permission to restore the replication-manager's backup,
+   * which limits the number of subscribers that are restoring (and thus not
+   * serving) at the same time.
+   *
+   * * `queued`: the subscriber is waiting for permission to restore. It
+   *   should continue consuming its existing subscription (if any).
+   * * `granted`: the subscriber should (gracefully) restart to restore a
+   *   new replica.
+   */
+  restore: v
+    .union(
+      v.object({state: v.literal('queued'), position: v.number()}),
+      v.object({state: v.literal('granted')}),
+    )
     .optional(),
 });
 
@@ -210,6 +256,12 @@ export type StatusMessage = v.Infer<typeof statusMessageSchema>;
 const subscriptionErrorSchema = v.object({
   type: v.number(), // ErrorType
   message: v.string().optional(),
+  /**
+   * The replica version of the replication-manager, sent with
+   * {@link ErrorType.WrongReplicaVersion} so that a subscriber with a newer
+   * replica can avoid restoring an older one.
+   */
+  replicaVersion: v.string().optional(),
 });
 
 export type SubscriptionError = v.Infer<typeof subscriptionErrorSchema>;
@@ -276,7 +328,17 @@ export interface ChangeStreamerService
    * until the client with that `taskID` subscribes, or if the snapshot
    * connection terminates.
    */
-  startSnapshotReservation(taskID: string): Promise<Source<SnapshotMessage>>;
+  startSnapshotReservation(
+    taskID: string,
+    opts?: {localReplica?: LocalReplica | undefined},
+  ): Promise<Source<SnapshotMessage>>;
+
+  /**
+   * Signals (drainable) serving subscribers to switch over to another
+   * replication-manager, and resolves when they have all disconnected.
+   * Subscribers continue to be served in the meantime.
+   */
+  drain?(): Promise<void>;
 
   /**
    * Informs the change-streamer of the watermark up to which the replica has

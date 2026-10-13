@@ -1,9 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import type {Enum} from '../../../../shared/src/enum.ts';
+import {Database} from '../../../../zqlite/src/db.ts';
 import {mapPostgresToLiteIndex} from '../../db/pg-to-lite.ts';
+import {StatementRunner} from '../../db/statements.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
-import type {Sized, Source} from '../../types/streams.ts';
+import type {Source} from '../../types/streams.ts';
 import type {DownloadStatus} from '../change-source/protocol/current.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import type {ReservationFollowup} from '../change-streamer/change-streamer-http.ts';
@@ -11,11 +13,18 @@ import {
   errorTypeToReadableName,
   PROTOCOL_VERSION,
   type ChangeStreamer,
+  type SubscriberContext,
 } from '../change-streamer/change-streamer.ts';
 import type * as ErrorType from '../change-streamer/error-type-enum.ts';
+import {WrongReplicaVersion} from '../change-streamer/error-type-enum.ts';
 import type {SubscribeDownstream} from '../change-streamer/subscribe.ts';
 import {RunningState} from '../running-state.ts';
 import type {CommitResult} from './change-processor.ts';
+import {
+  DrainHandler,
+  type Downstream,
+  type SwitchoverOptions,
+} from './drain-handler.ts';
 import {Notifier} from './notifier.ts';
 import {
   IndexingProgress,
@@ -27,12 +36,21 @@ import {
   type ReplicationLagReadinessOptions,
 } from './reporter/recorder.ts';
 import type {ReplicationReport} from './reporter/report-schema.ts';
+import {readReplicaBackfills} from './schema/backfilling.ts';
+import {getSubscriptionState} from './schema/replication-state.ts';
 import type {WriteWorkerClient} from './write-worker-client.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
 
 const MAX_WORKER_BATCH_MESSAGES = 256;
 const MAX_WORKER_BATCH_SIZE = 1024 * 1024;
+
+// The number of times to reconnect after being rejected by a
+// replication-manager with an older replica version (e.g. one that has yet
+// to be replaced by a resync), before accepting the rejection and restarting
+// (e.g. if the upstream was legitimately replaced by one with a lower replica
+// version).
+const MAX_OLDER_REPLICA_VERSION_REJECTIONS = 20;
 
 /**
  * The {@link IncrementalSyncer} manages a logical replication stream from upstream,
@@ -55,6 +73,11 @@ export class IncrementalSyncer {
   // subsequent (re)connection goes through #changeStreamer.subscribe().
   #initialConnection: ReservationFollowup | undefined;
 
+  // Only set for serving replicas that switch over between
+  // replication-managers.
+  readonly #drainHandler: DrainHandler | undefined;
+  #olderReplicaVersionRejections = 0;
+
   readonly #state = new RunningState('IncrementalSyncer');
 
   readonly #replicationEvents = getOrCreateCounter(
@@ -73,6 +96,7 @@ export class IncrementalSyncer {
     statusPublisher: ReplicationStatusPublisher | null,
     replicationLagReadinessOptions: ReplicationLagReadinessOptions = {},
     initialConnection?: ReservationFollowup,
+    switchover?: SwitchoverOptions,
   ) {
     this.#lc = lc;
     this.#taskID = taskID;
@@ -87,6 +111,14 @@ export class IncrementalSyncer {
       replicationLagReadinessOptions,
     );
     this.#initialConnection = initialConnection;
+    // Only serving replicas switch over between replication-managers. In
+    // particular, the in-RM backup-replicator never does.
+    this.#drainHandler =
+      mode === 'serving' && switchover
+        ? new DrainHandler(lc, changeStreamer, this.#state, switchover, () =>
+            this.#committedContext(switchover.replicaFile),
+          )
+        : undefined;
   }
 
   ready(): Promise<void> {
@@ -116,29 +148,30 @@ export class IncrementalSyncer {
       const {replicaVersion, watermark, backfills} =
         await this.#worker.getSubscriptionState();
 
-      let downstream: Source<Sized<SubscribeDownstream>> | undefined;
+      let downstream: Downstream | undefined;
       let unregister = () => {};
       let err: unknown | undefined;
 
       try {
-        const ctx = {
-          protocolVersion: PROTOCOL_VERSION,
-          taskID: this.#taskID,
-          id: this.#id,
-          mode: this.#mode,
-          watermark,
+        const ctx = this.#subscriberContext(
           replicaVersion,
+          watermark,
           backfills,
-        };
+        );
+        // A successful switchover has already established the subscription
+        // on a new connection.
+        const switched = this.#drainHandler?.getNextConnection();
         // The first connection reuses the still-open reservation connection
         // (if any) from the backup restore, so the replication-manager that
         // reserved the change log is the one that serves the subscription.
         // Every reconnect after that opens a fresh connection.
         const initialConnection = this.#initialConnection;
         this.#initialConnection = undefined;
-        downstream = initialConnection
-          ? await initialConnection.subscribe(ctx)
-          : await this.#changeStreamer.subscribe(ctx);
+        downstream =
+          switched ??
+          (initialConnection
+            ? await initialConnection.subscribe(ctx)
+            : await this.#changeStreamer.subscribe(ctx));
         unregister = this.#state.cancelOnStop(downstream);
         this.#statusPublisher?.publish(
           lc,
@@ -190,7 +223,38 @@ export class IncrementalSyncer {
           }
         };
 
+        // Whether the current transaction is being skipped.
+        let skipping = false;
+
+        // A subscription established by a switchover starts at the
+        // watermark at which it was requested, and may thus include
+        // transactions that were since committed from the previous
+        // subscription.
+        const shouldSkip = (message: SubscribeDownstream) => {
+          const type = message[0];
+          if (type === 'begin' && message[2].commitWatermark <= watermark) {
+            lc.debug?.(
+              `skipping committed transaction ${message[2].commitWatermark}`,
+            );
+            skipping = true;
+          }
+          if (
+            skipping &&
+            (type === 'begin' ||
+              type === 'data' ||
+              type === 'commit' ||
+              type === 'rollback')
+          ) {
+            skipping = type !== 'commit' && type !== 'rollback';
+            return true;
+          }
+          return false;
+        };
+
         for await (const {data: message, size} of downstream) {
+          if (shouldSkip(message)) {
+            continue;
+          }
           // Only reset backoff after receiving an actual message.
           this.#state.resetBackoff();
 
@@ -202,7 +266,11 @@ export class IncrementalSyncer {
               });
               break;
             case 'status': {
-              const {lagReport} = message[1];
+              const {lagReport, draining} = message[1];
+              this.#olderReplicaVersionRejections = 0;
+              if (draining) {
+                this.#drainHandler?.onChangeStreamerDrain(downstream);
+              }
               if (lagReport) {
                 const report: ReplicationReport = {
                   nextSendTimeMs: lagReport.nextSendTimeMs,
@@ -218,9 +286,30 @@ export class IncrementalSyncer {
               break;
             }
             case 'error': {
+              const {
+                type,
+                message: msg,
+                replicaVersion: rmVersion,
+              } = message[1];
+              if (
+                type === WrongReplicaVersion &&
+                rmVersion !== undefined &&
+                rmVersion < replicaVersion &&
+                this.#olderReplicaVersionRejections++ <
+                  MAX_OLDER_REPLICA_VERSION_REJECTIONS
+              ) {
+                // The replication-manager is behind this replica (e.g. it
+                // has yet to be replaced by a resync). Rather than restoring
+                // its older replica, reconnect (with backoff), which may
+                // reach a different replication-manager.
+                lc.warn?.(
+                  `replication-manager is at an older replica version ` +
+                    `(${rmVersion}) than ${replicaVersion}. reconnecting`,
+                );
+                break;
+              }
               // Signal from the replication-manager that the view-syncer must
               // shut down and restore a new backup from litestream.
-              const {type, message: msg} = message[1];
               this.stop(
                 lc,
                 // Note: The AbortError indicates a clean / intentional shutdown.
@@ -322,6 +411,10 @@ export class IncrementalSyncer {
         unregister();
         this.#statusPublisher?.stop();
       }
+      if (err === undefined && this.#drainHandler?.hasNextConnection) {
+        continue; // Switched over to a new subscription; no backoff.
+      }
+      this.#drainHandler?.getNextConnection()?.cancel();
       await this.#state.backoff(lc, err);
     }
     lc.info?.('IncrementalSyncer stopped');
@@ -359,6 +452,41 @@ export class IncrementalSyncer {
 
   subscribe(): Source<ReplicaState> {
     return this.#notifier.subscribe();
+  }
+
+  #subscriberContext(
+    replicaVersion: string,
+    watermark: string,
+    backfills: SubscriberContext['backfills'],
+  ): SubscriberContext {
+    return {
+      protocolVersion: PROTOCOL_VERSION,
+      taskID: this.#taskID,
+      id: this.#id,
+      mode: this.#mode,
+      watermark,
+      replicaVersion,
+      backfills,
+      ...(this.#drainHandler ? {drainable: true} : {}),
+    };
+  }
+
+  /**
+   * Returns the subscriber context as of the last committed transaction,
+   * read from the replica file (i.e. not from the write worker, whose
+   * connection may be in the middle of a transaction).
+   */
+  #committedContext(replicaFile: string): SubscriberContext {
+    const db = new Database(this.#lc, replicaFile, {readonly: true});
+    try {
+      const {replicaVersion, watermark, backfills} = db.transaction(() => ({
+        ...getSubscriptionState(new StatementRunner(db)),
+        backfills: readReplicaBackfills(db),
+      }));
+      return this.#subscriberContext(replicaVersion, watermark, backfills);
+    } finally {
+      db.close();
+    }
   }
 
   stop(lc: LogContext, err?: unknown) {

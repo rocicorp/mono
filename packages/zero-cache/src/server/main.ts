@@ -17,6 +17,7 @@ import {
   childWorker,
   parentWorker,
   singleProcessMode,
+  type DrainRequestedMessage,
   type ProfileMessage,
   type ProfileResponseMessage,
   type Worker,
@@ -24,8 +25,8 @@ import {
 import {
   createNotifierFrom,
   handleSubscriptionsFrom,
-  type ReplicaFileMode,
   subscribeTo,
+  type ReplicaFileMode,
 } from '../workers/replicator.ts';
 import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
@@ -133,10 +134,15 @@ export default async function runWorker(
   if (runChangeStreamer) {
     const {promise: changeStreamerReady, resolve: changeStreamerStarted} =
       resolver();
-    changeStreamer = loadWorker(CHANGE_STREAMER_URL, 'supporting').once(
-      'message',
-      changeStreamerStarted,
-    );
+    // In a dedicated replication-manager (i.e. no syncers), the
+    // change-streamer is the user-facing worker: it receives the SIGTERM
+    // first so that it can drain subscribers before other supporting
+    // workers are stopped. When syncers run in the same task, the
+    // change-streamer supports them and thus must outlive them.
+    changeStreamer = loadWorker(
+      CHANGE_STREAMER_URL,
+      numSyncers > 0 ? 'supporting' : 'user-facing',
+    ).once('message', changeStreamerStarted);
     // Wait for the change-streamer to be ready to guarantee that a replica
     // file is present.
     await changeStreamerReady;
@@ -172,6 +178,11 @@ export default async function runWorker(
     ).once('message', () => {
       subscribeTo(lc, replicator);
       resolve();
+    });
+    // Relay drain requests to the runner, which coordinates the SelfDrain.
+    replicator.onMessageType<DrainRequestedMessage>('drainRequested', msg => {
+      lc.info?.(`drain requested by the replicator`);
+      parent.send<DrainRequestedMessage>(['drainRequested', msg]);
     });
     await replicaReady;
 

@@ -50,8 +50,10 @@ import {
   type SubscriberContext,
   type WatermarkedChange,
 } from './change-streamer.ts';
+import {DrainTracker} from './drain-tracker.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {Forwarder} from './forwarder.ts';
+import {RestoreAdmission} from './restore-admission.ts';
 import {
   AutoResetSignal,
   ensureReplicationConfig,
@@ -89,6 +91,7 @@ import {
   type PurgeLock,
   type TuningOptions as StorerOptions,
 } from './storer.ts';
+import type {LocalReplica} from './subscribe.ts';
 import {Subscriber} from './subscriber.ts';
 import {UpstreamAcker} from './upstream-acker.ts';
 
@@ -173,6 +176,14 @@ export type TuningOptions = StorerOptions & {
   pgChangeLogBehindSlot: boolean;
   flowControlConsensusTimeoutProportion: number;
   flowControlSlowSubscriberGracePeriodMs?: number | undefined;
+  /**
+   * The target number of subscribers that may be replacing their replica at
+   * the same time, which limits when subscribers switching over from an
+   * incompatible replication-manager are granted permission to restart (see
+   * {@link RestoreAdmission}). Defaults to 1. Only applicable when backups
+   * are configured.
+   */
+  maxConcurrentSwitchoverRestores?: number | undefined;
   sqliteCatchup?: SQLiteCatchupOptions | undefined;
   /**
    * Supplied when `sqliteChangeLogMode != off`, i.e. this is the gate on the
@@ -435,6 +446,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   readonly #pgChangeLogEnabled: boolean;
   readonly #forwarder: Forwarder;
   readonly #reservations: SnapshotReservations | undefined;
+  readonly #restoreAdmission: RestoreAdmission | undefined;
+  readonly #drainTracker: DrainTracker;
   readonly #replicationStatusPublisher: ReplicationStatusPublisher;
   readonly #sqliteCatchupOptions: SQLiteCatchupOptions | undefined;
   readonly #changeLogWriter: SQLiteChangeLogWriter | undefined;
@@ -623,11 +636,23 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           })
         : undefined;
     this.#reservations = backupConfig
-      ? new SnapshotReservations(lc, backupConfig, taskID => {
-          this.#readRouter?.release(taskID);
-          this.#purgeScheduler?.resume(taskID);
+      ? new SnapshotReservations(lc, backupConfig, {
+          onClose: taskID => {
+            this.#readRouter?.release(taskID);
+            this.#purgeScheduler?.resume(taskID);
+          },
+          // Note: A reservation that is replaced by a retry from the same
+          // task continues to hold its restore capacity.
+          onEnd: taskID => this.#restoreAdmission?.reservationClosed(taskID),
         })
       : undefined;
+    this.#restoreAdmission = backupConfig
+      ? new RestoreAdmission(lc, {
+          replicaVersion,
+          maxConcurrentRestores: opts.maxConcurrentSwitchoverRestores ?? 1,
+        })
+      : undefined;
+    this.#drainTracker = new DrainTracker(lc);
     this.#replicationStatusPublisher = replicationStatusPublisher;
     this.#changeLogWriter = opts.sqliteChangeLogWriter
       ? new SQLiteChangeLogWriter(lc, {
@@ -1058,145 +1083,237 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       {
         wsBatched,
         lagReportingDisabled: this.#lagReportingDisabled.promise,
+        drainable: mode === 'serving' && ctx.drainable,
         ...this.#backfills.subscriberOptions(lc, ctx),
       },
     );
     this.#backfills.register(subscriber, downstream);
+    try {
+      if (ctx.switchover && this.#drainTracker.draining) {
+        // A draining replication-manager is not expected to receive new
+        // connections (e.g. it is removed from a Service's endpoints before
+        // it is signaled to drain), and a switchover to it cannot succeed.
+        // Close it (without an error) before doing any work, so that the
+        // subscriber retries the switchover elsewhere.
+        lc.warn?.(
+          `rejecting switchover subscriber ${id}: ` +
+            `this replication-manager is draining`,
+        );
+        subscriber.close();
+      } else if (replicaVersion !== this.#replicaVersion) {
+        if (
+          ctx.switchover &&
+          mode === 'serving' &&
+          this.#restoreAdmission &&
+          !this.#drainTracker.draining &&
+          replicaVersion < this.#replicaVersion
+        ) {
+          // While legacy subscribers are immediately rejected with
+          // WrongReplicaVersion, switchover-capable subscribers are still
+          // being served by another replication-manager. RestoreAdmission
+          // holds the connection until granting permission to restart and
+          // restore. This limits the number of concurrently restoring
+          // subscribers to avoid unavailability.
+          lc.info?.(
+            `holding switchover subscriber ${subscriber.id} at replica version ` +
+              `${replicaVersion} for permission to restore ${this.#replicaVersion}`,
+          );
+          const ticket = this.#restoreAdmission.request({
+            onQueued: position =>
+              subscriber.sendControlStatus({
+                tag: 'status',
+                restore: {state: 'queued', position},
+              }),
+            onGranted: () =>
+              subscriber.sendControlStatus({
+                tag: 'status',
+                restore: {state: 'granted'},
+              }),
+          });
+          cleanupSubscriber = () => ticket.release();
+        } else {
+          lc.warn?.(
+            `rejecting subscriber at replica version ${replicaVersion}`,
+          );
+          subscriber.close(
+            ErrorType.WrongReplicaVersion,
+            `current replica version is ${
+              this.#replicaVersion
+            } (requested ${replicaVersion})`,
+            {replicaVersion: this.#replicaVersion},
+          );
+        }
+      } else {
+        lc.info?.(`adding subscriber ${subscriber.id}`);
+        this.#drainTracker.register(subscriber, downstream);
+        // A subscriber that restored a replacement replica continues to count
+        // toward restore capacity until it has caught up.
+        const release = this.#restoreAdmission?.reservationSubscribed(
+          ctx.taskID,
+        );
+        if (release) {
+          void subscriber.caughtUp.then(release);
+          downstream.addCloseHandler(release);
+        }
+        cleanupSubscriber = await this.#startCatchup(lc, ctx, subscriber);
+      }
+    } catch (e) {
+      // Close the subscription (for in-process callers, whose downstream is
+      // not otherwise closed), which runs the cleanup registered below.
+      downstream.fail(e instanceof Error ? e : new Error(String(e)));
+      throw e;
+    } finally {
+      // Register the cleanup now that `cleanupSubscriber` reflects where the
+      // subscriber was registered. If `downstream` is already closed (e.g. a
+      // client disconnect during the catchup await, or a failure),
+      // `addCloseHandler` runs the cleanup immediately.
+      downstream.addCloseHandler(() => cleanupSubscriber());
+
+      // Any snapshot reservation held by this task can be closed now that it
+      // is subscribed to the change stream (or failed to subscribe).
+      this.#reservations?.close(ctx.taskID);
+    }
+    return downstream;
+  }
+
+  /**
+   * Routes the catchup of an accepted `subscriber` to the SQLite or PG change
+   * log (or rejects it), and returns the function that removes the subscriber
+   * from wherever it was registered. If routing fails partway, any partial
+   * registration is removed before the error is rethrown.
+   */
+  async #startCatchup(
+    lc: LogContext,
+    ctx: SubscriberContext,
+    subscriber: Subscriber,
+  ): Promise<() => void> {
     const removeFromForwarder = () => {
       lc.info?.(`removing subscriber ${subscriber.id}`);
       this.#forwarder.remove(subscriber);
     };
-    cleanupSubscriber = removeFromForwarder;
-    if (replicaVersion !== this.#replicaVersion) {
-      lc.warn?.(`rejecting subscriber at replica version ${replicaVersion}`);
-      subscriber.close(
-        ErrorType.WrongReplicaVersion,
-        `current replica version is ${
-          this.#replicaVersion
-        } (requested ${replicaVersion})`,
+    const catchupFromPG = () => {
+      assert(
+        this.#pgChangeLogEnabled,
+        'cannot catch up from a disabled PG change log',
       );
-    } else {
-      lc.info?.(`adding subscriber ${subscriber.id}`);
-
-      const catchupFromPG = () => {
-        assert(
-          this.#pgChangeLogEnabled,
-          'cannot catch up from a disabled PG change log',
-        );
-        // Keep the existing PG registration/catchup lockstep unchanged when
-        // SQLite was not selected before Forwarder.add().
-        cleanupSubscriber = removeFromForwarder;
+      // Keep the existing PG registration/catchup lockstep unchanged when
+      // SQLite was not selected before Forwarder.add().
+      try {
         this.#forwarder.add(subscriber);
-        this.#storer.catchup(subscriber, mode);
-      };
-      const sqliteDecision = this.#selectSQLiteCatchup(lc, ctx);
-      if (!sqliteDecision) {
-        catchupFromPG();
-      } else if (sqliteDecision.kind === 'rejected') {
-        lc.warn?.(
-          `${
-            sqliteDecision.terminal ? 'rejecting' : 'ending'
-          } subscription for ${ctx.id}: ${sqliteDecision.message}`,
-        );
-        if (sqliteDecision.terminal) {
-          subscriber.close(ErrorType.WatermarkTooOld, sqliteDecision.message);
-        } else {
-          subscriber.close();
-        }
-      } else {
-        const {catchup, reason, coverage, logWarm} = sqliteDecision;
-        cleanupSubscriber = () => catchup.remove(subscriber);
-        const registration = await catchup.catchup(
-          subscriber,
-          () => this.#captureRequiredHead(),
-          {logWarm},
-        );
-        switch (registration.kind) {
-          case 'registered':
-            lc.debug?.(
-              `serving ${ctx.id} from SQLite catchup`,
-              ...(coverage ? [{sqliteChangeLogCoverage: coverage}] : []),
-            );
-            this.#recordCatchupRoute('sqlite', reason);
-            break;
-          case 'uncovered':
-            if (this.#pgChangeLogEnabled) {
-              lc.info?.(
-                `serving ${ctx.id} from PG catchup: subscriber watermark ` +
-                  `${ctx.watermark} is below the SQLite change-log minimum ` +
-                  registration.minWatermark,
-              );
-              this.#recordCatchupRoute('pg', 'watermark-uncovered');
-              catchupFromPG();
-            } else {
-              const message =
-                `earliest supported watermark is ` +
-                `${registration.minWatermark} (requested ${ctx.watermark})`;
-              lc.warn?.(
-                `rejecting subscriber at watermark ${ctx.watermark}: ` +
-                  `the SQLite change log starts at ` +
-                  `${registration.minWatermark} and the PG change log is disabled`,
-              );
-              this.#recordCatchupRoute('none', 'watermark-uncovered');
-              subscriber.close(ErrorType.WatermarkTooOld, message);
-            }
-            break;
-          case 'declined':
-            // Registration failed before the subscriber was committed to
-            // SQLite. Use PG when enabled; otherwise end this subscription so
-            // it retries. The coordinator has already tripped the breaker,
-            // which keeps the retry off SQLite for the cooldown; it is
-            // deliberately not closed here, since closing it would abort the
-            // catchups of every other subscriber it is serving.
-            if (this.#pgChangeLogEnabled) {
-              lc.error?.(
-                `serving ${ctx.id} from PG catchup: SQLite catchup ` +
-                  `registration failed`,
-                registration.error,
-              );
-              this.#recordCatchupRoute('pg', 'registration-failed');
-              catchupFromPG();
-            } else {
-              lc.error?.(
-                `ending subscription for ${ctx.id} to retry SQLite catchup: ` +
-                  `registration failed and the PG change log is disabled`,
-                registration.error,
-              );
-              this.#recordCatchupRoute('none', 'registration-failed');
-              subscriber.fail(registration.error);
-            }
-            break;
-          case 'handled':
-            // The coordinator closed or failed the subscriber itself, so
-            // there is nothing left to route. Still counted, so that the
-            // route counter sums to the number of subscriptions.
-            this.#recordCatchupRoute('sqlite', 'registration-handled');
-            break;
-          default:
-            unreachable(registration);
-        }
+        this.#storer.catchup(subscriber, ctx.mode);
+      } catch (e) {
+        removeFromForwarder();
+        throw e;
       }
-    }
-    // Register the cleanup now that `cleanupSubscriber` points at the real
-    // cleanup and the subscriber is registered. If `downstream` was already
-    // cancelled (e.g. a client disconnect during the catchup await above),
-    // `addCloseHandler` runs the cleanup immediately, and so it must not be
-    // called until cleanupSubscriber is properly set up.
-    downstream.addCloseHandler(() => cleanupSubscriber());
+      return removeFromForwarder;
+    };
 
-    // Any snapshot reservation held by this task can be closed now that
-    // it is subscribed to the change stream.
-    this.#reservations?.close(ctx.taskID);
-    return downstream;
+    const sqliteDecision = this.#selectSQLiteCatchup(lc, ctx);
+    if (!sqliteDecision) {
+      return catchupFromPG();
+    }
+    if (sqliteDecision.kind === 'rejected') {
+      lc.warn?.(
+        `${
+          sqliteDecision.terminal ? 'rejecting' : 'ending'
+        } subscription for ${ctx.id}: ${sqliteDecision.message}`,
+      );
+      if (sqliteDecision.terminal) {
+        subscriber.close(ErrorType.WatermarkTooOld, sqliteDecision.message);
+      } else {
+        subscriber.close();
+      }
+      return () => {};
+    }
+
+    const {catchup, reason, coverage, logWarm} = sqliteDecision;
+    const removeFromSQLite = () => catchup.remove(subscriber);
+    let registration;
+    try {
+      registration = await catchup.catchup(
+        subscriber,
+        () => this.#captureRequiredHead(),
+        {logWarm},
+      );
+    } catch (e) {
+      removeFromSQLite();
+      throw e;
+    }
+    switch (registration.kind) {
+      case 'registered':
+        lc.debug?.(
+          `serving ${ctx.id} from SQLite catchup`,
+          ...(coverage ? [{sqliteChangeLogCoverage: coverage}] : []),
+        );
+        this.#recordCatchupRoute('sqlite', reason);
+        return removeFromSQLite;
+      case 'uncovered':
+        if (this.#pgChangeLogEnabled) {
+          lc.info?.(
+            `serving ${ctx.id} from PG catchup: subscriber watermark ` +
+              `${ctx.watermark} is below the SQLite change-log minimum ` +
+              registration.minWatermark,
+          );
+          this.#recordCatchupRoute('pg', 'watermark-uncovered');
+          return catchupFromPG();
+        } else {
+          const message =
+            `earliest supported watermark is ` +
+            `${registration.minWatermark} (requested ${ctx.watermark})`;
+          lc.warn?.(
+            `rejecting subscriber at watermark ${ctx.watermark}: ` +
+              `the SQLite change log starts at ` +
+              `${registration.minWatermark} and the PG change log is disabled`,
+          );
+          this.#recordCatchupRoute('none', 'watermark-uncovered');
+          subscriber.close(ErrorType.WatermarkTooOld, message);
+          return removeFromSQLite;
+        }
+      case 'declined':
+        // Registration failed before the subscriber was committed to
+        // SQLite. Use PG when enabled; otherwise end this subscription so
+        // it retries. The coordinator has already tripped the breaker,
+        // which keeps the retry off SQLite for the cooldown; it is
+        // deliberately not closed here, since closing it would abort the
+        // catchups of every other subscriber it is serving.
+        if (this.#pgChangeLogEnabled) {
+          lc.error?.(
+            `serving ${ctx.id} from PG catchup: SQLite catchup ` +
+              `registration failed`,
+            registration.error,
+          );
+          this.#recordCatchupRoute('pg', 'registration-failed');
+          return catchupFromPG();
+        } else {
+          lc.error?.(
+            `ending subscription for ${ctx.id} to retry SQLite catchup: ` +
+              `registration failed and the PG change log is disabled`,
+            registration.error,
+          );
+          this.#recordCatchupRoute('none', 'registration-failed');
+          subscriber.fail(registration.error);
+          return removeFromSQLite;
+        }
+      case 'handled':
+        // The coordinator closed or failed the subscriber itself, so
+        // there is nothing left to route. Still counted, so that the
+        // route counter sums to the number of subscriptions.
+        this.#recordCatchupRoute('sqlite', 'registration-handled');
+        return removeFromSQLite;
+      default:
+        unreachable(registration);
+    }
   }
 
   async startSnapshotReservation(
     taskID: string,
+    {localReplica}: {localReplica?: LocalReplica | undefined} = {},
   ): Promise<Source<SnapshotMessage>> {
     if (!this.#reservations) {
       throw new Error('backups are not configured');
     }
     const downstream = this.#reservations.open(taskID);
+    this.#restoreAdmission?.reservationOpened(taskID, localReplica);
 
     try {
       // Wait for an in-flight SQLite purge batch before reading and
@@ -1225,6 +1342,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       downstream.cancel();
       throw e;
     }
+  }
+
+  drain(): Promise<void> {
+    return this.#drainTracker.drain();
   }
 
   trackBackupWatermark(watermark: string) {
@@ -1336,6 +1457,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           backupWatermark,
           source,
         );
+        this.#restoreAdmission?.reservationConfirmed(taskID, backupWatermark);
       } else {
         // PG cannot catch a restored replica up from this backup yet. Keep
         // the reservation pending until a later backup moves the durable
@@ -1527,6 +1649,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
   async stop(err?: unknown) {
     this.#state.stop(this.#lc, err);
+    // Nothing is served once stopped.
+    this.#drainTracker.stop();
     // No-op if already resolved by run().
     this.#lagReportingDisabled.resolve(false);
     this.#stream?.changes.cancel();

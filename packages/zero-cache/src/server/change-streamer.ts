@@ -76,6 +76,7 @@ export default async function runWorker(
       backPressureLimitHeapProportion,
       flowControlConsensusTimeoutProportion,
       flowControlSlowSubscriberGracePeriodSeconds,
+      maxConcurrentSwitchoverRestores,
       pgChangeLogEnabled,
       sqliteChangeLogMode,
       sqliteChangeLogReadPercent,
@@ -271,6 +272,7 @@ export default async function runWorker(
             flowControlSlowSubscriberGracePeriodSeconds > 0
               ? flowControlSlowSubscriberGracePeriodSeconds * 1000
               : undefined,
+          maxConcurrentSwitchoverRestores,
           statementTimeoutMs: change.statementTimeoutMs,
           changeLogBatchSize: change.logBatchSize,
           sqliteCatchup: {

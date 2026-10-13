@@ -27,6 +27,7 @@ import {
   runUntilKilled,
 } from '../services/life-cycle.ts';
 import {
+  readLocalReplica,
   startReplicaBackupProcess,
   tryRestore,
   type RestoreAttempt,
@@ -51,6 +52,7 @@ import {
 import {
   parentWorker,
   singleProcessMode,
+  type DrainRequestedMessage,
   type Worker,
 } from '../types/processes.ts';
 import {installProfileHandler} from '../types/profiler.ts';
@@ -201,6 +203,15 @@ export default async function runWorker(
       maxReadinessDelayMs,
     },
     initialConnection,
+    // View-syncers (i.e. with a remote change-streamer) switch over to
+    // another replication-manager when theirs drains.
+    runningLocalChangeStreamer
+      ? undefined
+      : {
+          onRestoreGranted: () =>
+            parent.send<DrainRequestedMessage>(['drainRequested', {}]),
+          replicaFile: dbPath,
+        },
   );
 
   setUpMessageHandlers(lc, replicator, parent);
@@ -352,6 +363,13 @@ function observeSQLiteFileBytes(
 
 const RETRY_INTERVAL_MS = 3000;
 
+// The number of times a view-syncer retries a snapshot reservation from a
+// replication-manager with an older replica version than its local replica
+// (e.g. a not-yet-terminated replication-manager during a resync rollout),
+// before accepting the older version (e.g. if the upstream was legitimately
+// replaced by one with a lower replica version).
+const MAX_OLDER_REPLICA_VERSION_RETRIES = 20;
+
 // View-syncers wait indefinitely for the replication-manager to publish a
 // restorable backup. On a fresh stack the first backup is not durable until
 // the initial sync completes and litestream uploads the initial snapshot,
@@ -364,7 +382,8 @@ const RETRY_INTERVAL_MS = 3000;
 // restored, still open, so the caller can hand it to IncrementalSyncer's
 // first subscribe() via `followup.subscribe()`: the same replication-manager
 // that reserved the change log is the one that serves the subscription.
-async function restoreReplica(
+/** Exported for testing. */
+export async function restoreReplica(
   lc: LogContext,
   config: NormalizedZeroConfig,
   changeStreamer: SnapshotReserver,
@@ -373,13 +392,38 @@ async function restoreReplica(
   let backupURL: string | undefined;
   let result: RestoreResult | undefined;
   const progress = new RestoreProgressReporter(lc, config.replica.file);
+  let olderReplicaVersionRetries = 0;
+  // Describing the local replica (if any) allows the replication-manager to
+  // account for replicas that are being replaced (see RestoreAdmission). It
+  // is read once, before the first attempt, as a failed attempt may have
+  // already deleted it; it continues to describe the replica being replaced
+  // (and the version not to downgrade from) on every retry.
+  const localReplica = readLocalReplica(lc, config.replica.file);
+  const localReplicaVersion = localReplica?.replicaVersion;
   try {
     for (;;) {
       const {reserved, followup} = await reserveAndGetSnapshotStatus(
         lc,
         config.taskID,
         changeStreamer,
+        localReplica,
       );
+      if (
+        localReplicaVersion !== undefined &&
+        reserved.replicaVersion < localReplicaVersion &&
+        olderReplicaVersionRetries++ < MAX_OLDER_REPLICA_VERSION_RETRIES
+      ) {
+        // Don't replace a newer local replica with an older one, e.g. from
+        // a replication-manager that has yet to be replaced by a resync.
+        followup.cancel();
+        lc.info?.(
+          `replication-manager is at an older replica version ` +
+            `(${reserved.replicaVersion}) than the local replica ` +
+            `(${localReplicaVersion}). retrying in ${RETRY_INTERVAL_MS / 1000} seconds`,
+        );
+        await sleep(RETRY_INTERVAL_MS);
+        continue;
+      }
       // The backupURL comes from the replication-manager's snapshot response.
       ({backupURL} = reserved);
       const litestream: LitestreamConfig = {...config.litestream, backupURL};

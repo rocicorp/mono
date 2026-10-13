@@ -40,9 +40,25 @@ export type SnapshotStatus = v.Infer<typeof snapshotStatusSchema>;
 // Upstream (view-syncer → replication-manager) — application control messages.
 // ---------------------------------------------------------------------------
 
+/**
+ * The state of the replica on the subscriber's disk, if any. This allows the
+ * replication-manager to distinguish a subscriber that is replacing its
+ * replica (i.e. one that was serving, see `RestoreAdmission`) from one that
+ * is restoring onto an empty disk.
+ */
+export const localReplicaSchema = v.object({
+  replicaVersion: v.string(),
+  watermark: v.string(),
+});
+
+export type LocalReplica = v.Infer<typeof localReplicaSchema>;
+
 export const reserveSnapshotMessageSchema = v.tuple([
   v.literal('reserve-snapshot'),
-  v.object({taskID: v.string()}),
+  v.object({
+    taskID: v.string(),
+    localReplica: localReplicaSchema.optional(),
+  }),
 ]);
 
 /**
@@ -72,6 +88,10 @@ export const subscribeContextSchema = v.object({
    * it is only absent from v7 subscribers.
    */
   backfills: v.array(backfillRequestSchema).optional(),
+  /** See `SubscriberContext.drainable`. */
+  drainable: v.boolean().optional(),
+  /** See `SubscriberContext.switchover`. */
+  switchover: v.boolean().optional(),
 });
 
 export type SubscribeContext = v.Infer<typeof subscribeContextSchema>;

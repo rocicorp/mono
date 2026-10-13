@@ -64,6 +64,12 @@ export type SubscriberOptions = {
    * readiness to serve traffic).
    */
   lagReportingDisabled?: Promise<boolean> | undefined;
+
+  /**
+   * Whether the subscriber switches over to another replication-manager
+   * when this one drains (see `DrainTracker`).
+   */
+  drainable?: boolean | undefined;
 };
 
 /**
@@ -107,6 +113,7 @@ export class Subscriber {
   readonly #protocolVersion: number;
   readonly id: string;
   readonly mode: ReplicatorMode;
+  readonly drainable: boolean;
   readonly #downstream: Subscription<string | PreSerializedBatch>;
   readonly #wsBatched: boolean;
   #watermark: string;
@@ -126,6 +133,10 @@ export class Subscriber {
   readonly #onBackfillIgnored: ((columns: string[]) => void) | undefined;
   readonly #lagReportingDisabled: Promise<boolean> | undefined;
   #aligned = false;
+  // The watermark to be acked for the subscriber to be caught up, set when
+  // it is aligned.
+  #caughtUpWatermark: string | undefined;
+  readonly #caughtUp = resolver<void>();
 
   constructor(
     protocolVersion: number,
@@ -138,6 +149,7 @@ export class Subscriber {
     this.#protocolVersion = protocolVersion;
     this.id = id;
     this.mode = mode;
+    this.drainable = options.drainable ?? false;
     this.#downstream = downstream;
     this.#wsBatched = options.wsBatched ?? false;
     this.#watermark = watermark;
@@ -168,6 +180,15 @@ export class Subscriber {
    */
   get aligned(): boolean {
     return this.#aligned;
+  }
+
+  /**
+   * Resolves once the subscriber has caught up, i.e. once it has acked
+   * (durably applied) all changes up to the head of the stream at the time
+   * it was {@link aligned}. Never resolves if the subscriber is closed first.
+   */
+  get caughtUp(): Promise<void> {
+    return this.#caughtUp.promise;
   }
 
   #trackBackfills(change: WatermarkedChange) {
@@ -327,6 +348,16 @@ export class Subscriber {
     void this.#sendDownstream(downstream);
   }
 
+  /**
+   * Sends a control status (e.g. `draining` or `restore`) downstream
+   * immediately, regardless of whether the subscriber is initialized or
+   * catching up. Unlike {@link sendStatus}, such statuses are not tied to a
+   * position in the replication stream.
+   */
+  sendControlStatus(status: Status) {
+    void this.#sendDownstream(['status', status]);
+  }
+
   /** catchup() is called on ChangeEntries loaded from the store. */
   async catchup(change: WatermarkedChange) {
     this.#initialize();
@@ -367,14 +398,29 @@ export class Subscriber {
     this.#trackBackfills(change);
     const result = await this.#sendStringifiedDownstream(json);
     if (tag === 'commit' && result === 'consumed') {
-      // Sends can complete out of order (e.g. the bounded window in
-      // #drainBacklog), so the ack only advances monotonically, and listeners
-      // are only notified when it does.
-      const acked = max(this.#acked, watermark);
-      if (acked !== this.#acked) {
-        this.#acked = acked;
-        this.#onAck?.(acked);
-      }
+      this.#advanceAck(watermark);
+    }
+  }
+
+  #advanceAck(watermark: string) {
+    // Sends can complete out of order (e.g. the bounded window in
+    // #drainBacklog), so the ack only advances monotonically, and listeners
+    // are only notified when it does.
+    const acked = max(this.#acked, watermark);
+    if (acked !== this.#acked) {
+      this.#acked = acked;
+      this.#onAck?.(acked);
+      this.#checkCaughtUp();
+    }
+  }
+
+  #checkCaughtUp() {
+    if (
+      this.#caughtUpWatermark !== undefined &&
+      this.#acked >= this.#caughtUpWatermark
+    ) {
+      this.#caughtUpWatermark = undefined;
+      this.#caughtUp.resolve();
     }
   }
 
@@ -407,11 +453,7 @@ export class Subscriber {
     try {
       const outcome = await result;
       if (commitWatermark && outcome === 'consumed') {
-        const acked = max(this.#acked, commitWatermark);
-        if (acked !== this.#acked) {
-          this.#acked = acked;
-          this.#onAck?.(acked);
-        }
+        this.#advanceAck(commitWatermark);
       }
     } finally {
       this.#pending -= batch.changes.length;
@@ -548,7 +590,11 @@ export class Subscriber {
     this.close();
   }
 
-  close(error?: ErrorType, message?: string) {
+  close(
+    error?: ErrorType,
+    message?: string,
+    details?: {replicaVersion?: string | undefined},
+  ) {
     // Closing the subscriber must also release producers that are blocked on
     // backlog capacity; there is no future drain that could wake them.
     this.#backlog = null;
@@ -560,9 +606,10 @@ export class Subscriber {
 
     if (error !== undefined) {
       // Wait for the ACK of the error message before closing the connection.
-      void this.#sendDownstream(['error', {type: error, message}]).finally(() =>
-        this.#downstream.cancel(),
-      );
+      void this.#sendDownstream([
+        'error',
+        {type: error, message, ...details},
+      ]).finally(() => this.#downstream.cancel());
     } else {
       this.#downstream.cancel();
     }
@@ -623,6 +670,8 @@ export class Subscriber {
             // (and thus tracked), and subsequent changes are sent directly.
             this.#aligned = true;
             this.#onAligned?.(this);
+            this.#caughtUpWatermark = this.#watermark;
+            this.#checkCaughtUp();
             void this.#lagReportingDisabled?.then(disabled => {
               if (disabled) {
                 this.sendStatus(LAG_REPORTING_DISABLED);

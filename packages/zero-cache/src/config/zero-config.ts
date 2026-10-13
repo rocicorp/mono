@@ -906,6 +906,21 @@ export const zeroOptions = {
     desc: [`The port for sync connections.`],
   },
 
+  selfDrainDelayMs: {
+    type: v.number().optional(() => 0),
+    desc: [
+      `When the server initiates its own graceful restart (e.g. a view-syncer that restores a`,
+      `new replica after a resync), it immediately fails health checks (both "/" and`,
+      `"/keepalive") so that the container runner stops routing to it and shuts it down as usual`,
+      `(e.g. running pre-stop hooks before sending {bold SIGTERM}). After this delay, the server`,
+      `sends itself a {bold SIGTERM} if it has not already received one.`,
+      ``,
+      `The default of 0 drains immediately. In environments with liveness checks, set this to`,
+      `exceed the time for the container runner to detect the failed liveness check plus any`,
+      `pre-stop delay.`,
+    ],
+  },
+
   keepaliveTimeoutMs: {
     type: v.number().optional(),
     desc: [
@@ -1165,6 +1180,24 @@ export const zeroOptions = {
         ``,
         `Set this to 0 or a negative number to disable laggard detection. (Not recommended, but`,
         `available as an emergency measure.)`,
+      ],
+    },
+
+    maxConcurrentSwitchoverRestores: {
+      type: v.number().optional(() => 1),
+      desc: [
+        `The targeted number of view-syncers allowed to restart and replace their replica with`,
+        `this replication-manager's backup at a given time, when view-syncers with an incompatible`,
+        `replica (e.g. after a resync) switch over from a draining replication-manager. These`,
+        `view-syncers wait for permission to restore before switching over, so that not all of`,
+        `them stop serving at once.`,
+        ``,
+        `Any view-syncer that replaces an incompatible or outdated local replica counts towards`,
+        `this number (e.g. one that restarted on its own), but is not itself limited by it.`,
+        `View-syncers restoring onto an empty disk (e.g. new pods) are not counted or limited.`,
+        ``,
+        `This parameter only has effect when {bold ZERO_UPSTREAM_PG_HIGH_AVAILABILITY_REPLICATION}`,
+        `is enabled.`,
       ],
     },
   },

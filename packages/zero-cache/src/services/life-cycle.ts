@@ -30,6 +30,9 @@ import type {SingletonService} from './service.ts';
  * are stopped without draining. `SIGQUIT` is used to represent an
  * intentional shutdown (for which draining is not beneficial), whereas
  * `SIGABRT` is used for unexpected process exits.
+ *
+ * A clean exit (i.e. code 0) of a worker of either type that is not the
+ * result of a drain is treated as an intentional shutdown of the server.
  */
 export type WorkerType = 'user-facing' | 'supporting';
 
@@ -98,8 +101,8 @@ function workerStartupDuration() {
 export const UNHANDLED_EXCEPTION_ERROR_CODE = 13;
 
 // An internal error code used to indicate that the server should exit
-// without draining (e.g. due to a supporting worker get a signal to shut
-// down), but the exit is otherwise intentional.
+// without draining (e.g. due to a worker exiting cleanly outside of a drain,
+// such as for an auto reset), but the exit is otherwise intentional.
 export const INTENTIONAL_SHUTDOWN_ERROR_CODE = 14;
 
 /**
@@ -270,15 +273,22 @@ export class ProcessManager {
 
     const pid = worker?.pid ?? process.pid;
 
+    // A clean exit outside of a drain is an intentional shutdown, e.g. the
+    // replication-manager shutting down for protocol-specific instructions
+    // (like auto reset), or a configuration error. In this case, a special
+    // error code is used to signal that the server should be shut down
+    // without draining, but it is otherwise not considered an
+    // unexpected/alertable error. The same applies to a supporting worker
+    // that exits while user-facing workers are still draining.
+    if (
+      code === 0 &&
+      (this.#drainStart === 0 ||
+        (type === 'supporting' && this.#userFacing.size > 0))
+    ) {
+      code = INTENTIONAL_SHUTDOWN_ERROR_CODE;
+    }
+
     if (type === 'supporting') {
-      // Supporting workers like the replication-manager shut down without a
-      // drain signal when receiving protocol-specific instructions (like auto
-      // reset). In this case, a special error code is used to signal that the
-      // server should be shut down without draining, but it is otherwise not
-      // considered an unexpected/alertable error.
-      if (code === 0 && (this.#drainStart === 0 || this.#userFacing.size > 0)) {
-        code = INTENTIONAL_SHUTDOWN_ERROR_CODE;
-      }
       const log =
         code === 0 || code === INTENTIONAL_SHUTDOWN_ERROR_CODE
           ? 'info'
@@ -309,13 +319,13 @@ export class ProcessManager {
             } ms)`
           : `all user-facing workers exited`,
       );
-      return this.#exit(this.#drainStart ? 0 : code || -1);
+      return this.#exit(this.#drainStart ? 0 : code);
     }
 
     if (this.#drainStart === 0) {
       // If a user-facing worker exits without receiving a drain signal,
       // shutdown the server.
-      return this.#exit(code || -1);
+      return this.#exit(code);
     }
 
     return undefined;
@@ -329,6 +339,74 @@ export class ProcessManager {
         this.#lc.error?.(e);
       }
     }
+  }
+}
+
+export type SelfDrainOptions = {
+  /**
+   * The time after a self drain is requested at which the server sends itself
+   * a `SIGTERM`, unless one was received sooner (e.g. from the container
+   * runner).
+   */
+  delayMs: number;
+
+  /**
+   * Called when a self drain is requested. This should fail health checks
+   * (both readiness and liveness) so that the container runner stops routing
+   * to the server and initiates its normal shutdown process.
+   */
+  onRequested: () => void;
+};
+
+/**
+ * Coordinates a drain that is initiated by the server itself (e.g. by a
+ * view-syncer that has been granted permission to restore a new replica),
+ * as opposed to one initiated by the container runner with a `SIGTERM`.
+ *
+ * Health checks start failing immediately, upon which an orchestrator such
+ * as Kubernetes stops routing to the server and shuts it down as usual
+ * (i.e. running any pre-stop hooks before sending `SIGTERM`). As a backstop,
+ * and for environments without liveness checks, the server sends itself a
+ * `SIGTERM` after the configured delay.
+ */
+export class SelfDrain {
+  readonly #lc: LogContext;
+  readonly #proc: EventEmitter;
+  readonly #delayMs: number;
+  readonly #onRequested: () => void;
+  #requested = false;
+  #signaled = false;
+  #timer: ReturnType<typeof setTimeout> | undefined;
+
+  constructor(lc: LogContext, proc: EventEmitter, opts: SelfDrainOptions) {
+    this.#lc = lc.withContext('component', 'self-drain');
+    this.#proc = proc;
+    this.#delayMs = opts.delayMs;
+    this.#onRequested = opts.onRequested;
+
+    for (const signal of GRACEFUL_SHUTDOWN) {
+      proc.once(signal, () => {
+        this.#signaled = true;
+        clearTimeout(this.#timer);
+      });
+    }
+  }
+
+  request() {
+    if (this.#requested || this.#signaled) {
+      return; // Already draining.
+    }
+    this.#requested = true;
+    this.#lc.info?.(
+      `self drain requested. sending SIGTERM in ${this.#delayMs} ms`,
+    );
+    this.#onRequested();
+    this.#timer = setTimeout(() => {
+      if (!this.#signaled) {
+        this.#lc.info?.(`initiating self drain`);
+        this.#proc.emit('SIGTERM', 'SIGTERM');
+      }
+    }, this.#delayMs);
   }
 }
 
@@ -349,14 +427,30 @@ export async function runUntilKilled(
     return;
   }
   for (const signal of [...GRACEFUL_SHUTDOWN, ...FORCEFUL_SHUTDOWN]) {
-    parent.once(signal, () => {
+    parent.once(signal, async () => {
       const GRACEFUL_SIGNALS = GRACEFUL_SHUTDOWN as readonly NodeJS.Signals[];
 
-      services.forEach(async svc => {
-        if (GRACEFUL_SIGNALS.includes(signal) && svc.drain) {
-          lc.info?.(`draining ${svc.constructor.name} ${svc.id} (${signal})`);
-          await svc.drain();
+      if (GRACEFUL_SIGNALS.includes(signal)) {
+        // Drain all services before stopping any of them. Stopping a service
+        // resolves its run() and thus ends runUntilKilled(), so a service
+        // without a drain() must not be stopped while others are draining.
+        const results = await Promise.allSettled(
+          services.map(async svc => {
+            if (svc.drain) {
+              lc.info?.(
+                `draining ${svc.constructor.name} ${svc.id} (${signal})`,
+              );
+              await svc.drain();
+            }
+          }),
+        );
+        for (const result of results) {
+          if (result.status === 'rejected') {
+            lc.warn?.(`error while draining (${signal})`, result.reason);
+          }
         }
+      }
+      services.forEach(async svc => {
         lc.info?.(`stopping ${svc.constructor.name} ${svc.id} (${signal})`);
         await svc.stop();
       });

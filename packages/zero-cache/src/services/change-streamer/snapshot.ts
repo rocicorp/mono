@@ -25,7 +25,7 @@ import type {
   ReservationFollowup,
   SnapshotReserver,
 } from './change-streamer-http.ts';
-import type {SnapshotStatus} from './subscribe.ts';
+import type {LocalReplica, SnapshotStatus} from './subscribe.ts';
 
 export type {SnapshotStatus};
 
@@ -33,6 +33,7 @@ export async function reserveAndGetSnapshotStatus(
   lc: LogContext,
   taskID: string,
   changeStreamer: SnapshotReserver,
+  localReplica?: LocalReplica | undefined,
 ): Promise<{reserved: SnapshotStatus; followup: ReservationFollowup}> {
   const abort = new AbortController();
   const {signal} = abort;
@@ -47,7 +48,7 @@ export async function reserveAndGetSnapshotStatus(
   try {
     for (let i = 0; ; i++) {
       let err: unknown;
-      const reservation = changeStreamer.reserveSnapshot(taskID);
+      const reservation = changeStreamer.reserveSnapshot(taskID, localReplica);
       try {
         return await promiseOrAbort(reservation, signal);
       } catch (e) {

@@ -11,24 +11,38 @@ import type {BackupConfig} from './change-streamer-service.ts';
 import type {SnapshotMessage} from './snapshot-message.ts';
 import type {ChangeLogReadSource} from './sqlite-change-log-read-router.ts';
 
+export type ReservationCallbacks = {
+  /**
+   * Called whenever a reservation is closed, including when it is replaced
+   * by a new reservation (e.g. a retry) for the same task.
+   */
+  onClose?: ((taskID: string) => void) | undefined;
+
+  /**
+   * Called when a task's reservation is closed without being replaced,
+   * i.e. when the task no longer holds a reservation.
+   */
+  onEnd?: ((taskID: string) => void) | undefined;
+};
+
 export class SnapshotReservations {
   readonly #lc: LogContext;
   readonly #backupConfig: BackupConfig;
-  readonly #onClose: ((taskID: string) => void) | undefined;
+  readonly #callbacks: ReservationCallbacks;
   readonly #reservations = new Map<string, Reservation>();
 
   constructor(
     lc: LogContext,
     backupConfig: BackupConfig,
-    onClose?: ((taskID: string) => void) | undefined,
+    callbacks: ReservationCallbacks = {},
   ) {
     this.#lc = lc.withContext('component', 'snapshot-reserver');
     this.#backupConfig = backupConfig;
-    this.#onClose = onClose;
+    this.#callbacks = callbacks;
   }
 
   open(taskID: string): Source<SnapshotMessage> {
-    this.close(taskID);
+    this.#close(taskID, undefined, true);
 
     const instanceID = {};
     const downstream = Subscription.create<SnapshotMessage>({
@@ -55,7 +69,11 @@ export class SnapshotReservations {
     );
   }
 
-  #close(taskID: string, cancelledInstanceID: InstanceID | undefined) {
+  #close(
+    taskID: string,
+    cancelledInstanceID: InstanceID | undefined,
+    replaced = false,
+  ) {
     const res = this.#reservations.get(taskID);
     if (
       res &&
@@ -63,7 +81,10 @@ export class SnapshotReservations {
     ) {
       // Note: delete first, so that the reservation is gone when close() is called.
       this.#reservations.delete(taskID);
-      this.#onClose?.(taskID);
+      this.#callbacks.onClose?.(taskID);
+      if (!replaced) {
+        this.#callbacks.onEnd?.(taskID);
+      }
       res.close();
 
       const duration = Date.now() - res.startTime.getTime();

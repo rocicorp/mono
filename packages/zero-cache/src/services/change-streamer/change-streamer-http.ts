@@ -33,6 +33,7 @@ import {
 import {discoverChangeStreamerAddress} from './schema/tables.ts';
 import {type SnapshotMessage} from './snapshot-message.ts';
 import {
+  type LocalReplica,
   subscribeDownstreamSchema,
   subscribeUpstreamSchema,
   type ReservedMessage,
@@ -218,10 +219,12 @@ export class ChangeStreamerHttpServer extends HttpService {
       // exits naturally when the connection closes.
       for await (const msg of instream) {
         if (msg[0] === 'reserve-snapshot') {
-          const {taskID} = msg[1];
+          const {taskID, localReplica} = msg[1];
           this.#ensureChangeStreamerStarted('incoming snapshot reservation');
-          reservation =
-            await this.#changeStreamer.startSnapshotReservation(taskID);
+          reservation = await this.#changeStreamer.startSnapshotReservation(
+            taskID,
+            {localReplica},
+          );
           void this.#forwardReservation(reservation, outbound);
         } else if (msg[0] === 'start-subscription') {
           const ctx: SubscriberContext = {
@@ -322,6 +325,17 @@ export class ChangeStreamerHttpServer extends HttpService {
     }
   }
 
+  /**
+   * Signals (drainable) subscribers to switch over to another
+   * replication-manager, resolving when they have disconnected. Subscribers
+   * continue to be served in the meantime.
+   */
+  async drain(): Promise<void> {
+    if (this.#changeStreamerStarted && this.#changeStreamer.drain) {
+      await this.#changeStreamer.drain();
+    }
+  }
+
   protected override async _onStop(): Promise<void> {
     if (this.#changeStreamerStarted) {
       await this.#changeStreamer.stop();
@@ -330,7 +344,10 @@ export class ChangeStreamerHttpServer extends HttpService {
 }
 
 export interface SnapshotReserver {
-  reserveSnapshot(taskID: string): Promise<{
+  reserveSnapshot(
+    taskID: string,
+    localReplica?: LocalReplica | undefined,
+  ): Promise<{
     reserved: SnapshotStatus;
     followup: ReservationFollowup;
   }>;
@@ -400,12 +417,18 @@ export class ChangeStreamerHttpClient
     return uri;
   }
 
-  async reserveSnapshot(taskID: string): Promise<{
+  async reserveSnapshot(
+    taskID: string,
+    localReplica?: LocalReplica | undefined,
+  ): Promise<{
     reserved: SnapshotStatus;
     followup: ReservationFollowup;
   }> {
     const {instream, outbound} = await this.connect(taskID);
-    outbound.push(['reserve-snapshot', {taskID}]);
+    outbound.push([
+      'reserve-snapshot',
+      {taskID, ...(localReplica ? {localReplica} : {})},
+    ]);
 
     const {head, rest} = readHead(instream);
     const item = await head.next();
@@ -519,6 +542,24 @@ function checkProtocolVersion(pathname: string): number {
 // message payload, dropping the fields that are implicit on the merged
 // connection: protocolVersion (from the request path), wsBatched (always on).
 function toStartSubscriptionContext(ctx: SubscriberContext): SubscribeContext {
-  const {taskID, id, mode, replicaVersion, watermark, backfills} = ctx;
-  return {taskID, id, mode, replicaVersion, watermark, backfills};
+  const {
+    taskID,
+    id,
+    mode,
+    replicaVersion,
+    watermark,
+    backfills,
+    drainable,
+    switchover,
+  } = ctx;
+  return {
+    taskID,
+    id,
+    mode,
+    replicaVersion,
+    watermark,
+    backfills,
+    ...(drainable !== undefined ? {drainable} : {}),
+    ...(switchover !== undefined ? {switchover} : {}),
+  };
 }
