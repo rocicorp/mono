@@ -6,7 +6,9 @@ import {assert} from '../../shared/src/asserts.ts';
  * The `PROTOCOL_VERSION` encompasses both the wire-protocol of the `/sync/...`
  * connection between the browser and `zero-cache`, as well as the format of
  * the `AST` objects stored in the CVR. The client's local database has its
- * own version, `STORAGE_VERSION` in zero-client.
+ * own version, `STORAGE_VERSION` in zero-client. A bump that changes what the
+ * client stores (as version 23 did by adding mutation results) must bump that
+ * too.
  *
  * A change in the `AST` schema (e.g. new functionality added) must be
  * accompanied by an increment of the `PROTOCOL_VERSION` and a new major
