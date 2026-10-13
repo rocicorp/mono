@@ -47,13 +47,23 @@ export function typeErrors(
       ),
       'bin/tsc',
     );
-    const {stdout} = spawnSync(process.execPath, [tsc, '--pretty', 'false'], {
-      cwd: dir,
-      encoding: 'utf8',
-    });
+    const {error, stdout, stderr} = spawnSync(
+      process.execPath,
+      [tsc, '--pretty', 'false'],
+      {cwd: dir, encoding: 'utf8'},
+    );
+    // Set when node could not start or the output overflowed its buffer.
+    if (error) {
+      throw error;
+    }
+    // tsc reports diagnostics on stdout. Anything on stderr means it did not
+    // run, and the caller would otherwise see only an empty list.
+    if (stderr) {
+      throw new Error(stderr);
+    }
     return stdout
       .split(errorStart)
-      .filter(error => error.startsWith('misuse.ts'));
+      .filter(diagnostic => diagnostic.startsWith('misuse.ts'));
   } finally {
     rmSync(dir, {recursive: true, force: true});
   }
