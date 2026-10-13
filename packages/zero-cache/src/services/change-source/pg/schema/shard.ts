@@ -324,11 +324,16 @@ export async function createReplica(
   stage: ReplicaStage,
 ) {
   const schema = upstreamSchema(shard);
-  const values: Partial<v.Infer<typeof fullReplicaRowSchema>> = {
+  const values: Partial<v.Infer<typeof fullReplicaRowSchema>> & {
+    version: string;
+  } = {
     id,
     slot,
     epoch,
     generation: replicaVersion,
+    // No longer read, but zero-cache 1.10 fails to start on a NULL "version",
+    // so it is still written for rollbacks to 1.10.
+    version: replicaVersion,
     backupPath,
     backupV5,
     pgChangeLog,
@@ -362,6 +367,7 @@ export async function initRestoreReplica(
   await sql`
     UPDATE ${sql(schema)}.replicas dest 
       SET "generation"         = source."generation",
+          "version"            = source."generation",
           "initialSchema"      = source."initialSchema",
           "initialSyncContext" = source."initialSyncContext"
       FROM ${sql(schema)}.replicas source

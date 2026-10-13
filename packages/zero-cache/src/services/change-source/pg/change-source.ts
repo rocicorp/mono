@@ -513,9 +513,13 @@ export class PostgresChangeSource implements ChangeSource {
     // the stage from InitialSync to Replicate, so that a replica in the
     // InitialSync stage is never intentionally inactive. This allows the
     // restore logic to safely exclude (actually) orphaned initial syncs.
+    //
+    // "version" is also backfilled for rollbacks to 1.10 (see createReplica()),
+    // since earlier 1.11 canaries left it NULL.
     await sql`
       UPDATE ${sql(replicasTable)} 
         SET "stage" = ${Replicate},
+            "version" = "generation",
             "subscriberContext" = ${this.#context},
             "backupPath" = ${this.#backupOptions.backupPath},
             "backupV5" = ${this.#backupOptions.backupV5},
