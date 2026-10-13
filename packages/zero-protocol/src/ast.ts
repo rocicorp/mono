@@ -8,6 +8,7 @@
 
 import {compareUTF8} from 'compare-utf8';
 import {assert} from '../../shared/src/asserts.ts';
+import {isPlainObject} from '../../shared/src/deep-merge.ts';
 import {getOrInsertComputed} from '../../shared/src/map.ts';
 import {must} from '../../shared/src/must.ts';
 import * as v from '../../shared/src/valita.ts';
@@ -195,6 +196,84 @@ export const astSchema: v.Type<AST> = v.readonlyObject({
     })
     .optional(),
 });
+
+/**
+ * The maximum nesting depth of an AST sent by a client, counting and/or
+ * conditions, correlated subqueries and related subqueries. Parsing and the
+ * AST visitors in zero-cache are recursive, so a single deeply nested AST can
+ * otherwise overflow the stack or burn seconds of CPU. Realistic queries,
+ * permission rules included, are less than 10 levels deep.
+ */
+export const MAX_AST_DEPTH = 50;
+
+/**
+ * Returns whether the unparsed `ast` is nested deeper than `maxDepth`.
+ */
+export function exceedsASTDepth(
+  ast: unknown,
+  maxDepth = MAX_AST_DEPTH,
+): boolean {
+  return astExceedsDepth(ast, 0, maxDepth);
+}
+
+// Every step down increases the depth, except the one from an AST into its
+// where clause, so the recursion stops within 2 * maxDepth steps and cannot
+// overflow the stack.
+function astExceedsDepth(
+  ast: unknown,
+  depth: number,
+  maxDepth: number,
+): boolean {
+  if (depth > maxDepth) {
+    return true;
+  }
+  if (!isPlainObject(ast)) {
+    return false;
+  }
+  const {where, related} = ast;
+  return (
+    conditionExceedsDepth(where, depth, maxDepth) ||
+    (Array.isArray(related) &&
+      related.some(
+        r =>
+          isPlainObject(r) && astExceedsDepth(r.subquery, depth + 1, maxDepth),
+      ))
+  );
+}
+
+function conditionExceedsDepth(
+  cond: unknown,
+  depth: number,
+  maxDepth: number,
+): boolean {
+  if (depth > maxDepth) {
+    return true;
+  }
+  if (!isPlainObject(cond)) {
+    return false;
+  }
+  const {conditions, related} = cond;
+  return (
+    (Array.isArray(conditions) &&
+      conditions.some(c => conditionExceedsDepth(c, depth + 1, maxDepth))) ||
+    (isPlainObject(related) &&
+      astExceedsDepth(related.subquery, depth + 1, maxDepth))
+  );
+}
+
+/**
+ * {@link astSchema} for ASTs sent by clients, which rejects ASTs nested deeper
+ * than {@link MAX_AST_DEPTH} before parsing them. ASTs the server stored itself
+ * (e.g. in the CVR) are parsed with {@link astSchema} so that ones stored
+ * before the limit existed can still be read.
+ */
+export const depthBoundedAstSchema: v.Type<AST> = v
+  .unknown()
+  .chain((value, options) =>
+    exceedsASTDepth(value)
+      ? v.err(`AST exceeds the maximum depth of ${MAX_AST_DEPTH}`)
+      : astSchema.try(value, options),
+  );
 
 export type Bound = {
   row: Row;
