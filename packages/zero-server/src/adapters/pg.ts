@@ -13,6 +13,10 @@ import type {
 import type {HumanReadable} from '../../../zql/src/query/query.ts';
 import {createLogContext} from '../logging.ts';
 import {executePostgresQuery} from '../pg-query-executor.ts';
+import {
+  beginStatement,
+  type TransactionOptions,
+} from '../transaction-options.ts';
 import {ZQLDatabase} from '../zql-database.ts';
 
 export type {ZQLDatabase};
@@ -26,9 +30,11 @@ export type NodePgTransaction = Pool | PoolClient | Client;
 
 export class NodePgConnection implements DBConnection<NodePgTransaction> {
   readonly #pool: NodePgTransaction;
+  readonly #options: TransactionOptions;
 
-  constructor(pool: NodePgTransaction) {
+  constructor(pool: NodePgTransaction, options: TransactionOptions = {}) {
     this.#pool = pool;
+    this.#options = options;
   }
 
   query(sql: string, params: unknown[]): Promise<Row[]> {
@@ -51,7 +57,7 @@ export class NodePgConnection implements DBConnection<NodePgTransaction> {
     };
     client.on('error', onError);
     try {
-      await client.query('BEGIN');
+      await client.query(beginStatement(this.#options.isolationLevel));
       const result = await fn(new NodePgTransactionInternal(client));
       await client.query('COMMIT');
       return result;
@@ -156,6 +162,7 @@ export function zeroNodePg<S extends Schema>(
   schema: S,
   pg: NodePgTransaction | string,
   lc: LogContext = createLogContext('warn'),
+  options?: TransactionOptions,
 ) {
   if (typeof pg === 'string') {
     const pool = new Pool({connectionString: pg});
@@ -172,5 +179,5 @@ export function zeroNodePg<S extends Schema>(
     });
     pg = pool;
   }
-  return new ZQLDatabase(new NodePgConnection(pg), schema);
+  return new ZQLDatabase(new NodePgConnection(pg, options), schema);
 }
