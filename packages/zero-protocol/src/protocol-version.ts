@@ -5,7 +5,8 @@ import {assert} from '../../shared/src/asserts.ts';
  *
  * The `PROTOCOL_VERSION` encompasses both the wire-protocol of the `/sync/...`
  * connection between the browser and `zero-cache`, as well as the format of
- * the `AST` objects stored in both components (i.e. IDB and CVR).
+ * the `AST` objects stored in the CVR. The client's local database has its
+ * own version, `STORAGE_VERSION` in zero-client.
  *
  * A change in the `AST` schema (e.g. new functionality added) must be
  * accompanied by an increment of the `PROTOCOL_VERSION` and a new major

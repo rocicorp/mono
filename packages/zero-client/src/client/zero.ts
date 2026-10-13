@@ -183,6 +183,7 @@ import {
   resetBackoff,
 } from './reload-error-handler.ts';
 import {getServer} from './server-option.ts';
+import {STORAGE_VERSION} from './storage-version.ts';
 import {version} from './version.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {
@@ -652,9 +653,9 @@ export class Zero<
     const storageScopedUserID = userID ?? LOGGED_OUT_STORAGE_USER_ID;
 
     const replicacheOptions: ReplicacheOptions<WithCRUD<MutatorDefs>> = {
-      // The schema stored in IDB is dependent upon both the ClientSchema
-      // and the AST schema (i.e. PROTOCOL_VERSION).
-      schemaVersion: `${PROTOCOL_VERSION}.${hash}`,
+      // What the local database holds depends on the ClientSchema and on how
+      // Zero stores it (STORAGE_VERSION).
+      schemaVersion: `${STORAGE_VERSION}.${hash}`,
       logLevel: logOptions.logLevel,
       logSinks: [logOptions.logSink],
       mutators: replicacheMutators,
