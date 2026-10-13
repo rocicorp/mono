@@ -29,7 +29,7 @@
   border: 1px solid var(--color-modal-outline);
   max-height: 30vh;
   min-width: 16rem;
-  overflow-y: scroll;
+  overflow-y: auto;
   overflow-x: hidden;
   z-index: var(--z-index-popover);
   scrollbar-color: var(--color-nav-selected) rgba(0, 0, 0, 0);

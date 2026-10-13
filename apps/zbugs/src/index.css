@@ -110,10 +110,35 @@
   background: #f5f5f5;
 }
 
-[data-theme='light'] .onboarding-modal .keyboard-keys {
+/* Light mode: Onboarding modal. Its rules are nested under #root-modal, so
+   the overrides need the id too. */
+[data-theme='light'] #root-modal .onboarding-modal .keyboard-keys {
   border: 1px solid #d0d0d0;
   background: linear-gradient(180deg, #ffffff 0%, #f0f0f0 100%);
   color: #000;
+}
+
+/* Invert only the white Gigabugs logo, not the text below it */
+[data-theme='light'] #root-modal .onboarding-modal .opening-text {
+  position: relative;
+  background-image: none;
+}
+
+[data-theme='light'] #root-modal .onboarding-modal .opening-text::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url(assets/images/logo-gigabugs-crop.svg);
+  /* Follow the logo size and position the mobile breakpoints set */
+  background-position: inherit;
+  background-repeat: inherit;
+  background-size: inherit;
+  filter: invert(1);
+  pointer-events: none;
+}
+
+[data-theme='light'] #root-modal .onboarding-modal .onboarding-modal-accept {
+  color: white;
 }
 
 [data-theme='light'] .markdown-container blockquote {
@@ -1463,7 +1488,7 @@ textarea.autoResize {
 
   .modal-container {
     padding: 3rem;
-    overflow-y: scroll;
+    overflow-y: auto;
   }
 }
 
