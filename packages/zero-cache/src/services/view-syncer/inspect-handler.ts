@@ -3,6 +3,7 @@ import {unreachable} from '../../../../shared/src/asserts.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {TDigest} from '../../../../shared/src/tdigest.ts';
 import * as v from '../../../../shared/src/valita.ts';
+import type {AnalyzeQueryResult} from '../../../../zero-protocol/src/analyze-query-result.ts';
 import type {
   QueryServerMetrics,
   ServerMetrics,
@@ -168,7 +169,7 @@ export async function handleInspect(
         client.sendInspectResponse(lc, {
           op: 'analyze-query',
           id: body.id,
-          value: result,
+          value: analyzeResultForProtocol(result, ctx.protocolVersion),
         });
         break;
       }
@@ -184,6 +185,29 @@ export async function handleInspect(
       value: (e as Error).message,
     });
   }
+}
+
+/**
+ * Removes the planner's `filter` nodes from `joinPlans` for clients before
+ * protocol 53, which added that node type. 1.9 and 1.10 clients fail to parse
+ * a node type they don't know, and the failed parse puts the client in its
+ * error state.
+ *
+ * @visibleForTesting
+ */
+export function analyzeResultForProtocol(
+  result: AnalyzeQueryResult,
+  protocolVersion: number,
+): AnalyzeQueryResult {
+  if (protocolVersion >= 53 || result.joinPlans === undefined) {
+    return result;
+  }
+  return {
+    ...result,
+    joinPlans: result.joinPlans.filter(
+      event => !('nodeType' in event && event.nodeType === 'filter'),
+    ),
+  };
 }
 
 /**
