@@ -333,6 +333,54 @@ test('literalUnion', () => {
   );
 });
 
+test('openLiteralUnion', () => {
+  const s = v.openLiteralUnion('a', 'b');
+  expectTypeOf(s).toEqualTypeOf<v.Type<'a' | 'b' | v.Unrecognized>>();
+
+  expect(v.parse('a', s)).toBe('a');
+  // A value that a newer writer added parses and keeps its raw string.
+  expect(v.parse('c', s)).toBe('c');
+  expect(() => v.parse(1, s)).toThrow(TypeError);
+
+  // Writers can only use the known values.
+  const known: v.Infer<typeof s> = 'b';
+  // @ts-expect-error 'c' is not a known value.
+  const typo: v.Infer<typeof s> = 'c';
+  expect([known, typo]).toEqual(['b', 'c']);
+});
+
+test('assertUnrecognized', () => {
+  type AB = 'a' | 'b' | v.Unrecognized;
+
+  function label(x: AB): string {
+    switch (x) {
+      case 'a':
+        return 'A';
+      case 'b':
+        return 'B';
+      default:
+        v.assertUnrecognized(x);
+        return `unknown ${x}`;
+    }
+  }
+
+  function labelWithoutB(x: AB): string {
+    switch (x) {
+      case 'a':
+        return 'A';
+      default:
+        // @ts-expect-error 'b' has no case.
+        v.assertUnrecognized(x);
+        return `unknown ${x}`;
+    }
+  }
+
+  const s = v.openLiteralUnion('a', 'b');
+  expect(label(v.parse('b', s))).toBe('B');
+  expect(label(v.parse('c', s))).toBe('unknown c');
+  expect(labelWithoutB(v.parse('a', s))).toBe('A');
+});
+
 test('strict', () => {
   const inner = v.object({a: v.number()});
   const strictInner = v.strict(inner);

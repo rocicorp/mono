@@ -341,6 +341,27 @@ export type Unrecognized<T extends Literal = string> = T & {
   readonly [unrecognized]: true;
 };
 
+/**
+ * Like {@link literalUnion}, but any string parses, so a reader accepts values
+ * that a newer writer added. Unknown values keep their raw string and are typed
+ * as {@link Unrecognized}.
+ *
+ * Use it only where a reader can ignore or display an unknown value. Never use
+ * it for a value that changes what the reader computes, or for the
+ * discriminator of a union.
+ */
+export function openLiteralUnion<T extends [string, ...string[]]>(
+  ..._literals: T
+): v.Type<T[number] | Unrecognized> {
+  return v.string() as v.Type<T[number] | Unrecognized>;
+}
+
+/**
+ * Call in the `default` case of a `switch` over an open enum, so that a known
+ * value without a `case` fails to compile.
+ */
+export function assertUnrecognized(_value: Unrecognized): void {}
+
 /** A tuple whose first element, its tag, is a literal. */
 type TaggedTuple = v.TupleType<[v.Type<Literal>, ...v.Type[]]>;
 

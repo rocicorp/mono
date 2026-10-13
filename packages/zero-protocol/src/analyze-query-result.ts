@@ -69,11 +69,9 @@ const constraintsPropagatedEventJSONSchema = v.object({
   ),
 });
 
-const joinTypeSchema = v.union(
-  v.literal('semi'),
-  v.literal('flipped'),
-  v.literal('unflippable'),
-);
+// `joinType` and `nodeType` are only displayed, so they are open: a client
+// accepts values that a newer server adds instead of failing the whole message.
+const joinTypeSchema = v.openLiteralUnion('semi', 'flipped', 'unflippable');
 
 const planCompleteEventJSONSchema = v.object({
   type: v.literal('plan-complete'),
@@ -107,13 +105,13 @@ const bestPlanSelectedEventJSONSchema = v.object({
   ),
 });
 
-const nodeTypeSchema = v.union(
-  v.literal('connection'),
-  v.literal('join'),
-  v.literal('fan-out'),
-  v.literal('fan-in'),
-  v.literal('filter'),
-  v.literal('terminus'),
+const nodeTypeSchema = v.openLiteralUnion(
+  'connection',
+  'join',
+  'fan-out',
+  'fan-in',
+  'filter',
+  'terminus',
 );
 
 const nodeCostEventJSONSchema = v.object({
