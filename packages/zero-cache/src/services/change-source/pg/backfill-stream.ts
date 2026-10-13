@@ -197,6 +197,7 @@ export async function* streamBackfill(
   });
   let tx: TransactionPool | undefined;
   let watermark: string;
+  let completed = false;
   try {
     ({tx, watermark} = await createSnapshotTransaction(
       lc,
@@ -288,6 +289,7 @@ export async function* streamBackfill(
         flushThresholdBytes,
       );
     }
+    completed = true;
   } catch (e) {
     // Although we make the best effort to validate the schema at the
     // transaction snapshot, certain forms of `ALTER TABLE` are not
@@ -306,9 +308,17 @@ export async function* streamBackfill(
     throw e;
   } finally {
     tx?.setDone();
-    // Workaround postgres.js hanging at the end of some COPY commands:
-    // https://github.com/porsager/postgres/issues/499
-    void db.end().catch(e => lc.warn?.(`error closing backfill connection`, e));
+    if (completed) {
+      await tx?.done();
+      await db.end();
+    } else {
+      // The stream failed or was closed early, in which case the COPY read
+      // task may be blocked on a stream that is no longer consumed. Close the
+      // connection in the background, forcibly after a timeout.
+      void db
+        .end({timeout: 5})
+        .catch(e => lc.warn?.(`error closing backfill connection`, e));
+    }
   }
 }
 

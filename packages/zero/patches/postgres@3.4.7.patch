@@ -1,5 +1,5 @@
 diff --git a/cf/src/connection.js b/cf/src/connection.js
-index 203af80d072552c32d5f748b8245c0052e2998bc..68d26721b1700916bcf89e7e9ca31fd8386564fe 100644
+index 203af80d072552c32d5f748b8245c0052e2998bc..2f296a7cfc74df5e7c43c0d9adb5216750627079 100644
 --- a/cf/src/connection.js
 +++ b/cf/src/connection.js
 @@ -157,6 +157,9 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
@@ -40,8 +40,20 @@ index 203af80d072552c32d5f748b8245c0052e2998bc..68d26721b1700916bcf89e7e9ca31fd8
        }
  
        initial && !initial.reserve && execute(initial)
+@@ -892,6 +900,11 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+   function CopyDone() {
+     stream && stream.push(null)
+     stream = null
++    // CopyData pauses the socket when the stream buffer is full. If CopyDone
++    // arrives in the same chunk, read() (which resumes the socket) is never
++    // called again after push(null), leaving the connection hung.
++    // https://github.com/porsager/postgres/issues/499 (fix: PR #1016)
++    socket.isPaused() && socket.resume()
+   }
+ 
+   function NoticeResponse(x) {
 diff --git a/cjs/src/connection.js b/cjs/src/connection.js
-index 589d36382ca943c90679dbe22aaff06d252f6532..6bc900907495802a94acdb8b6357f964d1f7ee16 100644
+index 589d36382ca943c90679dbe22aaff06d252f6532..fc6868142045dfde15f5f40bd94a19d4d78e7fbc 100644
 --- a/cjs/src/connection.js
 +++ b/cjs/src/connection.js
 @@ -155,6 +155,9 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
@@ -82,8 +94,20 @@ index 589d36382ca943c90679dbe22aaff06d252f6532..6bc900907495802a94acdb8b6357f964
        }
  
        initial && !initial.reserve && execute(initial)
+@@ -890,6 +898,11 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+   function CopyDone() {
+     stream && stream.push(null)
+     stream = null
++    // CopyData pauses the socket when the stream buffer is full. If CopyDone
++    // arrives in the same chunk, read() (which resumes the socket) is never
++    // called again after push(null), leaving the connection hung.
++    // https://github.com/porsager/postgres/issues/499 (fix: PR #1016)
++    socket.isPaused() && socket.resume()
+   }
+ 
+   function NoticeResponse(x) {
 diff --git a/src/connection.js b/src/connection.js
-index c3f554aada71a79dc3c3cb489b722e9cf53961f3..b60ed5f2268fe7c44a7e0c63ce18b05afc9b31f9 100644
+index c3f554aada71a79dc3c3cb489b722e9cf53961f3..3efd1fbae67dd731e5d51396e49c97b2f5454901 100644
 --- a/src/connection.js
 +++ b/src/connection.js
 @@ -155,6 +155,9 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
@@ -124,3 +148,15 @@ index c3f554aada71a79dc3c3cb489b722e9cf53961f3..b60ed5f2268fe7c44a7e0c63ce18b05a
        }
  
        initial && !initial.reserve && execute(initial)
+@@ -890,6 +898,11 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+   function CopyDone() {
+     stream && stream.push(null)
+     stream = null
++    // CopyData pauses the socket when the stream buffer is full. If CopyDone
++    // arrives in the same chunk, read() (which resumes the socket) is never
++    // called again after push(null), leaving the connection hung.
++    // https://github.com/porsager/postgres/issues/499 (fix: PR #1016)
++    socket.isPaused() && socket.resume()
+   }
+ 
+   function NoticeResponse(x) {

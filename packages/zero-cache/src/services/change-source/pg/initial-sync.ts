@@ -1,5 +1,5 @@
 import {mkdtemp, rm} from 'node:fs/promises';
-import {platform, tmpdir} from 'node:os';
+import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {Writable, type Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
@@ -203,16 +203,7 @@ export async function initialSync(
       // Now that tables have been validated, kick off the copiers.
       const {tables, indexes} = published;
       const numTables = tables.length;
-      if (platform() === 'win32' && tableCopyWorkers < numTables) {
-        lc.warn?.(
-          `Increasing the number of copy workers from ${tableCopyWorkers} to ` +
-            `${numTables} to work around a Node/Postgres connection bug`,
-        );
-      }
-      const numWorkers =
-        platform() === 'win32'
-          ? numTables
-          : Math.min(tableCopyWorkers, numTables);
+      const numWorkers = Math.min(tableCopyWorkers, numTables);
 
       const copyPool = await connectPgClient(
         lc,
@@ -330,6 +321,9 @@ export async function initialSync(
       const copyElapsed = performance.now() - copyStart;
       void copyProfiler?.stopAndDispose(lc, 'initial-copy');
       copiers.setDone();
+      // Release the upstream connections before indexing.
+      await copiers.done();
+      await copyPool.end();
 
       const copySummary = initialSyncCopySummary(copyResults, copyElapsed);
 
@@ -395,8 +389,14 @@ export async function initialSync(
           )
         : undefined; // shadow sync only
     } finally {
-      // All meaningful errors are handled at the processReadTask() call site.
-      void copyPool.end().catch(e => lc.warn?.(`Error closing copyPool`, e));
+      // A no-op if the pool was already ended. Otherwise, initial sync failed
+      // and copy workers may still be blocked on COPY streams that were
+      // abandoned by their consumers, so their connections are forcibly
+      // closed after a timeout. All meaningful errors are handled at the
+      // processReadTask() call site.
+      await copyPool
+        .end({timeout: 5})
+        .catch(e => lc.warn?.(`Error closing copyPool`, e));
     }
   } catch (e) {
     recordInitialSyncRunMetrics(
@@ -585,17 +585,6 @@ async function startTableCopyWorkers(
   }
 
   lc.info?.(`Started ${numWorkers} workers to copy ${numTables} tables`);
-
-  if (parseInt(process.versions.node) < 22) {
-    lc.warn?.(
-      `\n\n\n` +
-        `Older versions of Node have a bug that results in an unresponsive\n` +
-        `Postgres connection after running certain combinations of COPY commands.\n` +
-        `If initial sync hangs, run zero-cache with Node v22+. This has the additional\n` +
-        `benefit of being consistent with the Node version run in the production container image.` +
-        `\n\n\n`,
-    );
-  }
   return tableCopiers;
 }
 
