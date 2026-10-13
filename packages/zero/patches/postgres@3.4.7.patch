@@ -1,5 +1,5 @@
 diff --git a/cf/src/connection.js b/cf/src/connection.js
-index 203af80d072552c32d5f748b8245c0052e2998bc..7524d01e43ca4bab9131bf7d40f13f4064bbe88b 100644
+index 203af80d072552c32d5f748b8245c0052e2998bc..68d26721b1700916bcf89e7e9ca31fd8386564fe 100644
 --- a/cf/src/connection.js
 +++ b/cf/src/connection.js
 @@ -157,6 +157,9 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
@@ -28,8 +28,20 @@ index 203af80d072552c32d5f748b8245c0052e2998bc..7524d01e43ca4bab9131bf7d40f13f40
      socket.removeListener('data', data)
      socket.removeListener('connect', connected)
      idleTimer.cancel()
+@@ -541,7 +546,10 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+ 
+       if (needsTypes) {
+         initial.reserve && (initial = null)
+-        return fetchArrayTypes()
++        // Fire-and-forget: the caller discards this promise, so a connection
++        // terminated mid-fetch would otherwise be an unhandled rejection. The
++        // pending query is rejected separately via errored().
++        return fetchArrayTypes().catch(() => {})
+       }
+ 
+       initial && !initial.reserve && execute(initial)
 diff --git a/cjs/src/connection.js b/cjs/src/connection.js
-index 589d36382ca943c90679dbe22aaff06d252f6532..e654b0359ca4ed6e67f9db5a789ebac0327cf451 100644
+index 589d36382ca943c90679dbe22aaff06d252f6532..6bc900907495802a94acdb8b6357f964d1f7ee16 100644
 --- a/cjs/src/connection.js
 +++ b/cjs/src/connection.js
 @@ -155,6 +155,9 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
@@ -58,8 +70,20 @@ index 589d36382ca943c90679dbe22aaff06d252f6532..e654b0359ca4ed6e67f9db5a789ebac0
      socket.removeListener('data', data)
      socket.removeListener('connect', connected)
      idleTimer.cancel()
+@@ -539,7 +544,10 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+ 
+       if (needsTypes) {
+         initial.reserve && (initial = null)
+-        return fetchArrayTypes()
++        // Fire-and-forget: the caller discards this promise, so a connection
++        // terminated mid-fetch would otherwise be an unhandled rejection. The
++        // pending query is rejected separately via errored().
++        return fetchArrayTypes().catch(() => {})
+       }
+ 
+       initial && !initial.reserve && execute(initial)
 diff --git a/src/connection.js b/src/connection.js
-index c3f554aada71a79dc3c3cb489b722e9cf53961f3..64cf790fc19bc52244f88145ed54a77f7bdd1b9b 100644
+index c3f554aada71a79dc3c3cb489b722e9cf53961f3..b60ed5f2268fe7c44a7e0c63ce18b05afc9b31f9 100644
 --- a/src/connection.js
 +++ b/src/connection.js
 @@ -155,6 +155,9 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
@@ -88,3 +112,15 @@ index c3f554aada71a79dc3c3cb489b722e9cf53961f3..64cf790fc19bc52244f88145ed54a77f
      socket.removeListener('data', data)
      socket.removeListener('connect', connected)
      idleTimer.cancel()
+@@ -539,7 +544,10 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+ 
+       if (needsTypes) {
+         initial.reserve && (initial = null)
+-        return fetchArrayTypes()
++        // Fire-and-forget: the caller discards this promise, so a connection
++        // terminated mid-fetch would otherwise be an unhandled rejection. The
++        // pending query is rejected separately via errored().
++        return fetchArrayTypes().catch(() => {})
+       }
+ 
+       initial && !initial.reserve && execute(initial)
