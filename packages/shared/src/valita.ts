@@ -433,3 +433,77 @@ export function taggedTupleUnion<T extends TaggedTuple[]>(
       byTag.has(value[0]),
   });
 }
+
+/** An object with a tag this build doesn't know, as {@link taggedObjectUnion} parses it. */
+export type UnrecognizedObject<K extends string> = {
+  readonly [P in K]: Unrecognized<Literal>;
+} & {readonly [key: string]: unknown};
+
+/**
+ * A union of objects told apart by a literal in their `key` property, their
+ * tag, such as `{op: 'queries', id: '1'}`. Unlike `union`, it picks the object
+ * by its tag instead of trying each in turn, so a bad object of a known kind
+ * fails with that kind's error.
+ *
+ * With `open`, an object whose tag it doesn't know, but of the same type as a
+ * known tag, parses as is, typed as {@link UnrecognizedObject}, so a reader
+ * can answer or skip kinds a newer writer added. Use `isKnown` to tell them
+ * apart. A closed union is not implemented yet.
+ */
+export function taggedObjectUnion<K extends string, T extends v.ObjectType[]>(
+  key: K,
+  objects: T,
+  options: {readonly open: boolean},
+): v.Type<v.Infer<T[number]> | UnrecognizedObject<K>> & {
+  isKnown(
+    value: v.Infer<T[number]> | UnrecognizedObject<K>,
+  ): value is v.Infer<T[number]>;
+} {
+  if (!options.open) {
+    throw new Error('A closed taggedObjectUnion is not implemented');
+  }
+  type Known = v.Infer<T[number]>;
+  const byTag = new Map<unknown, v.Type>();
+  const tagTypes = new Set<string>();
+  for (const object of objects) {
+    const tag = object.shape[key] as v.Type | v.Optional | undefined;
+    if (tag === undefined) {
+      throw new Error(`Expected every object to have ${key}`);
+    }
+    toTerminals(tag, t => {
+      if (t.name !== 'literal') {
+        throw new Error('Expected every tag to be a literal');
+      }
+      if (byTag.has(t.value)) {
+        throw new Error(`Duplicate tag ${toDisplay(t.value)}`);
+      }
+      byTag.set(t.value, object);
+      tagTypes.add(typeof t.value);
+    });
+  }
+  const expectedTag = `Expected ${displayList('or', [...tagTypes])}`;
+  const tagOf = (value: object): unknown =>
+    Object.hasOwn(value, key) ? (value as Record<K, unknown>)[key] : undefined;
+  const type = v
+    .unknown()
+    .chain((value, options): v.ValitaResult<Known | UnrecognizedObject<K>> => {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        return v.err('Expected object');
+      }
+      const tag = tagOf(value);
+      const object = byTag.get(tag);
+      if (object) {
+        return object.try(value, options) as v.ValitaResult<Known>;
+      }
+      return tagTypes.has(typeof tag)
+        ? v.ok(value as UnrecognizedObject<K>)
+        : v.err({message: expectedTag, path: [key]});
+    });
+  return Object.assign(type, {
+    // A transform serializes as just its name. Show the objects too, so a
+    // change to them still changes the hash in protocol-version.test.ts.
+    taggedObjectUnion: {key, objects},
+    isKnown: (value: Known | UnrecognizedObject<K>): value is Known =>
+      byTag.has(tagOf(value)),
+  });
+}

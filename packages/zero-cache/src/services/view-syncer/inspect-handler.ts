@@ -10,7 +10,8 @@ import type {
 } from '../../../../zero-protocol/src/inspect-down.ts';
 import {
   inspectAnalyzeQueryUpSchema,
-  type UnparsedInspectUpBody,
+  unparsedInspectUpBodySchema,
+  type UnparsedInspectUpMessage,
 } from '../../../../zero-protocol/src/inspect-up.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {loadPermissions} from '../../auth/load-permissions.ts';
@@ -29,7 +30,7 @@ import type {CVRSnapshot} from './cvr.ts';
 
 export async function handleInspect(
   lc: LogContext,
-  body: UnparsedInspectUpBody,
+  body: UnparsedInspectUpMessage[1],
   cvr: CVRSnapshot,
   client: ClientHandler,
   inspectorDelegate: InspectorDelegate,
@@ -41,6 +42,20 @@ export async function handleInspect(
   config: NormalizedZeroConfig,
   ctx: ConnectionContext,
 ): Promise<void> {
+  if (!unparsedInspectUpBodySchema.isKnown(body)) {
+    // An op from a newer client. Answer this request only, so the connection
+    // stays up. Nothing is computed for it, so it needs no authentication.
+    const {id} = body;
+    if (typeof id === 'string') {
+      client.sendInspectResponse(lc, {
+        op: 'error',
+        id,
+        value: `Unknown inspector op: ${String(body.op)}`,
+      });
+    }
+    return;
+  }
+
   // Check if the client is already authenticated. We only authenticate the clientGroup
   // once per "worker".
   if (

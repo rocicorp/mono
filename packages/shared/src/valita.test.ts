@@ -509,6 +509,107 @@ describe('taggedTupleUnion', () => {
   });
 });
 
+describe('taggedObjectUnion', () => {
+  const s = v.taggedObjectUnion(
+    'op',
+    [
+      v.object({op: v.literal('a'), x: v.number()}),
+      v.object({op: v.literal('b')}),
+    ],
+    {open: true},
+  );
+
+  test('types', () => {
+    expectTypeOf<v.Infer<typeof s>>().toEqualTypeOf<
+      {op: 'a'; x: number} | {op: 'b'} | v.UnrecognizedObject<'op'>
+    >();
+    const value = v.parse({op: 'b'}, s);
+    if (s.isKnown(value)) {
+      expectTypeOf(value).toEqualTypeOf<{op: 'a'; x: number} | {op: 'b'}>();
+    } else {
+      expectTypeOf(value).toEqualTypeOf<v.UnrecognizedObject<'op'>>();
+    }
+  });
+
+  test('picks the object by its tag', () => {
+    expect(v.parse({op: 'a', x: 1}, s)).toEqual({op: 'a', x: 1});
+    expect(v.parse({op: 'b'}, s)).toEqual({op: 'b'});
+    expect(() => v.parse({op: 'a', x: 'y'}, s)).toThrow(
+      new TypeError('Expected number at x. Got "y"'),
+    );
+    expect(() => v.parse({op: 'a'}, s)).toThrow(
+      new TypeError('Missing property x'),
+    );
+  });
+
+  test('passes the mode on', () => {
+    expect(() => v.parse({op: 'a', x: 1, y: 2}, s)).toThrow(
+      new TypeError('Unexpected property y'),
+    );
+    expect(v.parse({op: 'a', x: 1, y: 2}, s, 'strip')).toEqual({
+      op: 'a',
+      x: 1,
+    });
+  });
+
+  test('returns an object with a tag it does not know as is', () => {
+    for (const op of ['c', 'toString']) {
+      const value = {op, anything: true};
+      const parsed = v.parse(value, s);
+      expect(parsed).toBe(value);
+      expect(s.isKnown(parsed)).toBe(false);
+    }
+    expect(s.isKnown(v.parse({op: 'b'}, s))).toBe(true);
+  });
+
+  test('rejects a value that is not a tagged object', () => {
+    expect(() => v.parse('a', s)).toThrow(
+      new TypeError('Expected object. Got "a"'),
+    );
+    expect(() => v.parse(['a'], s)).toThrow(
+      new TypeError('Expected object. Got array'),
+    );
+    expect(() => v.parse({}, s)).toThrow(
+      new TypeError('Expected string at op. Got undefined'),
+    );
+    expect(() => v.parse({op: 1}, s)).toThrow(
+      new TypeError('Expected string at op. Got 1'),
+    );
+    // An inherited property is not a tag.
+    expect(() => v.parse(Object.create({op: 'a'}), s)).toThrow(
+      new TypeError('Expected string at op. Got "a"'),
+    );
+  });
+
+  test('requires a distinct literal tag in every object', () => {
+    expect(() =>
+      v.taggedObjectUnion('op', [v.object({x: v.number()})], {open: true}),
+    ).toThrow('Expected every object to have op');
+    expect(() =>
+      v.taggedObjectUnion('op', [v.object({op: v.string()})], {open: true}),
+    ).toThrow('Expected every tag to be a literal');
+    expect(() =>
+      v.taggedObjectUnion(
+        'op',
+        [v.object({op: v.literal('a')}), v.object({op: v.literal('a')})],
+        {open: true},
+      ),
+    ).toThrow('Duplicate tag "a"');
+  });
+
+  test('closed is not implemented yet', () => {
+    expect(() =>
+      v.taggedObjectUnion('op', [v.object({op: v.literal('a')})], {
+        open: false,
+      }),
+    ).toThrow('A closed taggedObjectUnion is not implemented');
+  });
+
+  test('shows its objects to JSON.stringify', () => {
+    expect(JSON.stringify(s)).toContain('"taggedObjectUnion":{"key":"op"');
+  });
+});
+
 test('toTerminals', () => {
   // The emission order is a valita implementation detail; options.ts only
   // depends on the set of terminals.

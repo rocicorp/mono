@@ -33,10 +33,7 @@ import {
   ProtocolError,
   type TransformFailedBody,
 } from '../../../../zero-protocol/src/error.ts';
-import type {
-  UnparsedInspectUpBody,
-  UnparsedInspectUpMessage,
-} from '../../../../zero-protocol/src/inspect-up.ts';
+import type {UnparsedInspectUpMessage} from '../../../../zero-protocol/src/inspect-up.ts';
 import type {UpdateAuthMessage} from '../../../../zero-protocol/src/update-auth.ts';
 import {ChangeType} from '../../../../zql/src/ivm/change-type.ts';
 import {clampTTL, MAX_TTL_MS} from '../../../../zql/src/query/ttl.ts';
@@ -4184,7 +4181,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #handleInspect = async (
     lc: LogContext,
     clientID: string,
-    body: UnparsedInspectUpBody,
+    body: UnparsedInspectUpMessage[1],
     cvr: CVRSnapshot,
   ): Promise<void> => {
     const client = must(this.#clients.get(clientID));

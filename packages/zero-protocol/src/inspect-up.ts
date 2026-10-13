@@ -79,12 +79,18 @@ export const inspectUpMessageSchema = v.tuple([
   inspectUpBodySchema,
 ]);
 
-const unparsedInspectUpBodySchema = v.union(
-  inspectQueriesUpBodySchema,
-  inspectMetricsUpSchema,
-  inspectVersionUpSchema,
-  inspectAuthenticateUpSchema,
-  unparsedInspectAnalyzeQueryUpSchema,
+// zero-cache answers an op from a newer client with an error for that request
+// instead of closing the connection.
+export const unparsedInspectUpBodySchema = v.taggedObjectUnion(
+  'op',
+  [
+    inspectQueriesUpBodySchema,
+    inspectMetricsUpSchema,
+    inspectVersionUpSchema,
+    inspectAuthenticateUpSchema,
+    unparsedInspectAnalyzeQueryUpSchema,
+  ],
+  {open: true},
 );
 
 export const unparsedInspectUpMessageSchema = v.tuple([
@@ -100,4 +106,8 @@ export type UnparsedInspectUpMessage = v.Infer<
   typeof unparsedInspectUpMessageSchema
 >;
 
-export type UnparsedInspectUpBody = v.Infer<typeof unparsedInspectUpBodySchema>;
+/** An inspect request with an op this build knows. */
+export type UnparsedInspectUpBody = Exclude<
+  v.Infer<typeof unparsedInspectUpBodySchema>,
+  v.UnrecognizedObject<'op'>
+>;
