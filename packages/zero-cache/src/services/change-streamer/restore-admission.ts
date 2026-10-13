@@ -13,6 +13,14 @@ import type {LocalReplica} from './subscribe.ts';
  */
 export const DEFAULT_PENDING_GRANT_TTL_MS = 90_000;
 
+/**
+ * The default time for which a replacement continues to be counted after its
+ * subscriber has caught up, which covers the time for the subscriber to start
+ * serving (i.e. become ready) after catching up. See
+ * {@link RestoreAdmissionOptions.readinessGracePeriodMs}.
+ */
+export const DEFAULT_READINESS_GRACE_PERIOD_MS = 5_000;
+
 export type RestoreAdmissionOptions = {
   /** The replica version of the replication-manager. */
   replicaVersion: string;
@@ -22,6 +30,15 @@ export type RestoreAdmissionOptions = {
    */
   maxConcurrentRestores: number;
   pendingGrantTTLMs?: number | undefined;
+  /**
+   * The time for which a replacement continues to be counted after its
+   * subscriber has caught up, so that the next subscriber is not granted
+   * permission to restore (and stop serving) before the restored one has
+   * started serving. Catching up is followed by the subscriber's readiness
+   * checks (e.g. waiting for the next replication lag report), and by the
+   * container runner's detection of its readiness.
+   */
+  readinessGracePeriodMs?: number | undefined;
   // Injectable timers, for deterministic testing.
   setTimeoutFn?: typeof setTimeout | undefined;
   clearTimeoutFn?: typeof clearTimeout | undefined;
@@ -36,6 +53,18 @@ export type AdmissionRequest = {
 
   /** Called (once) when the request is granted. */
   onGranted: () => void;
+};
+
+/** A subscribed replacement, returned by {@link RestoreAdmission.reservationSubscribed}. */
+export type Replacement = {
+  /**
+   * Called when the subscriber has caught up. The replacement is released
+   * after the readiness grace period.
+   */
+  caughtUp: () => void;
+
+  /** Called when the subscription closes. The replacement is released. */
+  closed: () => void;
 };
 
 export type AdmissionTicket = {
@@ -163,8 +192,10 @@ type Grant = {
  *
  * 9. **Caught up.** The VS catches up on the change stream from the
  *    backup's watermark. Once it has acked all changes up to the head of
- *    the stream (`Subscriber.caughtUp`), or if it disconnects first, the
- *    replacement is released and the next queued request is granted.
+ *    the stream (`Subscriber.caughtUp`), the replacement is released after
+ *    the readiness grace period, which covers the time for the VS to start
+ *    serving, and the next queued request is granted. If the VS disconnects
+ *    first, the replacement is released immediately.
  *
  * A VS that restarts outside of a switchover with an incompatible replica
  * (e.g. after a crash) enters at step 6 without a grant, and its restore
@@ -186,7 +217,8 @@ type Grant = {
  * |               |                          | yet confirmed                    |
  * | replacing     | `#replacing`             | Open replacement reservation     |
  * | catching up   | `#catchingUp`            | Subscribed replacement, not yet  |
- * |               |                          | caught up                        |
+ * |               |                          | caught up (or within the         |
+ * |               |                          | readiness grace period)          |
  * | in flight     | `#inFlight`              | `replacing` + `catchingUp` +     |
  * |               |                          | `granted`, bounded by            |
  * |               |                          | `maxConcurrentRestores`          |
@@ -195,13 +227,17 @@ export class RestoreAdmission {
   readonly #lc: LogContext;
   readonly #maxConcurrentRestores: number;
   readonly #pendingGrantTTLMs: number;
+  readonly #readinessGracePeriodMs: number;
   readonly #setTimeout: typeof setTimeout;
   readonly #clearTimeout: typeof clearTimeout;
 
   readonly #replicaVersion: string;
   /** Keys (task IDs) of open replacement reservations. */
   readonly #replacing = new Set<string>();
-  /** Replacements whose subscribers have subscribed but not caught up. */
+  /**
+   * Replacements whose subscribers have subscribed, but have not caught up
+   * (or are within the readiness grace period).
+   */
   readonly #catchingUp = new Set<object>();
   /**
    * The local replicas of open reservations with this replica version, which
@@ -217,6 +253,8 @@ export class RestoreAdmission {
     this.#maxConcurrentRestores = Math.max(1, opts.maxConcurrentRestores);
     this.#pendingGrantTTLMs =
       opts.pendingGrantTTLMs ?? DEFAULT_PENDING_GRANT_TTL_MS;
+    this.#readinessGracePeriodMs =
+      opts.readinessGracePeriodMs ?? DEFAULT_READINESS_GRACE_PERIOD_MS;
     this.#setTimeout = opts.setTimeoutFn ?? setTimeout;
     this.#clearTimeout = opts.clearTimeoutFn ?? clearTimeout;
 
@@ -297,20 +335,32 @@ export class RestoreAdmission {
   /**
    * Called when the task of a reservation subscribes (before the reservation
    * is closed). If the reservation is a replacement, it continues to be
-   * counted until the returned function is called, i.e. when the subscriber
-   * has caught up or disconnected.
+   * counted until the readiness grace period after the subscriber has caught
+   * up, or until the subscription closes.
    */
-  reservationSubscribed(key: string): (() => void) | undefined {
+  reservationSubscribed(key: string): Replacement | undefined {
     this.#unclassified.delete(key);
     if (!this.#replacing.delete(key)) {
       return undefined;
     }
     const replacement = {};
     this.#catchingUp.add(replacement);
-    return () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const release = () => {
+      if (timer) {
+        this.#clearTimeout(timer);
+      }
       if (this.#catchingUp.delete(replacement)) {
         this.#processQueue();
       }
+    };
+    return {
+      caughtUp: () => {
+        if (this.#catchingUp.has(replacement) && !timer) {
+          timer = this.#setTimeout(release, this.#readinessGracePeriodMs);
+        }
+      },
+      closed: release,
     };
   }
 

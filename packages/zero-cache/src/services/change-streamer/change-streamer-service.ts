@@ -184,6 +184,12 @@ export type TuningOptions = StorerOptions & {
    * are configured.
    */
   maxConcurrentSwitchoverRestores?: number | undefined;
+  /**
+   * The time for which a replacing subscriber continues to count towards
+   * {@link maxConcurrentSwitchoverRestores} after it has caught up, to allow
+   * it to start serving (see {@link RestoreAdmission}).
+   */
+  switchoverRestoreReadinessGracePeriodMs?: number | undefined;
   sqliteCatchup?: SQLiteCatchupOptions | undefined;
   /**
    * Supplied when `sqliteChangeLogMode != off`, i.e. this is the gate on the
@@ -650,6 +656,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       ? new RestoreAdmission(lc, {
           replicaVersion,
           maxConcurrentRestores: opts.maxConcurrentSwitchoverRestores ?? 1,
+          readinessGracePeriodMs: opts.switchoverRestoreReadinessGracePeriodMs,
         })
       : undefined;
     this.#drainTracker = new DrainTracker(lc);
@@ -1148,12 +1155,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         this.#drainTracker.register(subscriber, downstream);
         // A subscriber that restored a replacement replica continues to count
         // toward restore capacity until it has caught up.
-        const release = this.#restoreAdmission?.reservationSubscribed(
+        const replacement = this.#restoreAdmission?.reservationSubscribed(
           ctx.taskID,
         );
-        if (release) {
-          void subscriber.caughtUp.then(release);
-          downstream.addCloseHandler(release);
+        if (replacement) {
+          void subscriber.caughtUp.then(replacement.caughtUp);
+          downstream.addCloseHandler(replacement.closed);
         }
         cleanupSubscriber = await this.#startCatchup(lc, ctx, subscriber);
       }

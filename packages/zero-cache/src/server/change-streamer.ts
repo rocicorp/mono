@@ -19,6 +19,7 @@ import {createBackupCleanupMonitor} from '../services/change-streamer/backup-cle
 import {ChangeStreamerHttpServer} from '../services/change-streamer/change-streamer-http.ts';
 import {initializeStreamer} from '../services/change-streamer/change-streamer-service.ts';
 import type {ChangeStreamerService} from '../services/change-streamer/change-streamer.ts';
+import {DEFAULT_READINESS_GRACE_PERIOD_MS} from '../services/change-streamer/restore-admission.ts';
 import {initChangeStreamerSchema} from '../services/change-streamer/schema/init.ts';
 import {AutoResetSignal} from '../services/change-streamer/schema/tables.ts';
 import {
@@ -278,6 +279,13 @@ export default async function runWorker(
               ? flowControlSlowSubscriberGracePeriodSeconds * 1000
               : undefined,
           maxConcurrentSwitchoverRestores,
+          // When lag reporting is enabled, a restored view-syncer waits for
+          // the next lag report (sent at an interval with ~1 second of
+          // jitter) before becoming ready.
+          switchoverRestoreReadinessGracePeriodMs:
+            (replicationLag.reportIntervalMs > 0
+              ? replicationLag.reportIntervalMs + 1000
+              : 0) + DEFAULT_READINESS_GRACE_PERIOD_MS,
           statementTimeoutMs: change.statementTimeoutMs,
           changeLogBatchSize: change.logBatchSize,
           sqliteCatchup: {
