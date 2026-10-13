@@ -1,4 +1,4 @@
-import {expect, expectTypeOf, test} from 'vitest';
+import {describe, expect, expectTypeOf, test} from 'vitest';
 import {assert} from './asserts.ts';
 import * as v from './valita.ts';
 import {parse} from './valita.ts';
@@ -355,6 +355,109 @@ test('strict', () => {
   expect(v.parse({strict: {a: 1}, other: {a: 1, b: 2}}, s, 'strip')).toEqual({
     strict: {a: 1},
     other: {a: 1},
+  });
+});
+
+describe('taggedTupleUnion', () => {
+  const s = v.taggedTupleUnion(
+    [
+      v.tuple([v.literal('a'), v.object({x: v.number()})]),
+      v.tuple([v.literal('b')]),
+    ],
+    {open: true},
+  );
+
+  test('types', () => {
+    expectTypeOf<v.Infer<typeof s>>().toEqualTypeOf<
+      ['a', {x: number}] | ['b'] | v.UnrecognizedTuple
+    >();
+    const value = v.parse(['b'], s);
+    if (s.isKnown(value)) {
+      expectTypeOf(value).toEqualTypeOf<['a', {x: number}] | ['b']>();
+    } else {
+      expectTypeOf(value).toEqualTypeOf<v.UnrecognizedTuple>();
+    }
+    // @ts-expect-error A plain string is not Unrecognized.
+    const u: v.Unrecognized = 'c';
+    expect(u).toBe('c');
+  });
+
+  test('picks the tuple by its tag', () => {
+    expect(v.parse(['a', {x: 1}], s)).toEqual(['a', {x: 1}]);
+    expect(v.parse(['b'], s)).toEqual(['b']);
+    expect(() => v.parse(['a', {x: 'y'}], s)).toThrow(
+      new TypeError('Expected number at 1.x. Got "y"'),
+    );
+    expect(() => v.parse(['b', 1], s)).toThrow(
+      new TypeError('Expected array with length 1. Got array with length 2'),
+    );
+  });
+
+  test('passes the mode on', () => {
+    expect(() => v.parse(['a', {x: 1, y: 2}], s)).toThrow(
+      new TypeError('Unexpected property y at 1'),
+    );
+    expect(v.parse(['a', {x: 1, y: 2}], s, 'strip')).toEqual(['a', {x: 1}]);
+  });
+
+  test('returns a tuple with a tag it does not know as is', () => {
+    const value = ['c', {anything: true}];
+    const parsed = v.parse(value, s);
+    expect(parsed).toBe(value);
+    expect(s.isKnown(parsed)).toBe(false);
+    expect(s.isKnown(v.parse(['b'], s))).toBe(true);
+  });
+
+  test('rejects a value that is not a tagged tuple', () => {
+    expect(() => v.parse('a', s)).toThrow(
+      new TypeError('Expected array. Got "a"'),
+    );
+    expect(() => v.parse([], s)).toThrow(
+      new TypeError('Expected string at 0. Got undefined'),
+    );
+    expect(() => v.parse([1, {}], s)).toThrow(
+      new TypeError('Expected string at 0. Got 1'),
+    );
+  });
+
+  test('takes any literal as a tag', () => {
+    const n = v.taggedTupleUnion(
+      [
+        v.tuple([v.literal(0), v.string()]),
+        v.tuple([v.literal(1), v.number()]),
+      ],
+      {open: true},
+    );
+    expect(v.parse([1, 2], n)).toEqual([1, 2]);
+    expect(n.isKnown(v.parse([2, 'new'], n))).toBe(false);
+    expect(() => v.parse(['0', 'x'], n)).toThrow(
+      new TypeError('Expected number at 0. Got "0"'),
+    );
+  });
+
+  test('requires distinct literal tags', () => {
+    expect(() =>
+      v.taggedTupleUnion([v.tuple([v.string(), v.number()])], {open: true}),
+    ).toThrow('Expected every tag to be a literal');
+    expect(() =>
+      v.taggedTupleUnion(
+        [
+          v.tuple([v.literal('a'), v.number()]),
+          v.tuple([v.literal('a'), v.string()]),
+        ],
+        {open: true},
+      ),
+    ).toThrow('Duplicate tag "a"');
+  });
+
+  test('closed is not implemented yet', () => {
+    expect(() =>
+      v.taggedTupleUnion([v.tuple([v.literal('a')])], {open: false}),
+    ).toThrow('A closed taggedTupleUnion is not implemented');
+  });
+
+  test('shows its tuples to JSON.stringify', () => {
+    expect(JSON.stringify(s)).toContain('"taggedTupleUnion":[');
   });
 });
 

@@ -12,33 +12,45 @@ import {pullRequestMessageSchema} from './pull.ts';
 import {ackMutationResponsesMessageSchema, pushMessageSchema} from './push.ts';
 import {updateAuthMessageSchema} from './update-auth.ts';
 
-export const upstreamSchema = v.union(
-  initConnectionMessageSchema,
-  pingMessageSchema,
-  deleteClientsMessageSchema,
-  changeDesiredQueriesMessageSchema,
-  pullRequestMessageSchema,
-  updateAuthMessageSchema,
-  pushMessageSchema,
-  closeConnectionMessageSchema,
-  inspectUpMessageSchema,
-  ackMutationResponsesMessageSchema,
+export const upstreamSchema = v.taggedTupleUnion(
+  [
+    initConnectionMessageSchema,
+    pingMessageSchema,
+    deleteClientsMessageSchema,
+    changeDesiredQueriesMessageSchema,
+    pullRequestMessageSchema,
+    updateAuthMessageSchema,
+    pushMessageSchema,
+    closeConnectionMessageSchema,
+    inspectUpMessageSchema,
+    ackMutationResponsesMessageSchema,
+  ],
+  {open: true},
 );
 
-export const upstreamSchemaWithUnparsedAnalyzeQuery = v.union(
-  initConnectionMessageSchema,
-  pingMessageSchema,
-  deleteClientsMessageSchema,
-  changeDesiredQueriesMessageSchema,
-  pullRequestMessageSchema,
-  updateAuthMessageSchema,
-  pushMessageSchema,
-  closeConnectionMessageSchema,
-  unparsedInspectUpMessageSchema,
-  ackMutationResponsesMessageSchema,
+export const upstreamSchemaWithUnparsedAnalyzeQuery = v.taggedTupleUnion(
+  [
+    initConnectionMessageSchema,
+    pingMessageSchema,
+    deleteClientsMessageSchema,
+    changeDesiredQueriesMessageSchema,
+    pullRequestMessageSchema,
+    updateAuthMessageSchema,
+    pushMessageSchema,
+    closeConnectionMessageSchema,
+    unparsedInspectUpMessageSchema,
+    ackMutationResponsesMessageSchema,
+  ],
+  {open: true},
 );
 
-export type Upstream = v.Infer<typeof upstreamSchema>;
-export type UpstreamWithUnparsedAnalyzeQuery = v.Infer<
-  typeof upstreamSchemaWithUnparsedAnalyzeQuery
+// The messages this build knows. Parsing can also return a v.UnrecognizedTuple
+// from a newer client; check with `isKnown`.
+export type Upstream = Exclude<
+  v.Infer<typeof upstreamSchema>,
+  v.UnrecognizedTuple
+>;
+export type UpstreamWithUnparsedAnalyzeQuery = Exclude<
+  v.Infer<typeof upstreamSchemaWithUnparsedAnalyzeQuery>,
+  v.UnrecognizedTuple
 >;

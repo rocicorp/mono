@@ -106,16 +106,21 @@ const LEGACY_QUERIES_DISABLED_MESSAGE =
 
 // Exported for testing purposes.
 //
-// Client messages are parsed in strip mode, so a newer client can add fields
-// that this server drops. Strip rather than passthrough: nothing this server
-// doesn't know reaches the CVR or the API server, and valita's passthrough
-// drops unknown fields anyway on any object with a transformed field below it
-// (such as jsonSchema args). ASTs stay strict in the schema, because a server
-// that ignored an AST field would run a different query.
+// Client messages are parsed leniently, so a newer client can add message
+// kinds and fields:
+// - A message of a kind this server doesn't know parses as an
+//   UnrecognizedTuple, for the connection to drop. Malformed messages still
+//   throw.
+// - Messages are parsed in strip mode, so fields this server doesn't know are
+//   dropped. Strip rather than passthrough: nothing this server doesn't know
+//   reaches the CVR or the API server, and valita's passthrough drops unknown
+//   fields anyway on any object with a transformed field below it (such as
+//   jsonSchema args). ASTs stay strict in the schema, because a server that
+//   ignored an AST field would run a different query.
 export function parseUpstreamMessage(
   value: unknown,
   allowLegacyQueries: boolean,
-): UpstreamWithUnparsedAnalyzeQuery {
+): UpstreamWithUnparsedAnalyzeQuery | valita.UnrecognizedTuple {
   if (!allowLegacyQueries && containsLegacyQuery(value)) {
     throw new Error(LEGACY_QUERIES_DISABLED_MESSAGE);
   }
@@ -165,6 +170,7 @@ export class Connection {
   #viewSyncerOutboundStream: Source<ViewSyncerDownstream> | undefined;
   #pusherOutboundStream: Source<Downstream> | undefined;
   #closed = false;
+  #loggedUnknownMessage = false;
 
   constructor(
     lc: LogContext,
@@ -284,6 +290,17 @@ export class Connection {
         errorBody,
         new ProtocolErrorWithLevel(errorBody, 'warn'),
       );
+      return;
+    }
+
+    if (!upstreamSchemaWithUnparsedAnalyzeQuery.isKnown(msg)) {
+      // A message kind from a newer client.
+      if (!this.#loggedUnknownMessage) {
+        this.#loggedUnknownMessage = true;
+        this.#lc.info?.(
+          `Ignoring messages of unknown type, starting with ${JSON.stringify(msg[0])}`,
+        );
+      }
       return;
     }
 

@@ -333,3 +333,82 @@ export function literalUnion<T extends [...Literal[]]>(
 ): v.Type<T[number]> {
   return v.union(...literals.map(v.literal));
 }
+
+declare const unrecognized: unique symbol;
+
+/** A value of an open enum that this build doesn't know. Keeps the raw value. */
+export type Unrecognized<T extends Literal = string> = T & {
+  readonly [unrecognized]: true;
+};
+
+/** A tuple whose first element, its tag, is a literal. */
+type TaggedTuple = v.TupleType<[v.Type<Literal>, ...v.Type[]]>;
+
+/** A tuple with a tag this build doesn't know, as {@link taggedTupleUnion} parses it. */
+export type UnrecognizedTuple = [
+  tag: Unrecognized<Literal>,
+  ...rest: unknown[],
+];
+
+/**
+ * A union of tuples tagged by a literal in their first element, such as
+ * `['ping', {}]`. Unlike `union`, it picks the tuple by its tag instead of
+ * trying each in turn.
+ *
+ * With `open`, a tuple whose tag it doesn't know, but of the same type as a
+ * known tag, parses as is, typed as {@link UnrecognizedTuple}, so a reader can
+ * skip kinds a newer writer added. Use `isKnown` to tell them apart:
+ * TypeScript can't narrow the union by comparing the tag, because a tag
+ * literal is comparable to `Unrecognized`. A closed union is not implemented
+ * yet.
+ */
+export function taggedTupleUnion<T extends TaggedTuple[]>(
+  tuples: T,
+  options: {readonly open: boolean},
+): v.Type<v.Infer<T[number]> | UnrecognizedTuple> & {
+  isKnown(
+    value: v.Infer<T[number]> | UnrecognizedTuple,
+  ): value is v.Infer<T[number]>;
+} {
+  if (!options.open) {
+    throw new Error('A closed taggedTupleUnion is not implemented');
+  }
+  type Known = v.Infer<T[number]>;
+  const byTag = new Map<unknown, v.Type>();
+  const tagTypes = new Set<string>();
+  for (const tuple of tuples) {
+    toTerminals(tuple.prefix[0], t => {
+      if (t.name !== 'literal') {
+        throw new Error('Expected every tag to be a literal');
+      }
+      if (byTag.has(t.value)) {
+        throw new Error(`Duplicate tag ${toDisplay(t.value)}`);
+      }
+      byTag.set(t.value, tuple);
+      tagTypes.add(typeof t.value);
+    });
+  }
+  const expectedTag = `Expected ${displayList('or', [...tagTypes])}`;
+  const type = v
+    .unknown()
+    .chain((value, options): v.ValitaResult<Known | UnrecognizedTuple> => {
+      if (!Array.isArray(value)) {
+        return v.err('Expected array');
+      }
+      const [tag] = value;
+      const tuple = byTag.get(tag);
+      if (tuple) {
+        return tuple.try(value, options) as v.ValitaResult<Known>;
+      }
+      return tagTypes.has(typeof tag)
+        ? v.ok(value as UnrecognizedTuple)
+        : v.err({message: expectedTag, path: [0]});
+    });
+  return Object.assign(type, {
+    // A transform serializes as just its name. Show the tuples too, so a
+    // change to them still changes the hash in protocol-version.test.ts.
+    taggedTupleUnion: tuples,
+    isKnown: (value: Known | UnrecognizedTuple): value is Known =>
+      byTag.has(value[0]),
+  });
+}
