@@ -14,9 +14,9 @@
  * `clientSchemaFrom`) and Replicache's own layout (`FormatVersion`).
  *
  * This is separate from `PROTOCOL_VERSION`, which changes with the wire
- * format. It starts at 53, the protocol version the name used until then, so
- * clients already on 53 (1.11 canaries from 1.11.0-canary.34 on) keep their
- * database. Clients from 1.10.0 and earlier still move once, as on every
- * protocol bump before.
+ * format. It is 52, the protocol version 1.10.0 named its database with, so
+ * 1.10.0 clients keep their database and the mutations they haven't pushed.
+ * Protocol 53 didn't change what a client stores. 1.11 canaries from
+ * 1.11.0-canary.34 on, which named their database with 53, move once.
  */
-export const STORAGE_VERSION = 53;
+export const STORAGE_VERSION = 52;

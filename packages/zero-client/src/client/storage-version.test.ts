@@ -204,7 +204,7 @@ test('When what a client stores changes we may need to bump the storage version'
       {op: 'del', key: 'm/c1/1'},
     ],
   });
-  expect(STORAGE_VERSION).toBe(53);
+  expect(STORAGE_VERSION).toBe(52);
 });
 
 test('What a client stores for pending mutations', async () => {
