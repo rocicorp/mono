@@ -44,7 +44,7 @@ export type AnalyzeQueryOptions = v.Infer<typeof analyzeQueryOptionsSchema>;
 
 export const inspectAnalyzeQueryUpSchema = inspectUpBase.extend({
   op: v.literal('analyze-query'),
-  /** @deprecated Use {@linkcode ast} instead */
+  /** @deprecated Use {@link ast} instead */
   value: strictASTSchema.optional(),
   options: analyzeQueryOptionsSchema.optional(),
   ast: strictASTSchema.optional(),
@@ -54,7 +54,7 @@ export const inspectAnalyzeQueryUpSchema = inspectUpBase.extend({
 
 const unparsedInspectAnalyzeQueryUpSchema = inspectUpBase.extend({
   op: v.literal('analyze-query'),
-  /** @deprecated Use {@linkcode ast} instead */
+  /** @deprecated Use {@link ast} instead */
   value: v.unknown().optional(),
   options: analyzeQueryOptionsSchema.optional(),
   ast: v.unknown().optional(),

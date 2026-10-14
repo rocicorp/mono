@@ -28,7 +28,7 @@ import {createLogContext} from '../logging.ts';
  * This function will call `cb` in parallel for each query found in the request.
  *
  * If you need to limit concurrency, you can use a library like `p-limit` to wrap the `cb` function.
- * @deprecated Use {@linkcode handleQueryRequest} instead.
+ * @deprecated Use {@link handleQueryRequest} instead.
  */
 export function handleGetQueriesRequest<S extends Schema>(
   cb: (
@@ -52,7 +52,7 @@ export function handleGetQueriesRequest<S extends Schema>(
  * This function will call `cb` in parallel for each query found in the request.
  *
  * If you need to limit concurrency, you can use a library like `p-limit` to wrap the `cb` function.
- * @deprecated Use {@linkcode handleQueryRequest} instead.
+ * @deprecated Use {@link handleQueryRequest} instead.
  */
 export function handleTransformRequest<S extends Schema>(
   cb: (
@@ -70,7 +70,7 @@ export function handleTransformRequest<S extends Schema>(
 }
 
 /**
- * Parsed query params accepted by {@linkcode handleQueryRequest} when the
+ * Parsed query params accepted by {@link handleQueryRequest} when the
  * incoming request URL has already been handled by your framework.
  */
 export type QuerySearchParams = URLSearchParams | Record<string, string>;

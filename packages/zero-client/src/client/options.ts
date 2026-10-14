@@ -13,7 +13,7 @@ import type {CustomMutatorDefs} from './custom.ts';
 import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
 
 /**
- * Configuration for {@linkcode Zero}.
+ * Configuration for {@link Zero}.
  */
 export type ZeroOptions<
   S extends BaseDefaultSchema = DefaultSchema,
@@ -34,7 +34,7 @@ export type ZeroOptions<
   cacheURL?: string | null | undefined;
 
   /**
-   * @deprecated Use {@linkcode cacheURL} instead.
+   * @deprecated Use {@link cacheURL} instead.
    */
   server?: string | null | undefined;
 
@@ -93,7 +93,7 @@ export type ZeroOptions<
    * Destination for Zero's log output. When omitted, logs are written with
    * `console.log`/`info`/`warn`/`error` etc.
    *
-   * Provide a custom {@linkcode LogSink} to redirect logs — for example, to
+   * Provide a custom {@link LogSink} to redirect logs — for example, to
    * `process.stderr` in a CLI so that the tool's structured stdout output
    * isn't polluted by log lines.
    *
@@ -166,7 +166,7 @@ export type ZeroOptions<
    * Custom URL for query requests sent to your API server.
    * If not provided, uses the default configured in zero-cache.
    *
-   * @deprecated Use {@linkcode queryURL} instead.
+   * @deprecated Use {@link queryURL} instead.
    */
   getQueriesURL?: string | undefined;
 
@@ -209,7 +209,7 @@ export type ZeroOptions<
   /**
    * `onOnlineChange` is called when the Zero instance's online status changes.
    *
-   * @deprecated Use {@linkcode Connection.state.subscribe} on the Zero instance instead. e.g.
+   * @deprecated Use {@link Connection.state.subscribe} on the Zero instance instead. e.g.
    * ```ts
    * const zero = new Zero({...});
    * zero.connection.state.subscribe((state) => {
@@ -217,7 +217,7 @@ export type ZeroOptions<
    * });
    * ```
    *
-   * Or use a hook like {@linkcode useConnectionState} to subscribe to state changes.
+   * Or use a hook like {@link useConnectionState} to subscribe to state changes.
    */
   onOnlineChange?: ((online: boolean) => void) | undefined;
 

@@ -43,7 +43,7 @@ export interface TransactionBase<S extends Schema> {
 
   readonly mutate: TransactionMutate<S>;
   /**
-   * @deprecated Use {@linkcode createBuilder} with `tx.run(zql.table.where(...))` instead.
+   * @deprecated Use {@link createBuilder} with `tx.run(zql.table.where(...))` instead.
    */
   readonly query: ConditionalSchemaQuery<S>;
 
@@ -139,8 +139,8 @@ export interface DBConnection<TWrappedTransaction> {
   query?: Queryable['query'] | undefined;
 
   /**
-   * Mirrors {@linkcode DBTransaction.runQuery} for reads issued through
-   * {@linkcode query}. An adapter that customizes `DBTransaction.runQuery`
+   * Mirrors {@link DBTransaction.runQuery} for reads issued through
+   * {@link query}. An adapter that customizes `DBTransaction.runQuery`
    * should implement this too so that `ZQLDatabase.run` and `tx.run` execute
    * a query the same way. Optional; when absent, the default Postgres
    * executor is used.

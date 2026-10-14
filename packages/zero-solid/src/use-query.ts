@@ -45,7 +45,7 @@ export type MaybeQueryResult<TReturn> = readonly [
 
 // Deprecated in 0.22
 /**
- * @deprecated Use {@linkcode UseQueryOptions} instead.
+ * @deprecated Use {@link UseQueryOptions} instead.
  */
 export type CreateQueryOptions = {
   ttl?: TTL | undefined;
@@ -57,7 +57,7 @@ export type UseQueryOptions = {
 
 // Deprecated in 0.22
 /**
- * @deprecated Use {@linkcode useQuery} instead.
+ * @deprecated Use {@link useQuery} instead.
  */
 export function createQuery<
   TTable extends keyof TSchema['tables'] & string,

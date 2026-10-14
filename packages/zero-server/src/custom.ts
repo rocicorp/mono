@@ -123,7 +123,7 @@ export class TransactionImpl<
   readonly mutationID: number;
   readonly mutate: TransactionMutate<TSchema>;
   /**
-   * @deprecated Use {@linkcode createBuilder} with `tx.run(zql.table.where(...))` instead.
+   * @deprecated Use {@link createBuilder} with `tx.run(zql.table.where(...))` instead.
    */
   readonly query: ConditionalSchemaQuery<TSchema>;
 

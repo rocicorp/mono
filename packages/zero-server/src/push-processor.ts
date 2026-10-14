@@ -34,7 +34,7 @@ export class PushProcessor<
   /**
    * @param logSink Destination for this processor's log output. When omitted,
    *   logs are written with `console.log`/`info`/`warn`/`error` etc. Provide a
-   *   custom {@linkcode LogSink} to redirect them into the application's own
+   *   custom {@link LogSink} to redirect them into the application's own
    *   logging pipeline.
    */
   constructor(

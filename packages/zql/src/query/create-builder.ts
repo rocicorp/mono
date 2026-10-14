@@ -15,7 +15,7 @@ export function createBuilder<S extends Schema>(schema: S): SchemaQuery<S> {
   );
 }
 
-/** @deprecated Use {@linkcode createBuilder} with `tx.run(zql.table.where(...))` instead. */
+/** @deprecated Use {@link createBuilder} with `tx.run(zql.table.where(...))` instead. */
 export function createRunnableBuilder<S extends Schema>(
   delegate: QueryDelegate,
   schema: S,

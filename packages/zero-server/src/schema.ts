@@ -114,7 +114,7 @@ export async function getServerSchema<S extends Schema>(
 }
 
 /**
- * The query behind {@linkcode getServerSchema}, exported so that it can be
+ * The query behind {@link getServerSchema}, exported so that it can be
  * diffed against the `information_schema` query it replaced.
  */
 export function serverSchemaQuery(

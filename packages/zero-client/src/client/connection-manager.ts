@@ -97,7 +97,7 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
 
   /**
    * `Date.now()` at the last timeout-interval tick, used to notice that the
-   * JavaScript event loop was not running. See {@linkcode #creditFrozenTime}.
+   * JavaScript event loop was not running. See {@link #creditFrozenTime}.
    */
   #lastTimeoutCheckAt: number;
 

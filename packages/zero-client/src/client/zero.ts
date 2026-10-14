@@ -513,7 +513,7 @@ export class Zero<
   /**
    * Query builders for each table in the schema.
    *
-   * @deprecated Use {@linkcode createBuilder} to create query builders instead.
+   * @deprecated Use {@link createBuilder} to create query builders instead.
    */
   readonly query: ConditionalSchemaQuery<S>;
 

@@ -31,7 +31,7 @@ export function getBrowserGlobal<T extends keyof GlobalThis>(
  * This is important because some methods (e.g. `requestAnimationFrame`) are not
  * bound to the global object by default.
  *
- * If you end up using {@linkcode getBrowserGlobal} instead in a case like this:
+ * If you end up using {@link getBrowserGlobal} instead in a case like this:
  *
  * ```js
  * this.#raf = getBrowserGlobal('requestAnimationFrame') ?? rafFallback;

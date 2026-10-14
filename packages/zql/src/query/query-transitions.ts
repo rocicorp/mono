@@ -19,7 +19,7 @@ import {getOrInsertComputed, newMap} from '../../../shared/src/map.ts';
  *    in a *stable* string rather than build one per call; see below.
  * 2. `value` — the operation's varying argument, when it is a primitive, used
  *    directly as a `Map` key.
- * 3. `delta` — anything left over, compared with {@linkcode deepEqual}.
+ * 3. `delta` — anything left over, compared with {@link deepEqual}.
  *
  * Splitting 1 from 2 is what makes this fast. Folding the value into the key
  * instead means building a fresh string on every call, and a fresh string has to
@@ -63,7 +63,7 @@ import {getOrInsertComputed, newMap} from '../../../shared/src/map.ts';
  * ## Best effort
  *
  * Interning is a cache, not a guarantee: a missed lookup only costs an extra
- * object. See {@linkcode MAX_SCAN} for the one case where we deliberately give
+ * object. See {@link MAX_SCAN} for the one case where we deliberately give
  * up.
  *
  * ## Identity vs. hash
@@ -71,7 +71,7 @@ import {getOrInsertComputed, newMap} from '../../../shared/src/map.ts';
  * Identity implies an equal query hash, but the tree alone does not give the
  * converse. `normalizeAST` sorts `related` and `and`/`or` conditions, so
  * `q.where(a).where(b)` and `q.where(b).where(a)` hash the same while being
- * distinct paths, and so distinct nodes. {@linkcode HashIndex} is the second
+ * distinct paths, and so distinct nodes. {@link HashIndex} is the second
  * level that folds those together once they have been hashed. Callers that
  * need the normalizing behavior for a query that may not have been must keep
  * using the hash.
@@ -247,7 +247,7 @@ export class Transitions<T extends object> {
 
   /**
    * Re-points the transition that produced `from` at `to`, so the next lookup
-   * along that path yields `to` instead. This is how {@linkcode HashIndex}
+   * along that path yields `to` instead. This is how {@link HashIndex}
    * converges two paths on one node: `from` keeps its identity, since it has
    * already been handed out, and its path is redirected for the rebuilds that
    * follow.
@@ -353,7 +353,7 @@ export class Transitions<T extends object> {
  *
  * On a hit the query being hashed keeps its identity, since it has already
  * been handed out. Its *transition* is re-pointed at the existing node instead
- * (see {@linkcode Transitions.replace}), so the next rebuild along that path
+ * (see {@link Transitions.replace}), so the next rebuild along that path
  * yields the shared instance. As with the tree this is a cache: the rebuild
  * after a redirect is what converges, not the call that found the duplicate.
  *

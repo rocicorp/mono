@@ -2,7 +2,7 @@ import {vi} from 'vitest';
 
 /**
  * Controls over the stubbed `WeakRef` installed by
- * {@linkcode withStubbedWeakRef}.
+ * {@link withStubbedWeakRef}.
  */
 export type WeakRefControl = {
   /**
@@ -25,7 +25,7 @@ export type WeakRefControl = {
    */
   derefs(): number;
 
-  /** Resets {@linkcode derefs} to zero. */
+  /** Resets {@link derefs} to zero. */
   resetDerefs(): void;
 };
 

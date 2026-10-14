@@ -36,7 +36,7 @@ export function useZero<
 }
 
 /**
- * @deprecated Use {@linkcode useZero} instead, alongside default types defined with:
+ * @deprecated Use {@link useZero} instead, alongside default types defined with:
  *
  * ```ts
  * declare module '@rocicorp/zero' {

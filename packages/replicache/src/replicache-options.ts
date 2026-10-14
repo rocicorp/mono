@@ -222,7 +222,7 @@ export interface ReplicacheOptions<MD extends MutatorDefs> {
    * This means that this is the maximum time a tab can be in the background
    * (frozen or in fbcache) and still be able to sync when it comes back to the
    * foreground. If tab comes back after this time the
-   * {@linkcode onClientStateNotFound} callback is called on the Replicache
+   * {@link onClientStateNotFound} callback is called on the Replicache
    * instance.
    */
   clientMaxAgeMs?: number | undefined;

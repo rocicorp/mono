@@ -11,7 +11,7 @@ export const queryInternalsTag = Symbol();
 /**
  * Internal interface for query implementation details.
  * This is not part of the public API and should only be accessed via
- * the {@linkcode asQueryInternals} function.
+ * the {@link asQueryInternals} function.
  *
  * @typeParam TSchema The database schema type extending ZeroSchema
  * @typeParam TTable The name of the table being queried, must be a key of TSchema['tables']
@@ -26,8 +26,8 @@ export interface QueryInternals<
 
   /**
    * Format is used to specify the shape of the query results. This is used by
-   * {@linkcode one} and it also describes the shape when using
-   * {@linkcode related}.
+   * {@link one} and it also describes the shape when using
+   * {@link related}.
    */
   readonly format: Format;
 
@@ -36,11 +36,11 @@ export interface QueryInternals<
    * exactly when they are interchangeable, down to how their builder methods
    * behave.
    *
-   * It covers the AST, the {@linkcode format} the results take, the system the
+   * It covers the AST, the {@link format} the results take, the system the
    * query was built for, the junction relationship it is being built inside,
    * and, for a custom query, the name and arguments it was declared with.
    * Everything past the AST is hashed explicitly because it leaves no trace
-   * there: {@linkcode nameAndArgs} reuses the AST it is given, a query with no
+   * there: {@link nameAndArgs} reuses the AST it is given, a query with no
    * relationship and no `exists` has nowhere to stamp its system, and the
    * junction flag -- which decides whether `limit` and `orderBy` throw --
    * appears nowhere in the AST at all. Without them, such queries would share a

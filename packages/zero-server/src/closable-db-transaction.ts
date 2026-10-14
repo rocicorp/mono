@@ -2,7 +2,7 @@ import type {DBTransaction, Queryable} from '../../zql/src/mutate/custom.ts';
 import type {HumanReadable} from '../../zql/src/query/query.ts';
 
 /**
- * A {@linkcode DBTransaction} that stops working once closed. The mutator's
+ * A {@link DBTransaction} that stops working once closed. The mutator's
  * `tx` is built on it, so code that outlives the transaction cannot reach a
  * connection that has been committed, rolled back or returned to the pool.
  */

@@ -148,7 +148,7 @@ export class ZQLDatabase<
   /**
    * Runs a single read query.
    *
-   * When the {@linkcode DBConnection} implements `query`, the compiled SQL is
+   * When the {@link DBConnection} implements `query`, the compiled SQL is
    * issued as a bare statement with no `BEGIN`/`COMMIT` around it (plus a
    * one-time server schema lookup the first time this instance touches the
    * database). Postgres then releases the statement's locks the moment it
@@ -163,7 +163,7 @@ export class ZQLDatabase<
    * transaction as before.
    *
    * If you need multiple reads to observe a consistent snapshot, use
-   * {@linkcode transaction} and call `tx.run(...)` for each query instead.
+   * {@link transaction} and call `tx.run(...)` for each query instead.
    */
   run<TTable extends keyof TSchema['tables'] & string, TReturn>(
     query: Query<TTable, TSchema, TReturn>,

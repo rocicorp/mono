@@ -11,7 +11,7 @@ import {
 } from './sync/ids.ts';
 
 /**
- * We keep track of deleted clients in the {@linkcode DELETED_CLIENTS_HEAD_NAME}
+ * We keep track of deleted clients in the {@link DELETED_CLIENTS_HEAD_NAME}
  * head.
  */
 export const DELETED_CLIENTS_HEAD_NAME = 'deleted-clients-v2';
@@ -130,7 +130,7 @@ export async function getDeletedClients(
 }
 
 /**
- * Adds deleted clients to the {@linkcode DELETED_CLIENTS_HEAD_NAME} head.
+ * Adds deleted clients to the {@link DELETED_CLIENTS_HEAD_NAME} head.
  * @returns the new list of deleted clients (sorted and deduped).
  */
 export async function addDeletedClients(

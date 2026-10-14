@@ -2,7 +2,7 @@ import {ChangeType} from './change-type.ts';
 import type {Node} from './data.ts';
 
 /**
- * The `child` payload carried by a {@linkcode ChildChange}.
+ * The `child` payload carried by a {@link ChildChange}.
  */
 export type ChildData = {
   relationshipName: string;
@@ -33,11 +33,11 @@ export type ChildChange = [
 ];
 
 /**
- * The row changed (in a way that the {@linkcode Source} determines). Most
+ * The row changed (in a way that the {@link Source} determines). Most
  * likely the PK stayed the same but there is really no restriction in how it
  * can change.
  *
- * The edit changes flows down in a {@linkcode Output.push}.
+ * The edit changes flows down in a {@link Output.push}.
  * There are cases where an edit change gets split into a remove and/or an add
  * change.
  * 1. when the presence of the row in the result changes (for example the row

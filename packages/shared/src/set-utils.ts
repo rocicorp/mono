@@ -75,7 +75,7 @@ export function intersection<T>(
 }
 
 /**
- * Returns the elements in {@linkcode a} that are not in {@linkcode b}.
+ * Returns the elements in {@link a} that are not in {@link b}.
  */
 export function difference<T>(
   a: ReadonlySetLike<T>,

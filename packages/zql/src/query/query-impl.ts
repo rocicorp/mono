@@ -265,7 +265,7 @@ export class QueryImpl<
 
   /**
    * Interns a transition whose key space is finite and schema-derived; see
-   * {@linkcode Transitions.storeBounded}. Used for the base sub-query handed to
+   * {@link Transitions.storeBounded}. Used for the base sub-query handed to
    * a `related`/`exists` callback, which is determined entirely by the
    * relationship name.
    */
@@ -1053,7 +1053,7 @@ function tri(b: boolean | undefined): string {
 
 /**
  * An exact key for a whole condition tree, or `undefined` for a shape we cannot
- * encode (which falls back to {@linkcode treeKey} plus a delta).
+ * encode (which falls back to {@link treeKey} plus a delta).
  *
  * Everything variable-length is length-prefixed, so distinct trees cannot
  * produce the same string and the key needs no `deepEqual` to back it up. That
@@ -1093,7 +1093,7 @@ function condKey(cond: Condition): string | undefined {
 }
 
 /**
- * A coarse bucket key for the conditions {@linkcode condKey} cannot encode --
+ * A coarse bucket key for the conditions {@link condKey} cannot encode --
  * a two-hop `exists`, whose junction AST is built inline and so has no identity
  * of its own. Reads only the top of the tree, so it is cheap; the delta tells
  * apart what shares it.

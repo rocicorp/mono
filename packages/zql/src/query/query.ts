@@ -63,7 +63,7 @@ export type ExistsOptions<TScalar extends boolean = boolean> = {
    *
    * The server only honors this when the subquery is *provably* limited to one
    * row: every column of the table's primary key, or of one of its
-   * {@linkcode unique} keys, constrained to a literal by `=`. A subquery that
+   * {@link unique} keys, constrained to a literal by `=`. A subquery that
    * does not do so silently falls back to a plain `EXISTS`, so the type rejects
    * `scalar: true` there rather than letting the hint go quietly unused.
    *
@@ -77,7 +77,7 @@ declare const pinnedColumns: unique symbol;
 
 /**
  * The keys that make a subquery over `TTable` provably single-row: its primary
- * key, plus any {@linkcode unique} keys the schema declares.
+ * key, plus any {@link unique} keys the schema declares.
  */
 type UniqueKeysOf<
   TTable extends string,
@@ -473,12 +473,12 @@ export interface Query<
   one(): Query<TTable, TSchema, TReturn | undefined, TPinned>;
 
   /**
-   * @deprecated Use {@linkcode RunOptions} with {@linkcode zero.run} instead.
+   * @deprecated Use {@link RunOptions} with {@link zero.run} instead.
    */
   run(options?: RunOptions): Promise<HumanReadable<TReturn>>;
 
   /**
-   * @deprecated Use {@linkcode PreloadOptions} with {@linkcode zero.preload} instead.
+   * @deprecated Use {@link PreloadOptions} with {@link zero.preload} instead.
    */
   preload(options?: PreloadOptions): {
     cleanup: () => void;
@@ -487,11 +487,11 @@ export interface Query<
   };
 
   /**
-   * @deprecated Use {@linkcode MaterializeOptions} with {@linkcode zero.materialize} instead.
+   * @deprecated Use {@link MaterializeOptions} with {@link zero.materialize} instead.
    */
   materialize(ttl?: TTL): TypedView<HumanReadable<TReturn>>;
   /**
-   * @deprecated Use {@linkcode MaterializeOptions} with {@linkcode zero.materialize} instead.
+   * @deprecated Use {@link MaterializeOptions} with {@link zero.materialize} instead.
    */
   materialize<T>(
     factory: ViewFactory<TTable, TSchema, TReturn, T>,
@@ -502,7 +502,7 @@ export interface Query<
 export type PreloadOptions = {
   /**
    * Time To Live. This is the amount of time to keep the rows associated with
-   * this query after {@linkcode cleanup} has been called.
+   * this query after {@link cleanup} has been called.
    */
   ttl?: TTL | undefined;
 };
@@ -523,7 +523,7 @@ export type HumanReadableRecursive<T> = undefined extends T
   : ExpandRecursive<T>[];
 
 /**
- * The kind of results we want to wait for when using {@linkcode run} on {@linkcode Query}.
+ * The kind of results we want to wait for when using {@link run} on {@link Query}.
  *
  * `unknown` means we don't want to wait for the server to return results. The result is a
  * snapshot of the data at the time the query was run. It never waits: while the client is

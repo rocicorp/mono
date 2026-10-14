@@ -39,7 +39,7 @@ function normalizeParser<T extends ReadonlyJSONValue[]>(
 }
 
 /**
- * @deprecated Use {@linkcode defineQuery} instead.
+ * @deprecated Use {@link defineQuery} instead.
  */
 export function syncedQuery<
   TName extends string,
@@ -60,7 +60,7 @@ export function syncedQuery<
 }
 
 /**
- * @deprecated Use {@linkcode defineQuery} instead.
+ * @deprecated Use {@link defineQuery} instead.
  */
 export function syncedQueryWithContext<
   TName extends string,

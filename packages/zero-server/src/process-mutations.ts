@@ -115,12 +115,12 @@ const applicationErrorWrapper = async <T>(fn: () => Promise<T>): Promise<T> => {
 };
 
 /**
- * @deprecated Use {@linkcode handleMutateRequest} instead.
+ * @deprecated Use {@link handleMutateRequest} instead.
  */
 export const handleMutationRequest = handleMutateRequest;
 
 /**
- * Parsed query params accepted by {@linkcode handleMutateRequest} when the
+ * Parsed query params accepted by {@link handleMutateRequest} when the
  * incoming request URL has already been handled by your framework.
  */
 export type MutateSearchParams = URLSearchParams | Record<string, string>;
@@ -155,7 +155,7 @@ export type HandleMutateRequestArgs<
    * Destination for this request's log output. When omitted, logs are written
    * with `console.log`/`info`/`warn`/`error` etc.
    *
-   * Provide a custom {@linkcode LogSink} to redirect logs — for example into an
+   * Provide a custom {@link LogSink} to redirect logs — for example into an
    * application's own structured logging pipeline, so that records emitted while
    * processing a push carry the same fields as the rest of the server's logs.
    */
