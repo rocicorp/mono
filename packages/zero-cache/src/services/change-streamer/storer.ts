@@ -53,8 +53,10 @@ import {
 import * as ErrorType from './error-type-enum.ts';
 import {
   AutoResetSignal,
+  ensureReplicationConfig,
   markResetRequired,
   reinitializeChangeLog,
+  type ReplicaSubscriptionState,
   type BackfillingColumn,
   type ChangeLogReinitialization,
   type TableMetadataRow,
@@ -134,6 +136,16 @@ export type OwnershipTakeover = {
    * which is used to start pending backfills once ownership is assumed.
    */
   requestRestart: (reason: string) => void;
+  /**
+   * Whether to throw an AutoResetSignal if the change db requires a reset.
+   */
+  autoReset: boolean;
+  /**
+   * Whether the change log was behind the replication slot, in which case it
+   * is re-initialized from the replica (see `reinitializeFromReplica()`), and
+   * can thus be reset for a replica at any watermark.
+   */
+  pgChangeLogBehindSlot: boolean;
 };
 
 type ReplicationOwner = {
@@ -206,6 +218,7 @@ export class Storer implements Service {
   readonly #inserter: PostgresDB;
   readonly #purger: PostgresDB;
 
+  readonly #subscriptionState: ReplicaSubscriptionState;
   readonly #replicaVersion: string;
   readonly #onCommitted: (c: Commit) => void;
   readonly #onFatal: (err: Error) => void;
@@ -240,7 +253,7 @@ export class Storer implements Service {
     discoveryAddress: string,
     discoveryProtocol: string,
     dbProvider: PostgresDBProvider,
-    replicaVersion: string,
+    subscriptionState: ReplicaSubscriptionState,
     onCommitted: (c: Commit | UpstreamStatusMessage) => void,
     onFatal: (err: Error) => void,
     {
@@ -259,7 +272,8 @@ export class Storer implements Service {
     this.#db = dbProvider('change-stream-init', 3);
     this.#inserter = dbProvider('change-log-inserter', 1);
     this.#purger = dbProvider('change-log-purger', 1);
-    this.#replicaVersion = replicaVersion;
+    this.#subscriptionState = subscriptionState;
+    this.#replicaVersion = subscriptionState.replicaVersion;
     this.#onCommitted = onCommitted;
     this.#onFatal = onFatal;
     this.#statementTimeoutMs = statementTimeoutMs;
@@ -375,7 +389,21 @@ export class Storer implements Service {
    * assumed, a restart of the change stream is requested if the change log has
    * pending backfills or if a backfill transaction was skipped.
    */
-  assumeOwnershipAtHead(takeover: OwnershipTakeover) {
+  async assumeOwnershipAtHead(takeover: OwnershipTakeover) {
+    // Initialize the cdc tables for the replica, resetting the change log if
+    // it was written for a different replica (e.g. after a resync). This is
+    // deferred until now (see `checkReplicationConfig()`) because it disrupts
+    // the change-streamer that is currently serving the change log.
+    await ensureReplicationConfig(
+      this.#lc,
+      this.#db,
+      this.#subscriptionState,
+      this.#shard,
+      takeover.autoReset,
+      takeover.purgeLock ?? undefined,
+      undefined,
+      takeover.pgChangeLogBehindSlot,
+    );
     this.#pendingOwnership = {
       ...takeover,
       head: '',

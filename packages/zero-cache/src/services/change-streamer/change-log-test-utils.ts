@@ -113,7 +113,11 @@ export async function createShardStorer(
     'change-streamer:12345',
     'ws',
     () => db,
-    REPLICA_VERSION,
+    {
+      replicaVersion: REPLICA_VERSION,
+      publications: [],
+      watermark: REPLICA_VERSION,
+    },
     () => {},
     () => {},
     TUNING_OPTIONS,

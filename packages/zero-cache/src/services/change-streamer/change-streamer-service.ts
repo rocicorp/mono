@@ -56,8 +56,9 @@ import {Forwarder} from './forwarder.ts';
 import {RestoreAdmission} from './restore-admission.ts';
 import {
   AutoResetSignal,
-  ensureReplicationConfig,
+  checkReplicationConfig,
   markResetRequired,
+  type ReplicaSubscriptionState,
 } from './schema/tables.ts';
 import type {SnapshotMessage} from './snapshot-message.ts';
 import {SnapshotReservations} from './snapshot-reservations.ts';
@@ -243,16 +244,19 @@ export async function initializeStreamer(
   opts: TuningOptions,
   setTimeoutFn = setTimeout,
 ): Promise<ChangeStreamerService> {
-  await ensureReplicationConfig(
-    lc,
-    changeDB,
-    subscriptionState,
-    shard,
-    autoReset,
-    purgeLock ?? undefined,
-    setTimeoutFn,
-    opts.pgChangeLogEnabled,
-  );
+  if (opts.pgChangeLogEnabled) {
+    // Only check (without modifying) the change db here. The tables are
+    // initialized (or reset) by the Storer when it takes over the change log,
+    // so as not to disrupt the change-streamer that is currently serving it.
+    await checkReplicationConfig(
+      lc,
+      changeDB,
+      subscriptionState,
+      shard,
+      autoReset,
+      opts.pgChangeLogBehindSlot,
+    );
+  }
 
   // Dynamically creates connection pools that the implementation uses to
   // isolate concurrent, long-running transactions. This works around a bug in
@@ -274,7 +278,6 @@ export async function initializeStreamer(
       ),
     ) as PostgresDB;
 
-  const {replicaVersion} = subscriptionState;
   return new ChangeStreamerImpl(
     lc,
     shard,
@@ -282,7 +285,7 @@ export async function initializeStreamer(
     discoveryAddress,
     discoveryProtocol,
     changeDBProvider,
-    replicaVersion,
+    subscriptionState,
     changeSource,
     replicationStatusPublisher,
     backupConfig,
@@ -450,6 +453,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   readonly #source: ChangeSource;
   readonly #storer: Storer;
   readonly #pgChangeLogEnabled: boolean;
+  readonly #pgChangeLogBehindSlot: boolean;
   readonly #forwarder: Forwarder;
   readonly #reservations: SnapshotReservations | undefined;
   readonly #restoreAdmission: RestoreAdmission | undefined;
@@ -557,7 +561,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     discoveryAddress: string,
     discoveryProtocol: string,
     changeDBProvider: PostgresDBProvider,
-    replicaVersion: string,
+    subscriptionState: ReplicaSubscriptionState,
     source: ChangeSource,
     replicationStatusPublisher: ReplicationStatusPublisher,
     backupConfig: BackupConfig | null,
@@ -571,9 +575,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#backfills = new BackfillStateTracker(this.#lc);
     this.#shard = shard;
     this.#changeDBProvider = changeDBProvider;
+    const {replicaVersion} = subscriptionState;
     this.#replicaVersion = replicaVersion;
     this.#source = source;
     this.#pgChangeLogEnabled = opts.pgChangeLogEnabled;
+    this.#pgChangeLogBehindSlot = opts.pgChangeLogBehindSlot;
     if (!this.#pgChangeLogEnabled) {
       assert(
         opts.sqliteChangeLogWriter &&
@@ -608,7 +614,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       discoveryAddress,
       discoveryProtocol,
       changeDBProvider,
-      replicaVersion,
+      subscriptionState,
       consumed => this.#acker.trackPgChangeLog(consumed[2].watermark),
       err => this.stop(err),
       opts,
@@ -793,13 +799,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       this.#latestLagReportCommitTimeMs = lagReportInit.firstCommitTimeMs;
     }
 
-    if (this.#pgChangeLogEnabled) {
-      this.#storer.assumeOwnershipAtHead({
-        purgeLock: this.#purgeLock,
-        requestRestart: reason => this.#backfills.requestRestart(reason),
-      });
-    }
-    this.#purgeLock = null;
+    let takeoverPending = this.#pgChangeLogEnabled;
 
     // The threshold in (estimated number of) bytes to send() on subscriber
     // websockets before `await`-ing the I/O buffers to be ready for more.
@@ -810,6 +810,21 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       let watermark: string | null = null;
       let unflushedBytes = 0;
       try {
+        if (takeoverPending) {
+          // Initializes (or resets) the change log for this replica, which
+          // is deferred until now so as not to disrupt the change-streamer
+          // that is currently serving it. Failures are handled like those of
+          // the stream, e.g. an AutoResetSignal (if the change db changed
+          // since startup) shuts down the service.
+          await this.#storer.assumeOwnershipAtHead({
+            purgeLock: this.#purgeLock,
+            requestRestart: reason => this.#backfills.requestRestart(reason),
+            autoReset: this.#autoReset,
+            pgChangeLogBehindSlot: this.#pgChangeLogBehindSlot,
+          });
+          takeoverPending = false;
+          this.#purgeLock = null;
+        }
         // Initialization reconciles the change log for every stream
         // connection. It completes before `startStream`, so no change can
         // arrive during reconciliation.
@@ -1044,10 +1059,14 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
     switch (tag) {
       case 'reset-required':
-        await markResetRequired(
-          this.#changeDBProvider('change-streamer-reset', 1),
-          this.#shard,
-        );
+        if (this.#pgChangeLogEnabled) {
+          // Note: Without the PG change log, the reset is effected by the
+          // change source invalidating the replica.
+          await markResetRequired(
+            this.#changeDBProvider('change-streamer-reset', 1),
+            this.#shard,
+          );
+        }
         await publishReplicationError(
           this.#lc,
           'Replicating',

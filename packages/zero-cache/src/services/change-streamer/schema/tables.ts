@@ -5,7 +5,7 @@ import {type PendingQuery, type Row} from 'postgres';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {equals} from '../../../../../shared/src/set-utils.ts';
 import {runTx} from '../../../db/run-transaction.ts';
-import {type PostgresDB} from '../../../types/pg.ts';
+import {type PostgresDB, type PostgresTransaction} from '../../../types/pg.ts';
 import {cdcSchema, type ShardID} from '../../../types/shards.ts';
 import type {
   BackfillID,
@@ -163,20 +163,123 @@ export async function markResetRequired(sql: PostgresDB, shard: ShardID) {
     SET "resetRequired" = true`;
 }
 
+type ReplicationConfigRow = ReplicationConfig & {
+  resetRequired: boolean | null;
+};
+
+export type ReplicaSubscriptionState = Pick<
+  SubscriptionState,
+  'publications' | 'replicaVersion' | 'watermark'
+>;
+
+/**
+ * Validates the `replicationConfig` of the change db against the replica,
+ * throwing an {@link AutoResetSignal} if the replica cannot be served from it.
+ *
+ * @param behindSlot Whether the change log is behind the replication slot,
+ *     in which case it is re-initialized from the replica (see
+ *     {@link reinitializeChangeLog}) and can thus be reset for a replica
+ *     at any watermark.
+ * @returns `'init'` if the tables are uninitialized, `'reset'` if they are
+ *     for a different replica, or `'compatible'`.
+ */
+function validateReplicationConfig(
+  lc: LogContext,
+  current: ReplicationConfigRow | undefined,
+  {publications, replicaVersion, watermark}: ReplicaSubscriptionState,
+  autoReset: boolean,
+  behindSlot: boolean,
+): 'init' | 'reset' | 'compatible' {
+  if (!current) {
+    return 'init';
+  }
+  if (
+    current.replicaVersion !== replicaVersion ||
+    !equals(new Set(current.publications), new Set(publications))
+  ) {
+    if (replicaVersion !== watermark && !behindSlot) {
+      throw new AutoResetSignal(
+        `Cannot reset change db@${current.replicaVersion} to ` +
+          `service replica@${replicaVersion} from watermark ${watermark}`,
+      );
+    }
+    return 'reset';
+  }
+  if (current.resetRequired) {
+    if (autoReset) {
+      throw new AutoResetSignal('reset required by replication stream');
+    }
+    lc.error?.(
+      '\n\n\n' +
+        'Reset required but --auto-reset is not enabled.\n' +
+        'This can happen for upstream databases that do not support event triggers.\n' +
+        'To correct this, see https://zero.rocicorp.dev/docs/connecting-to-postgres#schema-changes' +
+        '\n\n\n',
+    );
+  }
+  return 'compatible';
+}
+
+function selectReplicationConfig(sql: PostgresTransaction, shard: ShardID) {
+  return sql<ReplicationConfigRow[]> /*sql*/ `
+    SELECT "replicaVersion", "publications", "resetRequired" 
+      FROM ${sql(cdcSchema(shard))}."replicationConfig"`;
+}
+
+/**
+ * Checks, without modifying the change db, that the replica can be served
+ * by the change log once {@link ensureReplicationConfig} is called upon
+ * taking over the change log. Throws an {@link AutoResetSignal} otherwise.
+ *
+ * This allows a replication-manager to detect an incompatible replica at
+ * startup while leaving the change log to its current owner until then.
+ */
+export async function checkReplicationConfig(
+  lc: LogContext,
+  db: PostgresDB,
+  subscriptionState: ReplicaSubscriptionState,
+  shard: ShardID,
+  autoReset: boolean,
+  behindSlot = false,
+): Promise<void> {
+  const [current] = await runTx(db, sql => selectReplicationConfig(sql, shard));
+  const status = validateReplicationConfig(
+    lc,
+    current,
+    subscriptionState,
+    autoReset,
+    behindSlot,
+  );
+  if (status === 'reset') {
+    lc.info?.(
+      `Data in cdc tables @${current?.replicaVersion} is incompatible ` +
+        `with replica @${subscriptionState.replicaVersion}. ` +
+        `Tables will be reset when taking over the change log.`,
+    );
+  }
+}
+
+/**
+ * Initializes the cdc tables for the replica, resetting them if they were
+ * written for a different replica (version or publications). This disrupts
+ * a replication-manager that is serving the change log, and is thus only
+ * done when taking over the change log (see `Storer.assumeOwnershipAtHead`).
+ *
+ * @param purgeLock A purge lock held by the caller, if any, which is released
+ *     before the tables are reset.
+ * @param behindSlot See {@link checkReplicationConfig}.
+ */
 export async function ensureReplicationConfig(
   lc: LogContext,
   db: PostgresDB,
-  subscriptionState: Pick<
-    SubscriptionState,
-    'publications' | 'replicaVersion' | 'watermark'
-  >,
+  subscriptionState: ReplicaSubscriptionState,
   shard: ShardID,
   autoReset: boolean,
   purgeLock?: PurgeLock,
   setTimeoutFn: typeof setTimeout = setTimeout,
-  pgChangeLogEnabled = true,
+  behindSlot = false,
 ) {
-  const {publications, replicaVersion, watermark} = subscriptionState;
+  const {publications, replicaVersion} = subscriptionState;
   const replicaConfig = {publications, replicaVersion};
   const replicationState: ReplicationState = {
     lastWatermark: replicaVersion,
@@ -186,114 +289,77 @@ export async function ensureReplicationConfig(
   const schema = cdcSchema(shard);
 
   await runTx(db, async sql => {
+    const [current] = await selectReplicationConfig(sql, shard);
+    const status = validateReplicationConfig(
+      lc,
+      current,
+      subscriptionState,
+      autoReset,
+      behindSlot,
+    );
+    if (status === 'compatible') {
+      return [];
+    }
     const stmts: PendingQuery<Row[]>[] = [];
-    let needsTruncate = false;
-    const results = await sql<
-      {
-        replicaVersion: string;
-        publications: string[];
-        resetRequired: boolean | null;
-      }[]
-    > /*sql*/ `
-    SELECT "replicaVersion", "publications", "resetRequired" 
-      FROM ${sql(schema)}."replicationConfig"`;
+    if (status === 'reset') {
+      lc.info?.(
+        `Data in cdc tables @${current?.replicaVersion} is incompatible ` +
+          `with replica @${replicaVersion}. Clearing tables.`,
+      );
+      // Release any purge lock held by the caller; the changeLog is
+      // incompatible with the replica and needs to be truncated.
+      void purgeLock?.release();
 
-    if (results.length) {
-      const {replicaVersion, publications} = results[0];
-      if (
-        replicaVersion !== replicaConfig.replicaVersion ||
-        !equals(new Set(publications), new Set(replicaConfig.publications))
-      ) {
-        if (replicaConfig.replicaVersion !== watermark) {
-          throw new AutoResetSignal(
-            `Cannot reset change db@${replicaVersion} to ` +
-              `service replica@${replicaConfig.replicaVersion} ` +
-              `from watermark ${watermark}`,
-          );
-        }
-        lc.info?.(
-          `Data in cdc tables @${replicaVersion} is incompatible ` +
-            `with replica @${replicaConfig.replicaVersion}. Clearing tables.`,
-        );
-        // Release any purge lock held by the caller; the changeLog is
-        // incompatible with the replica and needs to be truncated.
-        void purgeLock?.release();
-
-        // Note: The order of TRUNCATE matters. The replicationState table is
-        //       truncated before the changeLog table, in order to acquire
-        //       (exclusive) locks on the tables in the same order that the
-        //       storer.ts acquires locks when writing the changeLog, namely:
-        //
-        // 1. SELECT ... FROM replicationState FOR UPDATE;
-        // 2. INSERT INTO changeLog ...;
-        //    ...
-        // n. UPDATE replicationState ...;
-        needsTruncate = true;
-        stmts.push(
-          sql`TRUNCATE TABLE ${sql(schema)}."replicationState"`,
-          ...(pgChangeLogEnabled
-            ? [sql`TRUNCATE TABLE ${sql(schema)}."changeLog"`]
-            : []),
-          sql`TRUNCATE TABLE ${sql(schema)}."replicationConfig"`,
-          sql`TRUNCATE TABLE ${sql(schema)}."tableMetadata"`,
-          sql`TRUNCATE TABLE ${sql(schema)}."backfilling"`,
-        );
-      }
-    }
-    // Initialize (or re-initialize TRUNCATED) tables
-    if (results.length === 0 || needsTruncate) {
-      // When enabled, the PG storer uses the earliest changeLog entry as the
-      // safe watermark from which subscribers can be resumed. These initial
-      // entries ensure that subscribers can start from a freshly synced
-      // replica, even if new changes have been replicated and not purged.
+      // Note: The order of TRUNCATE matters. The replicationState table is
+      //       truncated before the changeLog table, in order to acquire
+      //       (exclusive) locks on the tables in the same order that the
+      //       storer.ts acquires locks when writing the changeLog, namely:
       //
-      // TODO: Replace this with an explicit `firstWatermark` column in the
-      //       change db.
-      const watermark = replicaConfig.replicaVersion;
-      const initialTx: FullChangeLogEntry[] = pgChangeLogEnabled
-        ? [
-            {watermark, pos: 0, change: {tag: 'begin'}},
-            {watermark, pos: 1, change: {tag: 'commit'}},
-          ]
-        : [];
-
+      // 1. SELECT ... FROM replicationState FOR UPDATE;
+      // 2. INSERT INTO changeLog ...;
+      //    ...
+      // n. UPDATE replicationState ...;
       stmts.push(
-        sql`INSERT INTO ${sql(schema)}."replicationConfig" ${sql(replicaConfig)}`,
-        sql`INSERT INTO ${sql(schema)}."replicationState"  ${sql(replicationState)} 
-              ON CONFLICT (lock) DO UPDATE SET ${sql(replicationState)}`,
-        ...initialTx.map(
-          change => sql`INSERT INTO ${sql(schema)}."changeLog" ${sql(change)}`,
-        ),
-      );
-
-      if (needsTruncate) {
-        return runStatementsAndTerminateLockHolders(
-          lc,
-          db,
-          shard,
-          'ensureReplicationConfig',
-          stmts,
-          setTimeoutFn,
-        );
-      }
-      return Promise.all(stmts);
-    }
-
-    const {resetRequired} = results[0];
-    if (resetRequired) {
-      if (autoReset) {
-        throw new AutoResetSignal('reset required by replication stream');
-      }
-      lc.error?.(
-        '\n\n\n' +
-          'Reset required but --auto-reset is not enabled.\n' +
-          'This can happen for upstream databases that do not support event triggers.\n' +
-          'To correct this, see https://zero.rocicorp.dev/docs/connecting-to-postgres#schema-changes' +
-          '\n\n\n',
+        sql`TRUNCATE TABLE ${sql(schema)}."replicationState"`,
+        sql`TRUNCATE TABLE ${sql(schema)}."changeLog"`,
+        sql`TRUNCATE TABLE ${sql(schema)}."replicationConfig"`,
+        sql`TRUNCATE TABLE ${sql(schema)}."tableMetadata"`,
+        sql`TRUNCATE TABLE ${sql(schema)}."backfilling"`,
       );
     }
+    // Initialize (or re-initialize TRUNCATED) tables.
+    //
+    // The PG storer uses the earliest changeLog entry as the safe watermark
+    // from which subscribers can be resumed. These initial entries ensure
+    // that subscribers can start from a freshly synced replica, even if new
+    // changes have been replicated and not purged.
+    //
+    // TODO: Replace this with an explicit `firstWatermark` column in the
+    //       change db.
+    const initialTx: FullChangeLogEntry[] = [
+      {watermark: replicaVersion, pos: 0, change: {tag: 'begin'}},
+      {watermark: replicaVersion, pos: 1, change: {tag: 'commit'}},
+    ];
+    stmts.push(
+      sql`INSERT INTO ${sql(schema)}."replicationConfig" ${sql(replicaConfig)}`,
+      sql`INSERT INTO ${sql(schema)}."replicationState"  ${sql(replicationState)} 
+            ON CONFLICT (lock) DO UPDATE SET ${sql(replicationState)}`,
+      ...initialTx.map(
+        change => sql`INSERT INTO ${sql(schema)}."changeLog" ${sql(change)}`,
+      ),
+    );
 
-    return [];
+    if (status === 'reset') {
+      return runStatementsAndTerminateLockHolders(
+        lc,
+        db,
+        shard,
+        'ensureReplicationConfig',
+        stmts,
+        setTimeoutFn,
+      );
+    }
+    return Promise.all(stmts);
   });
 }
 
