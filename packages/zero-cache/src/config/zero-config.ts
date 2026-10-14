@@ -953,18 +953,15 @@ export const zeroOptions = {
       ],
     },
 
+    /** @deprecated */
     mode: {
       type: v.literalUnion('dedicated', 'discover').optional(() => 'dedicated'),
-      desc: [
-        `As an alternative to {bold ZERO_CHANGE_STREAMER_URI}, the {bold ZERO_CHANGE_STREAMER_MODE}`,
-        `can be set to "{bold discover}" to instruct the {bold view-syncer} to connect to the `,
-        `ip address registered by the {bold replication-manager} upon startup.`,
+      deprecated: [
+        `Set the {bold ZERO_CHANGE_STREAMER_URI} on view-syncers instead.`,
         ``,
-        `This may not work in all networking configurations, e.g. certain private `,
-        `networking or port forwarding configurations. Using the {bold ZERO_CHANGE_STREAMER_URI}`,
-        `with an explicit routable hostname is recommended instead.`,
-        ``,
-        `Note: This option is ignored if the {bold ZERO_CHANGE_STREAMER_URI} is set.`,
+        `When {bold ZERO_UPSTREAM_PG_HIGH_AVAILABILITY_REPLICATION} (i.e. "RMv2") is enabled`,
+        `the zero-cache will no longer support automatic change-streamer discovery,`,
+        `and setting this flag to "discover" will result in an error.`,
       ],
     },
 

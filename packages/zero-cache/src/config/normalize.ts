@@ -275,6 +275,16 @@ export function normalizeZeroConfig(
     env['ZERO_CHANGE_STREAMER_PG_CHANGE_LOG_ENABLED'] = 'false';
   }
 
+  if (!config.changeStreamer.pgChangeLogEnabled) {
+    assert(
+      config.changeStreamer.mode !== 'discover',
+      'Change streamer "discover" mode is deprecated and not supported when ' +
+        'the PG change log is disabled (e.g. with ' +
+        'ZERO_UPSTREAM_PG_HIGH_AVAILABILITY_REPLICATION). ' +
+        'Set ZERO_CHANGE_STREAMER_URI on view-syncers instead.',
+    );
+  }
+
   lc.info?.(`runtime env: taskID=${config.taskID}, hostIP=${hostIP}`);
 
   return {
