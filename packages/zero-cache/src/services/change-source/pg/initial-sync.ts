@@ -1,5 +1,5 @@
 import {mkdtemp, rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {platform, tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {Writable, type Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
@@ -41,6 +41,7 @@ import {
   type LiteValueType,
 } from '../../../types/lite.ts';
 import {liteTableName} from '../../../types/names.ts';
+import {hasPostgresPatch} from '../../../types/pg-patch.ts';
 import {PG_15} from '../../../types/pg-versions.ts';
 import {
   connectPgClient,
@@ -148,6 +149,10 @@ export async function initialSync(
   const syncMode: InitialSyncMode = shadow ? 'shadow' : 'initial';
   const copyFormat: CopyFormat = textCopy ? 'text' : 'binary';
   const start = performance.now();
+  // Without Zero's postgres.js patch, a connection can hang after a COPY on
+  // any Node version (see hasPostgresPatch()), so the copy connections are not
+  // waited on, as in 1.10.
+  const pgPatched = hasPostgresPatch();
   let sql: PostgresDB | undefined;
   const replicaID = Date.now().toString();
   let slotName: string | undefined; // undefined === shadow
@@ -203,7 +208,20 @@ export async function initialSync(
       // Now that tables have been validated, kick off the copiers.
       const {tables, indexes} = published;
       const numTables = tables.length;
-      const numWorkers = Math.min(tableCopyWorkers, numTables);
+      // A hung connection also blocks the next COPY sent on it. On Windows,
+      // where the unpatched hang was seen most often, give each table its own
+      // connection so that no COPY runs after another one, as in 1.10.
+      const workerPerTable = !pgPatched && platform() === 'win32';
+      if (workerPerTable && tableCopyWorkers < numTables) {
+        lc.warn?.(
+          `Increasing the number of copy workers from ${tableCopyWorkers} to ` +
+            `${numTables} to work around a postgres.js connection bug ` +
+            `(https://github.com/porsager/postgres/issues/499)`,
+        );
+      }
+      const numWorkers = workerPerTable
+        ? numTables
+        : Math.min(tableCopyWorkers, numTables);
 
       const copyPool = await connectPgClient(
         lc,
@@ -280,6 +298,7 @@ export async function initialSync(
 
     const initialVersion = toStateVersionString(lsn);
     initReplicationState(tx, publications, initialVersion, context);
+    let succeeded = false;
     try {
       createLiteTables(tx, tables, initialVersion);
       const sampleRate = shadow?.sampleRate;
@@ -321,9 +340,11 @@ export async function initialSync(
       const copyElapsed = performance.now() - copyStart;
       void copyProfiler?.stopAndDispose(lc, 'initial-copy');
       copiers.setDone();
-      // Release the upstream connections before indexing.
-      await copiers.done();
-      await copyPool.end();
+      if (pgPatched) {
+        // Release the upstream connections before indexing.
+        await copiers.done();
+        await copyPool.end();
+      }
 
       const copySummary = initialSyncCopySummary(copyResults, copyElapsed);
 
@@ -382,21 +403,31 @@ export async function initialSync(
         },
       );
 
-      return slotName && replicaID
-        ? must(
-            await getReplicaState(sql, shard, replicaID),
-            `Missing replica with id ${replicaID}`,
-          )
-        : undefined; // shadow sync only
+      const replicaState =
+        slotName && replicaID
+          ? must(
+              await getReplicaState(sql, shard, replicaID),
+              `Missing replica with id ${replicaID}`,
+            )
+          : undefined; // shadow sync only
+      succeeded = true;
+      return replicaState;
     } finally {
-      // A no-op if the pool was already ended. Otherwise, initial sync failed
-      // and copy workers may still be blocked on COPY streams that were
-      // abandoned by their consumers, so their connections are forcibly
-      // closed after a timeout. All meaningful errors are handled at the
-      // processReadTask() call site.
-      await copyPool
-        .end({timeout: 5})
-        .catch(e => lc.warn?.(`Error closing copyPool`, e));
+      if (succeeded && !pgPatched) {
+        // Close the pool without waiting, as an unpatched connection may hang
+        // after a COPY. All meaningful errors are handled at the
+        // processReadTask() call site.
+        void copyPool.end().catch(e => lc.warn?.(`Error closing copyPool`, e));
+      } else {
+        // A no-op if the pool was already ended. Otherwise, initial sync
+        // failed and copy workers may still be blocked on COPY streams that
+        // were abandoned by their consumers, so their connections are
+        // forcibly closed after a timeout. All meaningful errors are handled
+        // at the processReadTask() call site.
+        await copyPool
+          .end({timeout: 5})
+          .catch(e => lc.warn?.(`Error closing copyPool`, e));
+      }
     }
   } catch (e) {
     recordInitialSyncRunMetrics(
@@ -585,6 +616,18 @@ async function startTableCopyWorkers(
   }
 
   lc.info?.(`Started ${numWorkers} workers to copy ${numTables} tables`);
+
+  if (!hasPostgresPatch() && parseInt(process.versions.node) < 22) {
+    lc.warn?.(
+      `\n\n\n` +
+        `Without Zero's patch, postgres.js can leave a Postgres connection unresponsive\n` +
+        `after a COPY (https://github.com/porsager/postgres/issues/499). This can happen\n` +
+        `on any Node version, but was seen more often before Node 22. If initial sync hangs,\n` +
+        `use the rocicorp/zero Docker image, which includes the patch. Upgrading to Node v22+,\n` +
+        `which zero-cache requires, makes the hang less likely but does not prevent it.` +
+        `\n\n\n`,
+    );
+  }
   return tableCopiers;
 }
 

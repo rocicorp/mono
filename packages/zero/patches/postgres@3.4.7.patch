@@ -52,6 +52,22 @@ index 203af80d072552c32d5f748b8245c0052e2998bc..2f296a7cfc74df5e7c43c0d9adb52167
    }
  
    function NoticeResponse(x) {
+diff --git a/cf/src/index.js b/cf/src/index.js
+index 3ffb7e65a477928e543617dad15201c4ed656bf3..7ede91587923662a167a8bac6a71da58f2d551d7 100644
+--- a/cf/src/index.js
++++ b/cf/src/index.js
+@@ -45,6 +45,11 @@ Object.assign(Postgres, {
+   }
+ })
+ 
++// Marks Zero's patch of postgres.js, which includes the CopyDone fix for
++// https://github.com/porsager/postgres/issues/499 (PR #1016). Zero checks
++// for this property and raises the number when the patch changes.
++Postgres.zeroPatch = 1
++
+ export default Postgres
+ 
+ function Postgres(a, b) {
 diff --git a/cjs/src/connection.js b/cjs/src/connection.js
 index 589d36382ca943c90679dbe22aaff06d252f6532..fc6868142045dfde15f5f40bd94a19d4d78e7fbc 100644
 --- a/cjs/src/connection.js
@@ -106,6 +122,22 @@ index 589d36382ca943c90679dbe22aaff06d252f6532..fc6868142045dfde15f5f40bd94a19d4
    }
  
    function NoticeResponse(x) {
+diff --git a/cjs/src/index.js b/cjs/src/index.js
+index baf7e60a860afb3418908e9c27cff6d9abd0ced0..255f1a6e014ed65888a3154b2f63caa265180582 100644
+--- a/cjs/src/index.js
++++ b/cjs/src/index.js
+@@ -44,6 +44,11 @@ Object.assign(Postgres, {
+   }
+ })
+ 
++// Marks Zero's patch of postgres.js, which includes the CopyDone fix for
++// https://github.com/porsager/postgres/issues/499 (PR #1016). Zero checks
++// for this property and raises the number when the patch changes.
++Postgres.zeroPatch = 1
++
+ module.exports = Postgres
+ 
+ function Postgres(a, b) {
 diff --git a/src/connection.js b/src/connection.js
 index c3f554aada71a79dc3c3cb489b722e9cf53961f3..3efd1fbae67dd731e5d51396e49c97b2f5454901 100644
 --- a/src/connection.js
@@ -160,3 +192,19 @@ index c3f554aada71a79dc3c3cb489b722e9cf53961f3..3efd1fbae67dd731e5d51396e49c97b2
    }
  
    function NoticeResponse(x) {
+diff --git a/src/index.js b/src/index.js
+index 944d50cf2b599ee84c750e8530b5433caa6d8a4a..533f82dc0b232f221aecdbcd16637a6dc3e4f2ff 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -44,6 +44,11 @@ Object.assign(Postgres, {
+   }
+ })
+ 
++// Marks Zero's patch of postgres.js, which includes the CopyDone fix for
++// https://github.com/porsager/postgres/issues/499 (PR #1016). Zero checks
++// for this property and raises the number when the patch changes.
++Postgres.zeroPatch = 1
++
+ export default Postgres
+ 
+ function Postgres(a, b) {

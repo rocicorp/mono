@@ -41,6 +41,7 @@ import {
   ReplicationStatusPublisher,
 } from '../services/replicator/replication-status.ts';
 import {sqliteFileBytes} from '../services/replicator/sqlite-change-log-observability.ts';
+import {warnIfPostgresUnpatched} from '../types/pg-patch.ts';
 import {connectPgClient} from '../types/pg.ts';
 import {
   broadcastWorker,
@@ -118,6 +119,9 @@ export default async function runWorker(
     sqliteCorruptionChecks,
   );
   initEventSink(lc, config);
+  if (upstream.type === 'pg') {
+    warnIfPostgresUnpatched(lc);
+  }
 
   // Startup-time client used for for change-streamer initialization
   // and handoff / takeover. Steady-state clients are managed by the

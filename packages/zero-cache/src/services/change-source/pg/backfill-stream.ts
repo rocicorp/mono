@@ -21,6 +21,7 @@ import {TsvParser} from '../../../db/pg-copy.ts';
 import {getTypeParsers} from '../../../db/pg-type-parser.ts';
 import type {PublishedTableSpec} from '../../../db/specs.ts';
 import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.ts';
+import {hasPostgresPatch} from '../../../types/pg-patch.ts';
 import {connectPgClient, pgClient, type PostgresDB} from '../../../types/pg.ts';
 import {id} from '../../../types/sql.ts';
 import {
@@ -308,9 +309,16 @@ export async function* streamBackfill(
     throw e;
   } finally {
     tx?.setDone();
-    if (completed) {
+    if (completed && hasPostgresPatch()) {
       await tx?.done();
       await db.end();
+    } else if (completed) {
+      // Without Zero's postgres.js patch, the connection can hang after the
+      // COPY on any Node version (see hasPostgresPatch()), so close it without
+      // waiting, as in 1.10.
+      void db
+        .end()
+        .catch(e => lc.warn?.(`error closing backfill connection`, e));
     } else {
       // The stream failed or was closed early, in which case the COPY read
       // task may be blocked on a stream that is no longer consumed. Close the
