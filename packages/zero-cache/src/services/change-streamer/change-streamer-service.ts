@@ -1115,15 +1115,17 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     );
     this.#backfills.register(subscriber, downstream);
     try {
-      if (ctx.switchover && this.#drainTracker.draining) {
-        // A draining replication-manager is not expected to receive new
-        // connections (e.g. it is removed from a Service's endpoints before
-        // it is signaled to drain), and a switchover to it cannot succeed.
-        // Close it (without an error) before doing any work, so that the
-        // subscriber retries the switchover elsewhere.
+      if (this.#drainTracker.draining) {
+        // A draining replication-manager does not accept new subscribers:
+        // it stops listening for new connections when it drains, so this is
+        // a backstop for connections accepted before then (or handed off
+        // from another server). Accepting one would re-register it with the
+        // DrainTracker and hold the drain open (e.g. a subscriber that
+        // reconnects after failing to find another replication-manager), and
+        // a switchover to it cannot succeed. Close it (without an error)
+        // before doing any work, so that the subscriber retries elsewhere.
         lc.warn?.(
-          `rejecting switchover subscriber ${id}: ` +
-            `this replication-manager is draining`,
+          `rejecting subscriber ${id}: this replication-manager is draining`,
         );
         subscriber.close();
       } else if (replicaVersion !== this.#replicaVersion) {
@@ -1131,7 +1133,6 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           ctx.switchover &&
           mode === 'serving' &&
           this.#restoreAdmission &&
-          !this.#drainTracker.draining &&
           replicaVersion < this.#replicaVersion
         ) {
           // While legacy subscribers are immediately rejected with
