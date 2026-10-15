@@ -84,7 +84,6 @@ export function Comments({
     listContextParams: issueID,
     getScrollElement,
     estimateSize,
-    anchoring: 'native',
     // Comments are tall cards — the default 100-row page floor is many
     // viewports of content and lands as a long task when a page renders.
     // ~3 viewports of ~200px rows is ~14; floor at 20.
