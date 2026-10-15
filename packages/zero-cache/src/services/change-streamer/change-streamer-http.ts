@@ -328,9 +328,12 @@ export class ChangeStreamerHttpServer extends HttpService {
   /**
    * Signals (drainable) subscribers to switch over to another
    * replication-manager, resolving when they have disconnected. Subscribers
-   * continue to be served in the meantime.
+   * continue to be served in the meantime, but new connections (e.g.
+   * switchover attempts, reconnects, and snapshot reservations) are refused,
+   * so that they are routed to another replication-manager.
    */
   async drain(): Promise<void> {
+    this.stopAccepting();
     if (this.#changeStreamerStarted && this.#changeStreamer.drain) {
       await this.#changeStreamer.drain();
     }

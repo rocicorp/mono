@@ -11,10 +11,10 @@ const PROGRESS_LOG_INTERVAL_MS = 30_000;
  * change-streamer, i.e. those that switch over to another
  * replication-manager when this one drains.
  *
- * Upon {@link drain}, drainable subscribers are sent a `draining` status
- * (as are drainable subscribers that subscribe while draining), and the
- * returned promise resolves once they have all disconnected. Subscribers
- * continue to be served in the meantime.
+ * Upon {@link drain}, drainable subscribers are sent a `draining` status,
+ * and the returned promise resolves once they have all disconnected.
+ * Subscribers continue to be served in the meantime. (New subscribers are
+ * not accepted while draining.)
  */
 export class DrainTracker {
   readonly #lc: LogContext;
@@ -46,9 +46,6 @@ export class DrainTracker {
       return;
     }
     this.#subscribers.add(subscriber);
-    if (this.#draining) {
-      subscriber.sendControlStatus({tag: 'status', draining: true});
-    }
     downstream.addCloseHandler(() => {
       if (this.#subscribers.delete(subscriber)) {
         this.#checkDrained();

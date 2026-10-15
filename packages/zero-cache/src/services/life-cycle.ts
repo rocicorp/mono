@@ -535,8 +535,9 @@ export const STOP_TIMEOUT_MS = 60_000;
 /**
  * Runs the specified services, stopping them on `SIGTERM` or `SIGINT` with
  * an optional {@link SingletonService.drain drain()}, or stopping them
- * without draining for `SIGQUIT`. If a service stops (or throws) on its own,
- * the remaining services are stopped without draining.
+ * without draining for `SIGQUIT`, or when the parent process disconnects.
+ * Repeated graceful signals are ignored. If a service stops (or throws) on its
+ * own, the remaining services are stopped without draining.
  *
  * @returns a Promise that settles once all services have stopped (or
  *          {@link STOP_TIMEOUT_MS} has elapsed), resolving or rejecting
@@ -560,33 +561,50 @@ export async function runUntilKilled(
       allStopped.resolve,
     ));
 
-  for (const signal of [...GRACEFUL_SHUTDOWN, ...FORCEFUL_SHUTDOWN]) {
-    parent.once(signal, async () => {
-      const GRACEFUL_SIGNALS = GRACEFUL_SHUTDOWN as readonly NodeJS.Signals[];
-
-      if (GRACEFUL_SIGNALS.includes(signal)) {
-        // Drain all services before stopping any of them. Stopping a service
-        // resolves its run() and thus ends runUntilKilled(), so a service
-        // without a drain() must not be stopped while others are draining.
-        const results = await Promise.allSettled(
-          services.map(async svc => {
-            if (svc.drain) {
-              lc.info?.(
-                `draining ${svc.constructor.name} ${svc.id} (${signal})`,
-              );
-              await svc.drain();
-            }
-          }),
-        );
-        for (const result of results) {
-          if (result.status === 'rejected') {
-            lc.warn?.(`error while draining (${signal})`, result.reason);
+  const GRACEFUL_SIGNALS = GRACEFUL_SHUTDOWN as readonly NodeJS.Signals[];
+  let draining = false;
+  const onSignal = async (signal: NodeJS.Signals) => {
+    if (GRACEFUL_SIGNALS.includes(signal)) {
+      if (draining || stopping) {
+        // e.g. A SIGINT from both the terminal and a wrapping process.
+        lc.info?.(`already shutting down. ignoring ${signal}`);
+        return;
+      }
+      draining = true;
+      // Drain all services before stopping any of them. Stopping a service
+      // resolves its run() and thus ends runUntilKilled(), so a service
+      // without a drain() must not be stopped while others are draining.
+      const results = await Promise.allSettled(
+        services.map(async svc => {
+          if (svc.drain) {
+            lc.info?.(`draining ${svc.constructor.name} ${svc.id} (${signal})`);
+            await svc.drain();
           }
+        }),
+      );
+      for (const result of results) {
+        if (result.status === 'rejected') {
+          lc.warn?.(`error while draining (${signal})`, result.reason);
         }
       }
-      await stopAll(signal);
-    });
+    }
+    // A forceful signal stops the services without waiting for (or after)
+    // a drain.
+    await stopAll(signal);
+  };
+  // The listeners remain installed for the lifetime of the process, as a
+  // signal without a listener would terminate the process (e.g. a repeated
+  // SIGINT during a drain).
+  for (const signal of [...GRACEFUL_SHUTDOWN, ...FORCEFUL_SHUTDOWN]) {
+    parent.on(signal, () => void onSignal(signal));
   }
+  // A forked worker whose parent has exited (e.g. was killed by a signal,
+  // in which case it cannot signal its workers) stops without draining, so
+  // that it (and in turn its own subprocesses) is not orphaned.
+  parent.once('disconnect', () => {
+    lc.warn?.(`parent process disconnected. stopping without draining`);
+    void stopAll('disconnect');
+  });
 
   try {
     // Run all services and resolve when any of them stops, or when stopping

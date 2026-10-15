@@ -15,6 +15,19 @@ const DEFAULT_SWITCHOVER_TIMEOUT_MS = 10_000;
 const MIN_SWITCHOVER_RETRY_DELAY_MS = 1_000;
 const MAX_SWITCHOVER_RETRY_DELAY_MS = 30_000;
 
+/**
+ * Bounds the time to search for another replication-manager to switch over
+ * to, after which the current subscription is closed so that the draining
+ * replication-manager can shut down (e.g. when it is the only one). The time
+ * during which a subscription is held by another replication-manager (i.e.
+ * waiting for permission to restore) does not count towards it.
+ *
+ * This is well below the default termination grace period of container
+ * runners (30 seconds in Kubernetes and ECS), so that the draining
+ * replication-manager can shut down cleanly when there is no other.
+ */
+const DEFAULT_SWITCHOVER_SEARCH_TIMEOUT_MS = 20_000;
+
 export type SwitchoverOptions = {
   /**
    * Called when a replication-manager with a newer replica version grants
@@ -32,11 +45,19 @@ export type SwitchoverOptions = {
 
   /** For testing. */
   timeoutMs?: number | undefined;
+
+  /** For testing. */
+  searchTimeoutMs?: number | undefined;
 };
 
 export type Downstream = Source<Sized<SubscribeDownstream>>;
 
-type AttemptOutcome = 'switched' | 'restoring' | 'retry';
+type AttemptOutcome =
+  | 'switched'
+  | 'restoring'
+  // The subscription was held for restore, but closed before a grant.
+  | 'released'
+  | 'retry';
 
 /**
  * Handles the switchover of a serving replica's subscription from a draining
@@ -63,6 +84,12 @@ type AttemptOutcome = 'switched' | 'restoring' | 'retry';
  *   replication-manager can track the grant until the restore begins.
  * * Anything else (e.g. an error, or a `draining` replication-manager):
  *   The switchover is retried later.
+ *
+ * If no other replication-manager accepts or holds a switchover subscription
+ * within {@link DEFAULT_SWITCHOVER_SEARCH_TIMEOUT_MS} (e.g. because the
+ * draining one is the only one), the current subscription is closed so that
+ * the draining replication-manager can shut down, and the consumer reconnects
+ * on its own.
  *
  * The current subscription continues to be consumed throughout. A
  * switchover is scoped to the subscription from which it switches: If that
@@ -138,17 +165,39 @@ export class DrainHandler {
   }
 
   async #switchover(current: Downstream) {
+    const searchTimeoutMs =
+      this.#options.searchTimeoutMs ?? DEFAULT_SWITCHOVER_SEARCH_TIMEOUT_MS;
     let failures = 0;
+    let searchStart = Date.now();
     while (this.#isActive(current)) {
       const outcome = await this.#attempt(current);
-      if (outcome !== 'retry') {
+      if (outcome === 'switched' || outcome === 'restoring') {
         return;
       }
-      const delay = Math.min(
-        MIN_SWITCHOVER_RETRY_DELAY_MS * 2 ** failures++,
-        MAX_SWITCHOVER_RETRY_DELAY_MS,
-      );
-      await this.#state.sleep(delay);
+      if (outcome === 'released') {
+        // Time spent held by another replication-manager does not count
+        // towards the search.
+        failures = 0;
+        searchStart = Date.now();
+      }
+      const remaining = searchStart + searchTimeoutMs - Date.now();
+      if (remaining > 0) {
+        const delay = Math.min(
+          MIN_SWITCHOVER_RETRY_DELAY_MS * 2 ** failures++,
+          MAX_SWITCHOVER_RETRY_DELAY_MS,
+        );
+        await this.#state.sleep(Math.min(delay, remaining));
+        continue;
+      }
+      // The search has timed out.
+      if (this.#isActive(current)) {
+        this.#lc.warn?.(
+          `no other replication-manager found within ${searchTimeoutMs} ms. ` +
+            `disconnecting from the draining replication-manager`,
+        );
+        current.cancel();
+      }
+      return;
     }
   }
 
@@ -191,7 +240,7 @@ export class DrainHandler {
             return 'restoring';
           }
           lc.info?.(`held switchover subscription closed. will retry`);
-          return 'retry';
+          return 'released';
         }
         if (!draining) {
           lc.info?.(`switched over to a new subscription at ${ctx.watermark}`);
