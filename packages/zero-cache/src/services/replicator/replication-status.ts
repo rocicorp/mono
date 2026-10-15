@@ -21,10 +21,34 @@ import {
 const byKeys = (a: [string, unknown], b: [string, unknown]) =>
   a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0;
 
+export type GrowthOptions = {
+  /** How often to check the replica size. */
+  pollMs?: number;
+  /** Republish when the replica grew by at least this many bytes ... */
+  minDeltaBytes?: number;
+  /** ... and by at least this fraction of the last published size. */
+  minDeltaRatio?: number;
+};
+
+const DEFAULT_GROWTH_OPTIONS: Required<GrowthOptions> = {
+  pollMs: 30_000,
+  minDeltaBytes: 1024 ** 3,
+  minDeltaRatio: 0.05,
+};
+
+type PublishedStatus = {
+  stage: ReplicationStage;
+  description: string | undefined;
+  extraState: (() => Partial<ReplicationState>) | undefined;
+  replicaSize: number | undefined;
+};
+
 export class ReplicationStatusPublisher {
   readonly #dbRunner: <T>(lc: LogContext, fn: (db: Database) => T) => T;
   readonly #publishFn: typeof publishCriticalEvent;
   #timer: NodeJS.Timeout | undefined;
+  #growthTimer: NodeJS.Timeout | undefined;
+  #last: PublishedStatus | undefined;
 
   static forTesting() {
     return ReplicationStatusPublisher.forReplicaFile(':memory:');
@@ -99,6 +123,46 @@ export class ReplicationStatusPublisher {
     }
   }
 
+  /**
+   * Republishes the last published status whenever the replica has grown by
+   * the given delta since the last published `replicaSize`, until
+   * {@link stop}. Consumers (e.g. Cloud Zero, which sizes the disk requests of
+   * replicas from it) thereby see growth from any source, not only from
+   * backfills and initial syncs. The status interval of {@link publish} keeps
+   * running alongside.
+   */
+  watchGrowth(lc: LogContext, options: GrowthOptions = {}): this {
+    const {pollMs, minDeltaBytes, minDeltaRatio} = {
+      ...DEFAULT_GROWTH_OPTIONS,
+      ...options,
+    };
+    clearInterval(this.#growthTimer);
+    this.#growthTimer = setInterval(() => {
+      const last = this.#last;
+      if (!last) {
+        return;
+      }
+      let size: number;
+      try {
+        size = this.#dbRunner(lc, getReplicaSize);
+      } catch (e) {
+        lc.warn?.(`Unable to read the replica size`, e);
+        return;
+      }
+      const published = last.replicaSize ?? 0;
+      if (
+        size - published >=
+        Math.max(minDeltaBytes, published * minDeltaRatio)
+      ) {
+        lc.info?.(
+          `Replica grew from ${published} to ${size} bytes. Republishing status.`,
+        );
+        void this.#send(lc, last.stage, last.description, last.extraState);
+      }
+    }, pollMs);
+    return this;
+  }
+
   #publish(
     lc: LogContext,
     stage: ReplicationStage,
@@ -107,8 +171,26 @@ export class ReplicationStatusPublisher {
     extraState: (() => Partial<ReplicationState>) | undefined,
     now = new Date(),
   ): Promise<void> {
-    this.stop();
+    clearInterval(this.#timer);
 
+    const published = this.#send(lc, stage, description, extraState, now);
+
+    if (interval) {
+      this.#timer = setInterval(
+        () => this.publish(lc, stage, description, interval, extraState),
+        interval,
+      );
+    }
+    return published;
+  }
+
+  #send(
+    lc: LogContext,
+    stage: ReplicationStage,
+    description: string | undefined,
+    extraState: (() => Partial<ReplicationState>) | undefined,
+    now = new Date(),
+  ): Promise<void> {
     const event = this.#dbRunner(lc, db =>
       replicationStatusEvent(lc, db, stage, 'OK', description, now),
     );
@@ -118,15 +200,13 @@ export class ReplicationStatusPublisher {
         ...extraState?.(),
       };
     }
-    const published = this.#publishFn(lc, event);
-
-    if (interval) {
-      this.#timer = setInterval(
-        () => this.publish(lc, stage, description, interval, extraState),
-        interval,
-      );
-    }
-    return published;
+    this.#last = {
+      stage,
+      description,
+      extraState,
+      replicaSize: event.state?.replicaSize,
+    };
+    return this.#publishFn(lc, event);
   }
 
   async publishAndThrowError(
@@ -142,8 +222,10 @@ export class ReplicationStatusPublisher {
     throw e;
   }
 
+  /** Stops the status interval and the growth watch. */
   stop(): this {
     clearInterval(this.#timer);
+    clearInterval(this.#growthTimer);
     return this;
   }
 }

@@ -173,11 +173,9 @@ export class IncrementalSyncer {
             ? await initialConnection.subscribe(ctx)
             : await this.#changeStreamer.subscribe(ctx));
         unregister = this.#state.cancelOnStop(downstream);
-        this.#statusPublisher?.publish(
-          lc,
-          'Replicating',
-          `Replicating from ${watermark}`,
-        );
+        this.#statusPublisher
+          ?.publish(lc, 'Replicating', `Replicating from ${watermark}`)
+          .watchGrowth(lc);
 
         let backfill:
           | {status: DownloadStatus; table: string; columns: string[]}
