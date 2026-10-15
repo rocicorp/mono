@@ -98,6 +98,18 @@ export class HttpService implements Service {
     this.#failHealthChecks = true;
   }
 
+  /**
+   * Stops accepting new connections (e.g. when draining), while existing
+   * connections, including websockets, continue to be served until
+   * {@link stop} is called.
+   */
+  stopAccepting() {
+    if (this.#fastify.server.listening) {
+      this._lc.info?.(`${this.id}: no longer accepting new connections`);
+      this.#fastify.server.close();
+    }
+  }
+
   async stop(): Promise<void> {
     this._lc.info?.(`${this.id}: no longer accepting connections`);
     this.#heartbeatMonitor?.stop();
