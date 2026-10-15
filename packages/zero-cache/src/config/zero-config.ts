@@ -395,7 +395,7 @@ export const zeroOptions = {
     },
 
     pgReplicationSlotPerReplica: {
-      type: v.boolean().optional(() => false),
+      type: v.boolean().optional(() => true),
       desc: [
         `Creates a dedicated replication slot for each replication-manager, rather than`,
         `having a new replication-manager take over the slot of the one it replaces.`,
@@ -413,9 +413,9 @@ export const zeroOptions = {
         `from high-availability mode to this configuration re-initializes the change-db's change`,
         `log from the replica rather than requiring a resync.`,
         ``,
-        `Requires litestream v5 backups. Each slot retains upstream WAL until it is consumed or`,
-        `dropped. Slots of replication-managers that are no longer running are dropped`,
-        `automatically.`,
+        `Requires litestream v5 backups (on by default as of v1.11). Each slot retains upstream WAL`,
+        `until it is consumed or dropped. Slots of replication-managers that are no longer running`,
+        `are dropped automatically.`,
       ],
     },
 
