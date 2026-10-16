@@ -42,7 +42,7 @@ import {
 } from '../services/replicator/replication-status.ts';
 import {sqliteFileBytes} from '../services/replicator/sqlite-change-log-observability.ts';
 import {warnIfPostgresUnpatched} from '../types/pg-patch.ts';
-import {connectPgClient} from '../types/pg.ts';
+import {connectPgClient, type PostgresDB} from '../types/pg.ts';
 import {
   broadcastWorker,
   childWorker,
@@ -52,7 +52,7 @@ import {
   type Worker,
 } from '../types/processes.ts';
 import {installProfileHandler} from '../types/profiler.ts';
-import {getShardConfig} from '../types/shards.ts';
+import {getShardConfig, type ShardConfig} from '../types/shards.ts';
 import type {ReplicaFileMode} from '../workers/replicator.ts';
 import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
@@ -123,22 +123,13 @@ export default async function runWorker(
     warnIfPostgresUnpatched(lc);
   }
 
-  // Startup-time client used for for change-streamer initialization
-  // and handoff / takeover. Steady-state clients are managed by the
-  // change-streamer (Storer) implementation.
-  const changeDB = await connectPgClient(
-    lc,
-    change.db,
-    'change-streamer-init',
-    {max: 5},
-    {sendStringAsJson: true},
-  );
-  void warmupConnections(lc, changeDB, 'change').catch(() => {});
-
   const shard = getShardConfig(config);
 
-  // Ensure the change DB schema is initialized/up-to-date.
-  await initChangeStreamerSchema(lc, changeDB, shard);
+  // The change DB is only used by the PG change log. When it is disabled
+  // (RMv2), no connection to the change DB is made.
+  const changeDB = pgChangeLogEnabled
+    ? await connectChangeDB(lc, change.db, shard)
+    : null;
 
   let purgeLock = null as PurgeLock | null;
   let changeStreamer: ChangeStreamerService | undefined;
@@ -186,7 +177,7 @@ export default async function runWorker(
     // applicable), and released once this change-streamer takes over the
     // change-log.
     const acquirePurgeLock: PgChangeLogPurgeLocker | undefined =
-      pgChangeLogEnabled && litestream.backupURL && litestream.executable
+      changeDB && litestream.backupURL && litestream.executable
         ? async (slotWatermark?: string) => {
             const lock = await new PurgeLocker(lc, shard, changeDB).acquire(
               slotWatermark,
@@ -274,7 +265,6 @@ export default async function runWorker(
         purgeLock,
         autoReset ?? false,
         {
-          pgChangeLogEnabled,
           pgChangeLogBehindSlot: pgChangeLogBehindSlot ?? false,
           backPressureLimitHeapProportion,
           flowControlConsensusTimeoutProportion,
@@ -493,6 +483,29 @@ export default async function runWorker(
     backupMonitor,
     processes,
   );
+}
+
+/**
+ * Connects the startup-time client used for change-streamer initialization
+ * and handoff / takeover, and ensures that the change DB schema is
+ * initialized / up-to-date. Steady-state clients are managed by the
+ * change-streamer (Storer) implementation.
+ */
+async function connectChangeDB(
+  lc: LogContext,
+  connectionURI: string,
+  shard: ShardConfig,
+): Promise<PostgresDB> {
+  const changeDB = await connectPgClient(
+    lc,
+    connectionURI,
+    'change-streamer-init',
+    {max: 5},
+    {sendStringAsJson: true},
+  );
+  void warmupConnections(lc, changeDB, 'change').catch(() => {});
+  await initChangeStreamerSchema(lc, changeDB, shard);
+  return changeDB;
 }
 
 // fork()

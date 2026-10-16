@@ -3,6 +3,7 @@ import websocket from '@fastify/websocket';
 import type {LogContext} from '@rocicorp/logger';
 import WebSocket from 'ws';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
+import {must} from '../../../../shared/src/must.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import type {IncomingMessageSubset} from '../../types/http.ts';
@@ -383,7 +384,8 @@ export class ChangeStreamerHttpClient
 {
   readonly #lc: LogContext;
   readonly #shardID: ShardID;
-  readonly #changeDB: PostgresDB;
+  /** Only used for discovery, i.e. when there is no `changeStreamerURI`. */
+  readonly #changeDB: PostgresDB | undefined;
   readonly #changeStreamerURI: string | undefined;
 
   constructor(
@@ -395,11 +397,14 @@ export class ChangeStreamerHttpClient
     this.#lc = lc;
     this.#shardID = shardID;
     // Create a pg client with a single short-lived connection for the purpose
-    // of change-streamer discovery (i.e. ChangeDB as DNS).
-    this.#changeDB = pgClient(lc, changeDB, 'change-streamer-discovery', {
-      max: 1,
-      ['idle_timeout']: 15,
-    });
+    // of change-streamer discovery (i.e. ChangeDB as DNS). This is not
+    // needed if the change-streamer URI is specified.
+    this.#changeDB = !changeStreamerURI
+      ? pgClient(lc, changeDB, 'change-streamer-discovery', {
+          max: 1,
+          ['idle_timeout']: 15,
+        })
+      : undefined;
     this.#changeStreamerURI = changeStreamerURI;
   }
 
@@ -408,7 +413,7 @@ export class ChangeStreamerHttpClient
     if (!baseURL) {
       const address = await discoverChangeStreamerAddress(
         this.#shardID,
-        this.#changeDB,
+        must(this.#changeDB),
       );
       if (!address) {
         throw new Error(`no change-streamer is running`);

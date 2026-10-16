@@ -847,6 +847,8 @@ export const zeroOptions = {
         `The Postgres database used to store recent replication log entries, in order`,
         `to sync multiple view-syncers without requiring multiple replication slots on`,
         `the upstream database. If unspecified, the {bold upstream-db} will be used.`,
+        ``,
+        `Not used when the PG change log is disabled (e.g. in high-availability mode).`,
       ],
     },
 
@@ -1036,6 +1038,7 @@ export const zeroOptions = {
         `Whether the legacy Postgres change log remains authoritative for`,
         `stream initialization, persistence, catchup, and upstream ACKs.`,
         `Disabling it requires SQLite serve mode at 100 percent and a v5 backup.`,
+        `When disabled, the change-streamer does not connect to the {bold change-db}.`,
       ],
       hidden: true,
     },
