@@ -1491,7 +1491,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             // queries, but that may hit the transform cache so do not rely on
             // it for validation. This also ensures shared maintenance always has
             // a validated connection to fall back to.
-            if (!(await this.#validateConnection(connCtx))) {
+            const validatedConnCtx =
+              await this.#validateCurrentConnection(connCtx);
+            if (!validatedConnCtx) {
               return;
             }
             await this.#handleConfigUpdate(
@@ -1504,8 +1506,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               // `cg${clientGroupID}`, as is done in the schema migration.
               // As clients update to the zero version with the profileID logic,
               // the value will be correspondingly in the CVR db.
-              connCtx.profileID ?? `cg${this.id}`,
-              connCtx,
+              validatedConnCtx.profileID ?? `cg${this.id}`,
+              validatedConnCtx,
             );
             // this.#authData  and cvr (in particular cvr.clientSchema) have been
             // initialized, signal the run loop to run.
@@ -4319,6 +4321,30 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
       throw e;
     }
+  }
+
+  /**
+   * Validates the connection's credential as it stands once validation ends.
+   * An `updateAuth` handled while a validation is in flight moves the
+   * connection to a newer revision, which makes a failure of the older one
+   * stale; the newer credential is then validated in its place, so the
+   * `initConnection` waiting on it is not dropped.
+   */
+  async #validateCurrentConnection(
+    selector: ConnectionSelector,
+  ): Promise<ConnectionContext | undefined> {
+    let connCtx = this.connContextManager.getConnectionContext(selector);
+    while (connCtx) {
+      if (await this.#validateConnection(connCtx)) {
+        return connCtx;
+      }
+      const current = this.connContextManager.getConnectionContext(selector);
+      if (current?.revision === connCtx.revision) {
+        return undefined;
+      }
+      connCtx = current;
+    }
+    return undefined;
   }
 
   #failMaintenanceConnection(connCtx: ConnectionContext, error: ProtocolError) {
