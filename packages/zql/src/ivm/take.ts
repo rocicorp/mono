@@ -149,7 +149,7 @@ export class Take implements Operator, TakeBoundProvider {
     const takeState = this.#storage.get(takeStateKey);
     if (!takeState) {
       if (constraintMatchesPartitionKey(req.constraint, this.#partitionKey)) {
-        yield* this.#initialFetch(req);
+        yield* this.#initialFetch(req, takeStateKey);
       }
       return;
     }
@@ -182,7 +182,10 @@ export class Take implements Operator, TakeBoundProvider {
     }
   }
 
-  *#initialFetch(req: FetchRequest): Stream<Node | 'yield'> {
+  *#initialFetch(
+    req: FetchRequest,
+    takeStateKey: string,
+  ): Stream<Node | 'yield'> {
     assert(req.start === undefined, 'Start should be undefined');
     assert(!req.reverse, 'Reverse should be false');
 
@@ -195,11 +198,8 @@ export class Take implements Operator, TakeBoundProvider {
       'Constraint should match partition key',
     );
 
-    const takeStateKey = getTakeStateKey(this.#partitionKey, req.constraint);
-    assert(
-      this.#storage.get(takeStateKey) === undefined,
-      'Take state should be undefined',
-    );
+    // The caller (fetch) has already checked that there is no state for
+    // takeStateKey.
 
     let size = 0;
     let bound: Row | undefined;

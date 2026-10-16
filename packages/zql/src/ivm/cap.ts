@@ -105,7 +105,7 @@ export class Cap implements Operator {
     const capStateKey = getCapStateKey(this.#partitionKey, req.constraint);
     const capState = this.#storage.get(capStateKey);
     if (!capState) {
-      yield* this.#initialFetch(req);
+      yield* this.#initialFetch(req, capStateKey);
       return;
     }
     if (capState.size === 0) {
@@ -130,7 +130,10 @@ export class Cap implements Operator {
     }
   }
 
-  *#initialFetch(req: FetchRequest): Stream<Node | 'yield'> {
+  *#initialFetch(
+    req: FetchRequest,
+    capStateKey: string,
+  ): Stream<Node | 'yield'> {
     if (this.#limit === 0) {
       return;
     }
@@ -140,11 +143,8 @@ export class Cap implements Operator {
       'Constraint should match partition key',
     );
 
-    const capStateKey = getCapStateKey(this.#partitionKey, req.constraint);
-    assert(
-      this.#storage.get(capStateKey) === undefined,
-      'Cap state should be undefined',
-    );
+    // The caller (fetch) has already checked that there is no state for
+    // capStateKey.
 
     let size = 0;
     const pks: string[] = [];
