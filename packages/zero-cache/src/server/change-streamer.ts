@@ -219,7 +219,6 @@ export default async function runWorker(
             {
               ...initialSync,
               replicationSlotFailover: upstream.pgReplicationSlotFailover,
-              installPartialIndexTriggers: upstream.pgPartialIndexTriggers,
             },
             context,
             replicationLag.reportIntervalMs,

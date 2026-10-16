@@ -97,12 +97,7 @@ export async function initializePostgresChangeSource(
 ): Promise<InitializeResult> {
   const db = await connectPgClient(lc, upstreamURI, 'change-source-init');
   try {
-    await ensureShardSchema(
-      lc,
-      db,
-      shard,
-      syncOptions.installPartialIndexTriggers,
-    );
+    await ensureShardSchema(lc, db, shard);
 
     const {
       replica: restoredReplica,
