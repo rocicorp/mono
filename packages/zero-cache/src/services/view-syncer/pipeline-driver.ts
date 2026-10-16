@@ -56,7 +56,10 @@ import {
   type IgnoredScalarHint,
 } from '../../../../zqlite/src/resolve-scalar-subqueries.ts';
 import {createSQLiteCostModel} from '../../../../zqlite/src/sqlite-cost-model.ts';
-import {TableSource} from '../../../../zqlite/src/table-source.ts';
+import {
+  TableSource,
+  type SQLiteRow,
+} from '../../../../zqlite/src/table-source.ts';
 import {
   reloadPermissionsIfChanged,
   type LoadedPermissions,
@@ -1932,7 +1935,7 @@ export class PipelineDriver {
             const prevValues = tableSource.reconcilePendingConflicts(
               probedPrevValues,
               nextValue,
-              rowKey as Row,
+              rowKey as SQLiteRow,
               this.#tableSpecs.get(table)?.tableSpec.uniqueKeys ?? [],
             );
             let editOldRow: Row | undefined = undefined;

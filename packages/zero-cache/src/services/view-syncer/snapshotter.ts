@@ -7,17 +7,16 @@ import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../../zero-types/src/schema.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {recordIndexUsage} from '../../../../zqlite/src/index-usage.ts';
-import {fromSQLiteTypes} from '../../../../zqlite/src/table-source.ts';
+import {
+  fromSQLiteTypes,
+  type SQLiteRow,
+} from '../../../../zqlite/src/table-source.ts';
 import type {
   LiteAndZqlSpec,
   LiteTableSpecWithKeysAndVersion,
 } from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
-import {
-  normalizedKeyOrder,
-  type RowKey,
-  type RowValue,
-} from '../../types/row-key.ts';
+import {normalizedKeyOrder, type RowKey} from '../../types/row-key.ts';
 import type {AppID} from '../../types/shards.ts';
 import {id} from '../../types/sql.ts';
 import {
@@ -840,8 +839,7 @@ class Snapshot {
     const read = () =>
       this.db.statementCache.use(sql, cached => {
         cached.statement.safeIntegers(true);
-        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-        const row = cached.statement.get<any>(args);
+        const row = cached.statement.get<SQLiteRow>(args);
         recordIndexUsage(cached.statement, table.name);
         return row;
       });
@@ -867,7 +865,7 @@ class Snapshot {
   getRows(
     table: LiteTableSpecWithKeysAndVersion,
     keys: PrimaryKey[],
-    row: RowValue,
+    row: SQLiteRow,
     cache?: SnapshotRowCache,
     tag?: string,
   ) {
@@ -929,8 +927,7 @@ class Snapshot {
     const read = () =>
       this.db.statementCache.use(sql, cached => {
         cached.statement.safeIntegers(true);
-        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-        const rows = cached.statement.all<any>(args);
+        const rows = cached.statement.all<SQLiteRow>(args);
         recordIndexUsage(cached.statement, table.name);
         return rows;
       });
@@ -952,7 +949,7 @@ class Snapshot {
    * before it is cached, rather than be served to the valid Diffs of other
    * client groups (whose own validity checks would then fail).
    */
-  #assertNotAdvanced(row: RowValue) {
+  #assertNotAdvanced(row: SQLiteRow) {
     if ((row[ROW_VERSION] ?? '~') > this.version) {
       throw new InvalidDiffError(
         `Diff is no longer valid. db has advanced past ${this.version}.`,
@@ -1275,27 +1272,21 @@ class Diff implements SnapshotDiff {
               continue;
             }
 
-            if (
-              table === this.#permissionsTable &&
-              prevValues.some(
-                prevValue => prevValue.permissions !== nextValue.permissions,
-              )
-            ) {
-              throw new ResetPipelinesSignal(
-                `Permissions have changed ${
-                  prevValues.find(
-                    prevValue =>
-                      prevValue.permissions !== nextValue.permissions,
-                  ).hash
-                } => ${nextValue.hash}`,
-                'permissions-change',
+            if (table === this.#permissionsTable) {
+              const changed = prevValues.find(
+                prevValue => prevValue.permissions !== nextValue?.permissions,
               );
+              if (changed) {
+                throw new ResetPipelinesSignal(
+                  `Permissions have changed ${changed.hash} => ${nextValue?.hash}`,
+                  'permissions-change',
+                );
+              }
             }
 
             // Note: The raw SQLite rows may be shared with other client
             // groups via the SnapshotRowCache, so they must not be modified.
             // fromSQLiteTypes() produces new row objects.
-            // TODO Can we get rid of these RowValue casts?
             return {
               value: {
                 table,
@@ -1328,8 +1319,8 @@ class Diff implements SnapshotDiff {
   checkThatDiffIsValid(
     stateVersion: string,
     op: string,
-    prevValues: RowValue[],
-    nextValue: RowValue,
+    prevValues: readonly SQLiteRow[],
+    nextValue: SQLiteRow | null,
   ) {
     // Sanity checks to detect that the diff is not being accessed after
     // the Snapshots have advanced.
@@ -1347,7 +1338,7 @@ class Diff implements SnapshotDiff {
         `Diff is no longer valid. prev db has advanced past ${this.prev.version}.`,
       );
     }
-    if (op === SET_OP && nextValue[ROW_VERSION] !== stateVersion) {
+    if (op === SET_OP && nextValue?.[ROW_VERSION] !== stateVersion) {
       throw new InvalidDiffError(
         'Diff is no longer valid. curr db has advanced.',
       );

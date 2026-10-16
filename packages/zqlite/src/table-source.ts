@@ -467,7 +467,7 @@ export class TableSource implements Source {
     for (const sqlAndBindings of queries) {
       const cachedStatement = cache.get(sqlAndBindings.text);
       cachedStatement.statement.safeIntegers(true);
-      const rowIterator = cachedStatement.statement.iterate<Row>(
+      const rowIterator = cachedStatement.statement.iterate<SQLiteRow>(
         ...sqlAndBindings.values,
       );
       try {
@@ -553,7 +553,7 @@ export class TableSource implements Source {
 
   *#mapFromSQLiteTypes(
     valueTypes: Record<string, SchemaValue>,
-    rowIterator: IterableIterator<Row>,
+    rowIterator: IterableIterator<SQLiteRow>,
     query: string,
     debug: DebugDelegate | undefined,
   ): IterableIterator<Row> {
@@ -776,7 +776,7 @@ export class TableSource implements Source {
   reconcilePendingConflicts(
     base: readonly Row[],
     next: Row | null,
-    rowKey: Row,
+    rowKey: SQLiteRow,
     uniqueKeys: readonly (readonly string[])[],
   ): readonly Row[] {
     const delta = this.#delta;
@@ -816,8 +816,8 @@ export class TableSource implements Source {
     return out;
   }
 
-  #syncedDeleteKey(rowKey: Row): [string, Value][] {
-    const synced: Writable<Row> = {};
+  #syncedDeleteKey(rowKey: SQLiteRow): [string, Value][] {
+    const synced: Writable<SQLiteRow> = {};
     for (const [col, value] of Object.entries(rowKey)) {
       if (Object.hasOwn(this.#columns, col)) {
         synced[col] = value;
@@ -889,7 +889,7 @@ export class TableSource implements Source {
     const raw = this.#stmts.cache.use(stmt, ({statement}) => {
       const row = statement
         .safeIntegers(true)
-        .get<Row>(...toSQLiteTypes(keyCols, rowKey, this.#columns));
+        .get<SQLiteRow>(...toSQLiteTypes(keyCols, rowKey, this.#columns));
       recordIndexUsage(statement, this.#table);
       return row;
     });
@@ -1024,9 +1024,18 @@ export function toSQLiteTypeName(type: ValueType) {
   }
 }
 
+/**
+ * A column value as read from SQLite with `safeIntegers(true)`, i.e. before
+ * {@link fromSQLiteTypes} converts it to a {@link Value}.
+ */
+export type SQLiteValue = bigint | number | string | null;
+
+/** A row as read from SQLite, before {@link fromSQLiteTypes}. */
+export type SQLiteRow = Readonly<Record<string, SQLiteValue>>;
+
 export function fromSQLiteTypes(
   valueTypes: Record<string, SchemaValue>,
-  row: Row,
+  row: SQLiteRow,
   tableName: string,
 ): Row {
   const newRow: Writable<Row> = {};
@@ -1045,7 +1054,7 @@ export function fromSQLiteTypes(
 
 function fromSQLiteType(
   valueType: ValueType,
-  v: Value,
+  v: SQLiteValue,
   column: string,
   tableName: string,
 ): Value {
@@ -1059,13 +1068,12 @@ function fromSQLiteType(
     case 'string':
     case 'null':
       if (typeof v === 'bigint') {
-        const bi = v as bigint;
-        if (bi > Number.MAX_SAFE_INTEGER || bi < Number.MIN_SAFE_INTEGER) {
+        if (v > Number.MAX_SAFE_INTEGER || v < Number.MIN_SAFE_INTEGER) {
           throw new UnsupportedValueError(
-            `value ${bi} (in ${tableName}.${column}) is outside of supported bounds`,
+            `value ${v} (in ${tableName}.${column}) is outside of supported bounds`,
           );
         }
-        return Number(bi);
+        return Number(v);
       }
       return v;
     case 'json':
