@@ -27,9 +27,11 @@ export async function ensureShardSchema(
   lc: LogContext,
   db: PostgresDB,
   shard: ShardConfig,
+  installPartialIndexTriggers = true,
 ): Promise<void> {
   const initialSetup: Migration = {
-    migrateSchema: (lc, tx) => setupTablesAndReplication(lc, tx, shard),
+    migrateSchema: (lc, tx) =>
+      setupTablesAndReplication(lc, tx, shard, installPartialIndexTriggers),
     minSafeVersion: 1,
   };
   await runSchemaMigrations(
@@ -41,11 +43,14 @@ export async function ensureShardSchema(
     // The incremental migration of any existing replicas will be replaced by
     // the incoming replica being synced, so the replicaVersion here is
     // unnecessary.
-    getIncrementalMigrations(shard),
+    getIncrementalMigrations(shard, installPartialIndexTriggers),
   );
 }
 
-function getIncrementalMigrations(shard: ShardConfig): IncrementalMigrationMap {
+function getIncrementalMigrations(
+  shard: ShardConfig,
+  installPartialIndexTriggers: boolean,
+): IncrementalMigrationMap {
   const shardConfigTable = `${upstreamSchema(shard)}.shardConfig`;
 
   return {
@@ -199,9 +204,6 @@ function getIncrementalMigrations(shard: ShardConfig): IncrementalMigrationMap {
 
     // v23 (1.6.0): Event triggers: Handle the case where current_query()
     // returns NULL. Add more logging to debug unexpected messages
-    //
-    // Note: This is retained (despite v31 also upgrading the triggers) because
-    // the v28 migration depends on the update_schemas() function.
     23: {
       migrateSchema: async (lc, sql) => {
         const [{publications}] = await sql<{publications: string[]}[]>`
@@ -322,26 +324,36 @@ function getIncrementalMigrations(shard: ShardConfig): IncrementalMigrationMap {
       },
     },
 
-    // v31: Upgrade the DDL event triggers to include partial indexes in
-    // schema snapshots. Note that setupTriggers() also refreshes the
-    // stored "publishedSchema" so that the change in format does not
-    // manifest as a spurious schema change.
-    31: {
-      migrateSchema: async (lc, sql) => {
-        const [{publications}] = await sql<{publications: string[]}[]>`
-          SELECT publications FROM ${sql(shardConfigTable)}`;
-        await setupTriggers(lc, sql, {...shard, publications});
-        lc.info?.(`Upgraded DDL event triggers`);
-      },
-    },
+    // Note: While this is conditional, it always has to be bumped to the last
+    // version. (It was v29, and is re-run for shards at v29 when it is bumped,
+    // which is harmless as setupTriggers() is idempotent.)
+    ...(installPartialIndexTriggers
+      ? {
+          // v31: Upgrade the DDL event triggers to include partial indexes in
+          // schema snapshots. Note that setupTriggers() also refreshes the
+          // stored "publishedSchema" so that the change in format does not
+          // manifest as a spurious schema change.
+          31: {
+            migrateSchema: async (lc, sql) => {
+              const [{publications}] = await sql<{publications: string[]}[]>`
+                SELECT publications FROM ${sql(shardConfigTable)}`;
+              await setupTriggers(lc, sql, {...shard, publications});
+              lc.info?.(`Upgraded DDL event triggers`);
+            },
+          },
+        }
+      : {}),
   };
 }
 
 // Referenced in tests.
 export const CURRENT_SCHEMA_VERSION = Object.keys(
-  getIncrementalMigrations({
-    appID: 'unused',
-    shardNum: 0,
-    publications: ['foo'],
-  }),
+  getIncrementalMigrations(
+    {
+      appID: 'unused',
+      shardNum: 0,
+      publications: ['foo'],
+    },
+    true,
+  ),
 ).reduce((prev, curr) => Math.max(prev, parseInt(curr)), 0);
