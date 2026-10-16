@@ -11,7 +11,11 @@ import type {
   ValueType,
 } from '../../zero-schema/src/table-schema.ts';
 import type {Constraint} from '../../zql/src/ivm/constraint.ts';
-import type {MultiConstraint, Start} from '../../zql/src/ivm/operator.ts';
+import type {
+  FetchRequest,
+  MultiConstraint,
+  Start,
+} from '../../zql/src/ivm/operator.ts';
 import {sql} from './internal/sql.ts';
 
 /**
@@ -188,7 +192,7 @@ export function constraintsToSQL(
   const constraints: SQLQuery[] = [];
   for (const [key, value] of Object.entries(constraint)) {
     constraints.push(
-      sql`${sql.ident(key)} = ${toSQLiteType(value, columns[key].type)}`,
+      sql`${sql.ident(key)} = ${toSQLiteBinding(value, columns[key].type)}`,
     );
   }
 
@@ -232,7 +236,7 @@ export function multiConstraintToSQL(
     const key = keys[0];
     const colType = columns[key].type;
     return sql`${sql.ident(key)} IN (${sql.join(
-      multiConstraint.map(c => sql`${toSQLiteType(c[key], colType)}`),
+      multiConstraint.map(c => sql`${toSQLiteBinding(c[key], colType)}`),
       sql`,`,
     )})`;
   }
@@ -245,7 +249,7 @@ export function multiConstraintToSQL(
   const rows = multiConstraint.map(
     c =>
       sql`(${sql.join(
-        keys.map(k => sql`${toSQLiteType(c[k], columns[k].type)}`),
+        keys.map(k => sql`${toSQLiteBinding(c[k], columns[k].type)}`),
         sql`,`,
       )})`,
   );
@@ -409,6 +413,23 @@ export function toSQLiteType(v: unknown, type: ValueType): unknown {
   }
 }
 
+/**
+ * A placeholder for a fetch's value that {@link buildSelectQueries} passes
+ * through to the bindings of its SELECTs, where `toSQLiteType` would convert
+ * the value itself. It lets a fetch's SQL text be built once and reused for
+ * every fetch of the same shape (see `fetch-sql.ts`).
+ */
+export class Binding {
+  readonly get: (req: FetchRequest) => unknown;
+  constructor(get: (req: FetchRequest) => unknown) {
+    this.get = get;
+  }
+}
+
+function toSQLiteBinding(v: unknown, type: ValueType): unknown {
+  return v instanceof Binding ? v : toSQLiteType(v, type);
+}
+
 function nullableAwareEquality(
   field: string,
   value: unknown,
@@ -544,7 +565,7 @@ function gatherStartConstraints(
     for (let j = 0; j <= i; j++) {
       if (j === i) {
         const columnType = columnTypes[iField];
-        const constraintValue = toSQLiteType(
+        const constraintValue = toSQLiteBinding(
           from[iField] ?? null,
           columnType.type,
         );
@@ -572,7 +593,7 @@ function gatherStartConstraints(
       } else {
         const [jField] = order[j];
         const columnType = columnTypes[jField];
-        const value = toSQLiteType(from[jField] ?? null, columnType.type);
+        const value = toSQLiteBinding(from[jField] ?? null, columnType.type);
         group.push(nullableAwareEquality(jField, value, columnType));
       }
     }
@@ -584,7 +605,7 @@ function gatherStartConstraints(
       sql`(${sql.join(
         order.map(([field]) => {
           const columnType = columnTypes[field];
-          const value = toSQLiteType(from[field] ?? null, columnType.type);
+          const value = toSQLiteBinding(from[field] ?? null, columnType.type);
           return nullableAwareEquality(field, value, columnType);
         }),
         sql` AND `,

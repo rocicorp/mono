@@ -1,4 +1,3 @@
-import type {SQLQuery} from '@databases/sql';
 import type {LogContext} from '@rocicorp/logger';
 import SQLite3Database from '@rocicorp/zero-sqlite3';
 import type {LogConfig} from '../../otel/src/log-options.ts';
@@ -45,6 +44,7 @@ import {
 import type {Stream} from '../../zql/src/ivm/stream.ts';
 import {assertOrderingIncludesPK} from '../../zql/src/query/complete-ordering.ts';
 import type {Database, Statement} from './db.ts';
+import {FetchSQLCache, type FetchSQL} from './fetch-sql.ts';
 import {recordIndexUsage} from './index-usage.ts';
 import {compile, format, sql} from './internal/sql.ts';
 import {StatementCache} from './internal/statement-cache.ts';
@@ -54,11 +54,7 @@ import {
   NOT_OVERRIDDEN,
   PendingDelta,
 } from './pending-delta.ts';
-import {
-  buildSelectQueries,
-  toSQLiteType,
-  type NoSubqueryCondition,
-} from './query-builder.ts';
+import {toSQLiteType} from './query-builder.ts';
 
 type Statements = {
   readonly cache: StatementCache;
@@ -336,9 +332,15 @@ export class TableSource implements Source {
     // equality) even when no ordering is requested.
     const primaryKeySort: Ordering = this.#primaryKeySort;
 
+    const fetchSQL = new FetchSQLCache(
+      this.#table,
+      this.#columns,
+      transformedFilters.filters,
+      sort,
+    );
     const input: SourceInput = {
       getSchema: () => schema,
-      fetch: req => this.#fetch(req, connection),
+      fetch: req => this.#fetch(req, connection, fetchSQL),
       setOutput: output => {
         connection.output = output;
       },
@@ -383,13 +385,14 @@ export class TableSource implements Source {
     ) as Row;
   }
 
-  *#fetch(req: FetchRequest, connection: Connection): Stream<Node | 'yield'> {
+  *#fetch(
+    req: FetchRequest,
+    connection: Connection,
+    fetchSQL: FetchSQLCache,
+  ): Stream<Node | 'yield'> {
     const {sort, debug} = connection;
 
-    const rows = this.#queryRows(
-      this.#requestToSQL(req, connection.filters?.condition, sort),
-      debug,
-    );
+    const rows = this.#queryRows(fetchSQL.get(req), debug);
     const overlayPredicate = mergeOverlayPredicate(
       connection.filters?.predicate,
       req.filter,
@@ -452,17 +455,16 @@ export class TableSource implements Source {
   }
 
   /**
-   * The rows of `queries`, run one after another as {@link buildSelectQueries}
+   * The rows of `queries`, run one after another as `buildSelectQueries`
    * requires. Each statement is run only once the previous one is exhausted,
    * so a fetch that stops early never runs the rest.
    */
   *#queryRows(
-    queries: readonly SQLQuery[],
+    queries: readonly FetchSQL[],
     debug: DebugDelegate | undefined,
   ): Generator<Row, void, undefined> {
     const {cache} = this.#stmts;
-    for (const query of queries) {
-      const sqlAndBindings = format(query);
+    for (const sqlAndBindings of queries) {
       const cachedStatement = cache.get(sqlAndBindings.text);
       cachedStatement.statement.safeIntegers(true);
       const rowIterator = cachedStatement.statement.iterate<Row>(
@@ -914,24 +916,6 @@ export class TableSource implements Source {
     // The base match is absent, removed, or no longer matches this key. Another
     // pending row may now own the key.
     return delta.getByColumns(keyCols, rowKey);
-  }
-
-  #requestToSQL(
-    request: FetchRequest,
-    filters: NoSubqueryCondition | undefined,
-    order: Ordering | undefined,
-  ): readonly SQLQuery[] {
-    return buildSelectQueries(
-      this.#table,
-      this.#columns,
-      request.constraint,
-      filters,
-      order,
-      request.reverse,
-      request.start,
-      request.multiConstraints,
-      request.filter,
-    );
   }
 }
 
