@@ -18,6 +18,7 @@ minimumReleaseAgeExclude:
   - '@rocicorp/zero-virtual@0.7.0'
   - '@badrap/valita@0.5.5'
   - '@rocicorp/zero-sqlite3@1.1.5'
+  - '@rocicorp/zero@1.11.0'
 
 # docusaurus-plugin-typedoc and typedoc-docusaurus-theme both import typedoc
 # without declaring it, so they can only resolve it through pnpm's hoisted
