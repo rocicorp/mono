@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
+import {hasOwn} from '../../../../shared/src/has-own.ts';
 import {
   assertJSONValue,
   type JSONObject as SafeJSONObject,
@@ -9,7 +10,6 @@ import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import type {Writable} from '../../../../shared/src/writable.ts';
 import type {ErroredQuery} from '../../../../zero-protocol/src/custom-queries.ts';
-import {rowSchema} from '../../../../zero-protocol/src/data.ts';
 import type {DeleteClientsBody} from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {
@@ -77,8 +77,25 @@ export interface PokeHandler {
   end(finalVersion: CVRVersion): Promise<void>;
 }
 
+/**
+ * A put/del row patch and its JSON serialization. Computed once per client
+ * group and shared by all of the group's clients.
+ */
+type SerializedRowPatch = {
+  readonly rowPatch: RowPatchOp;
+  readonly json: string;
+};
+
+/**
+ * Lazily holds the {@link SerializedRowPatch} of one patch so that it is
+ * computed at most once, by the first client that needs it.
+ */
+type SharedRowPatch = {serialized?: SerializedRowPatch | undefined};
+
 /** A {@link PokeHandler} for a single client. */
 export interface ClientPokeHandler extends PokeHandler {
+  addPatch(patch: PatchToVersion, shared?: SharedRowPatch): Promise<void>;
+
   /**
    * Whether a patch has been sent to the client. Once one has, the poke can
    * only be ended with a `finalVersion` that is ahead of the client's base
@@ -130,11 +147,13 @@ export function startPoke(
     get patchesSent() {
       return pokers.some(poker => poker.patchesSent);
     },
-    addPatch: patch =>
-      settle(
+    addPatch: patch => {
+      const shared: SharedRowPatch = {};
+      return settle(
         'addPatch',
-        pokers.map(poker => poker.addPatch(patch)),
-      ),
+        pokers.map(poker => poker.addPatch(patch, shared)),
+      );
+    },
     cancel: () =>
       settle(
         'cancel',
@@ -253,6 +272,10 @@ export class ClientHandler {
 
     let pokeStarted = false;
     let body: PokePartBody | undefined;
+    // rowsPatch is kept out of `body` until it is flushed so that the poke
+    // part can be serialized by concatenating the pre-serialized rows.
+    let rowsPatch: RowPatchOp[] = [];
+    let rowsJSON: string[] = [];
     let partCount = 0;
     let serializedRowsLength = 0;
 
@@ -266,15 +289,31 @@ export class ClientHandler {
 
     const flushBody = async () => {
       if (body) {
-        const message = ['pokePart', body] satisfies PokePartMessage;
-        await this.#push(message, JSON.stringify(message));
+        let message: PokePartMessage;
+        let serialized: string;
+        if (rowsPatch.length === 0) {
+          message = ['pokePart', body];
+          serialized = JSON.stringify(message);
+        } else {
+          // Equivalent to JSON.stringify(message): rowsPatch is the last
+          // property of the body.
+          const prefix = JSON.stringify(['pokePart', body]);
+          message = ['pokePart', {...body, rowsPatch}];
+          serialized = `${prefix.slice(0, -2)},"rowsPatch":[${rowsJSON.join(',')}]}]`;
+          rowsPatch = [];
+          rowsJSON = [];
+        }
+        await this.#push(message, serialized);
         body = undefined;
         partCount = 0;
         serializedRowsLength = 0;
       }
     };
 
-    const addPatch = async (patchToVersion: PatchToVersion) => {
+    const addPatch = async (
+      patchToVersion: PatchToVersion,
+      shared: SharedRowPatch,
+    ) => {
       const {patch, toVersion} = patchToVersion;
       if (cmpVersions(toVersion, this.#baseVersion) <= 0) {
         return;
@@ -331,9 +370,11 @@ export class ClientHandler {
               });
             }
           } else {
-            const rowPatch = makeRowPatch(patch);
-            (target.rowsPatch ??= []).push(rowPatch);
-            serializedRowsLength += JSON.stringify(rowPatch).length;
+            const {rowPatch, json} = (shared.serialized ??=
+              serializeRowPatch(patch));
+            rowsPatch.push(rowPatch);
+            rowsJSON.push(json);
+            serializedRowsLength += json.length;
           }
           break;
         default:
@@ -358,9 +399,12 @@ export class ClientHandler {
       get patchesSent() {
         return pokeStarted;
       },
-      addPatch: async (patchToVersion: PatchToVersion) => {
+      addPatch: async (
+        patchToVersion: PatchToVersion,
+        shared: SharedRowPatch = {},
+      ) => {
         try {
-          await addPatch(patchToVersion);
+          await addPatch(patchToVersion, shared);
           if (patchToVersion.patch.type === 'row') {
             this.#pokedRows.add(1);
           }
@@ -483,6 +527,11 @@ const mutationRowSchema = v.object({
   result: mutationResultSchema,
 });
 
+function serializeRowPatch(patch: RowPatch): SerializedRowPatch {
+  const rowPatch = makeRowPatch(patch);
+  return {rowPatch, json: JSON.stringify(rowPatch)};
+}
+
 function makeRowPatch(patch: RowPatch): RowPatchOp {
   const {
     op,
@@ -491,10 +540,12 @@ function makeRowPatch(patch: RowPatch): RowPatchOp {
 
   switch (op) {
     case 'put':
+      // ensureSafeJSON() converts bigints and asserts (outside of prod) that
+      // the values are JSON, which is all that rowSchema checks.
       return {
         op: 'put',
         tableName,
-        value: v.parse(ensureSafeJSON(patch.contents), rowSchema),
+        value: ensureSafeJSON(patch.contents),
       };
 
     case 'del':
@@ -517,21 +568,20 @@ function makeRowPatch(patch: RowPatch): RowPatchOp {
  * result in an Error.
  */
 export function ensureSafeJSON(row: JSONObject): SafeJSONObject {
-  const modified = Object.entries(row)
-    .filter(([k, v]) => {
-      if (typeof v === 'bigint') {
-        if (v >= Number.MIN_SAFE_INTEGER && v <= Number.MAX_SAFE_INTEGER) {
-          return true; // send this entry onto the next map() step.
-        }
+  let modified: Record<string, unknown> | undefined;
+  for (const k in row) {
+    if (!hasOwn(row, k)) {
+      continue;
+    }
+    const v = row[k];
+    if (typeof v === 'bigint') {
+      if (v < Number.MIN_SAFE_INTEGER || v > Number.MAX_SAFE_INTEGER) {
         throw new Error(`Value of "${k}" exceeds safe Number range (${v})`);
-      } else if (typeof v === 'object') {
-        assertJSONValue(v);
       }
-      return false;
-    })
-    .map(([k, v]) => [k, Number(v)]);
-
-  return modified.length
-    ? {...row, ...Object.fromEntries(modified)}
-    : (row as SafeJSONObject);
+      (modified ??= {...row})[k] = Number(v);
+    } else if (typeof v === 'object') {
+      assertJSONValue(v);
+    }
+  }
+  return (modified ?? row) as SafeJSONObject;
 }
