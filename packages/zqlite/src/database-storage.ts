@@ -35,6 +35,14 @@ export const CREATE_STORAGE_TABLE = `
   )
   `;
 
+/**
+ * The most values each operator's storage keeps in memory. The storage is in
+ * SQLite so that operator state can spill to disk, so only a few values per
+ * operator are kept: profiles of the view-syncer gain as much from 64 as from
+ * 1,024.
+ */
+const MAX_CACHED_ENTRIES_PER_OP = 64;
+
 const defaultOptions = {
   commitInterval: 5_000,
   compactionThresholdBytes: 50 * 1024 * 1024,
@@ -109,15 +117,10 @@ export class DatabaseStorage {
     this.#db.close();
   }
 
-  #get(
-    cgID: string,
-    opID: number,
-    key: string,
-    def?: JSONValue,
-  ): JSONValue | undefined {
+  #get(cgID: string, opID: number, key: string): JSONValue | undefined {
     this.#maybeCheckpoint();
     const row = this.#stmts.get.get<{val: string}>(cgID, opID, key);
-    return row ? JSON.parse(row.val) : def;
+    return row ? JSON.parse(row.val) : undefined;
   }
 
   #set(cgID: string, opID: number, key: string, val: JSONValue) {
@@ -171,8 +174,13 @@ export class DatabaseStorage {
   }
 
   createClientGroupStorage(cgID: string): ClientGroupStorage {
+    // The caches of the group's live operator storages.
+    const caches = new Set<Map<string, JSONValue | undefined>>();
     const destroy = () => {
       this.#stmts.clear.run(cgID);
+      for (const cache of caches) {
+        cache.clear();
+      }
       this.#checkpoint();
       this.#db.compact(this.#options.compactionThresholdBytes);
     };
@@ -182,12 +190,44 @@ export class DatabaseStorage {
     return {
       createStorage: () => {
         const opID = nextOpID++;
+        // The operator's most recently read and written values, `undefined`
+        // for a key known to be absent. Operators read the same key again and
+        // again (Cap and Take read their state on every fetch and push), so
+        // this saves most of the SQLite reads. Like MemoryStorage, `get`
+        // returns the stored value itself, which operators do not mutate.
+        const cache = new Map<string, JSONValue | undefined>();
+        caches.add(cache);
+        const cacheSet = (key: string, val: JSONValue | undefined) => {
+          if (cache.size >= MAX_CACHED_ENTRIES_PER_OP && !cache.has(key)) {
+            cache.clear();
+          }
+          cache.set(key, val);
+        };
         return {
-          get: (key, def?) => this.#get(cgID, opID, key, def),
-          set: (key, val) => this.#set(cgID, opID, key, val),
-          del: key => this.#del(cgID, opID, key),
+          get: (key, def?) => {
+            let val = cache.get(key);
+            if (val === undefined && !cache.has(key)) {
+              val = this.#get(cgID, opID, key);
+              cacheSet(key, val);
+            }
+            return val === undefined ? def : val;
+          },
+          // The cache is updated only once the database is, so a failed write
+          // leaves it consistent with the database.
+          set: (key, val) => {
+            this.#set(cgID, opID, key, val);
+            cacheSet(key, val);
+          },
+          del: key => {
+            this.#del(cgID, opID, key);
+            cacheSet(key, undefined);
+          },
           scan: opts => this.#scan(cgID, opID, opts),
-          destroy: () => this.#destroy(cgID, opID),
+          destroy: () => {
+            this.#destroy(cgID, opID);
+            cache.clear();
+            caches.delete(cache);
+          },
         };
       },
 
