@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
+import {getErrorMessage} from '../../../../shared/src/error.ts';
 import {hasOwn} from '../../../../shared/src/has-own.ts';
 import {
   assertJSONValue,
@@ -12,6 +13,8 @@ import type {Writable} from '../../../../shared/src/writable.ts';
 import type {ErroredQuery} from '../../../../zero-protocol/src/custom-queries.ts';
 import type {DeleteClientsBody} from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
+import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 import {
   ProtocolError,
   type TransformFailedBody,
@@ -225,7 +228,7 @@ export class ClientHandler {
     this.#zeroMutationsTable = `${upstreamSchema(shard)}.mutations`;
     this.#lc = lc;
     this.#downstream = downstream;
-    this.#baseVersion = cookieToVersion(baseCookie);
+    this.#baseVersion = parseBaseCookie(baseCookie);
   }
 
   version(): NullableCVRVersion {
@@ -584,4 +587,24 @@ export function ensureSafeJSON(row: JSONObject): SafeJSONObject {
     }
   }
   return (modified ?? row) as SafeJSONObject;
+}
+
+/**
+ * The baseCookie comes from the connection URL so it is client input. A
+ * malformed one is reported to the client as an invalid baseCookie (which
+ * makes it reset its local state) rather than as an internal error.
+ */
+function parseBaseCookie(baseCookie: string | null): NullableCVRVersion {
+  try {
+    return cookieToVersion(baseCookie);
+  } catch (e) {
+    throw new ProtocolError(
+      {
+        kind: ErrorKind.InvalidConnectionRequestBaseCookie,
+        message: `Invalid baseCookie ${JSON.stringify(baseCookie)}: ${getErrorMessage(e)}`,
+        origin: ErrorOrigin.ZeroCache,
+      },
+      {cause: e},
+    );
+  }
 }

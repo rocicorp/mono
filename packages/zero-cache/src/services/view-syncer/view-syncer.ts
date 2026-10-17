@@ -1438,6 +1438,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           });
         },
       });
+      // Constructed before any bookkeeping: it throws for a malformed
+      // baseCookie.
+      const newClient = new ClientHandler(
+        lc,
+        this.id,
+        connCtx.clientID,
+        connCtx.wsID,
+        this.#shard,
+        connCtx.baseCookie,
+        downstream,
+      );
       this.#activeClients.add(1, {
         [PROTOCOL_VERSION_ATTR]: connCtx.protocolVersion,
       });
@@ -1451,15 +1462,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.#ttlClockBase = now;
       }
 
-      const newClient = new ClientHandler(
-        lc,
-        this.id,
-        connCtx.clientID,
-        connCtx.wsID,
-        this.#shard,
-        connCtx.baseCookie,
-        downstream,
-      );
       this.#clients
         .get(connCtx.clientID)
         ?.close(`replaced by wsID: ${connCtx.wsID}`);
