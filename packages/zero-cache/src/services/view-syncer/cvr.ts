@@ -1557,6 +1557,16 @@ export function nextEvictionTime(cvr: CVR): TTLClock | undefined {
   return next as TTLClock | undefined;
 }
 
+// Only reachable by a malformed client message (no published client sends
+// one), so it is reported as an invalid message rather than an internal error.
+function invalidQueryPut(id: string, message: string): ProtocolError {
+  return new ProtocolError({
+    kind: 'InvalidMessage',
+    message: `Invalid put for query ${id}: ${message}`,
+    origin: ErrorOrigin.ZeroCache,
+  });
+}
+
 function newQueryRecord(
   id: string,
   ast: AST | undefined,
@@ -1564,10 +1574,9 @@ function newQueryRecord(
   args: readonly ReadonlyJSONValue[] | undefined,
 ): ClientQueryRecord | CustomQueryRecord {
   if (ast !== undefined) {
-    assert(
-      name === undefined && args === undefined,
-      'Cannot provide name or args with ast',
-    );
+    if (name !== undefined || args !== undefined) {
+      throw invalidQueryPut(id, 'Cannot provide name or args with ast');
+    }
     return {
       id,
       type: 'client',
@@ -1576,10 +1585,9 @@ function newQueryRecord(
     } satisfies ClientQueryRecord;
   }
 
-  assert(
-    name !== undefined && args !== undefined,
-    'Must provide name and args',
-  );
+  if (name === undefined || args === undefined) {
+    throw invalidQueryPut(id, 'Must provide name and args');
+  }
   return {
     id,
     type: 'custom',

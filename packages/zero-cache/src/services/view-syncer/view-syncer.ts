@@ -1722,8 +1722,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       cvr,
       this.#shard,
     );
-    updater.ensureClient(clientID);
-    const patches = fn(updater);
+    let patches: PatchToVersion[];
+    try {
+      updater.ensureClient(clientID);
+      patches = fn(updater);
+    } catch (e) {
+      // The updater is abandoned, e.g. on a rejected client message. The
+      // writes it has queued must not reach the next flush.
+      this.#cvrStore.discardPending();
+      throw e;
+    }
 
     this.#cvr = await this.#flushUpdater(lc, updater);
 
