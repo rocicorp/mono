@@ -15,6 +15,7 @@ import {
   type ConnectionSelector,
 } from '../services/view-syncer/connection-context-manager.ts';
 import {type ViewSyncer} from '../services/view-syncer/view-syncer.ts';
+import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 import type {ConnectParams} from './connect-params.ts';
 import type {HandlerResult, MessageHandler} from './connection.ts';
 
@@ -42,6 +43,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
   readonly #connectionSelector: ConnectionSelector;
   readonly #connContextManager: ConnectionContextManager;
   readonly #pusher: Pusher | undefined;
+  #initialized = false;
 
   constructor(
     lc: LogContext,
@@ -238,6 +240,21 @@ export class SyncerWsMessageHandler implements MessageHandler {
         break;
       }
       case 'initConnection': {
+        // A socket is initialized once, from the sec-protocol header or from
+        // its first initConnection message. A second one is a client bug, so
+        // reject it before it replaces this socket's view-syncer and pusher
+        // streams.
+        if (this.#initialized) {
+          throw new ProtocolErrorWithLevel(
+            {
+              kind: ErrorKind.InvalidMessage,
+              message: 'Connection was already initialized',
+              origin: ErrorOrigin.ZeroCache,
+            },
+            'warn',
+          );
+        }
+        this.#initialized = true;
         this.#connContextManager.initConnection(
           this.#connectionSelector,
           msg[1],
