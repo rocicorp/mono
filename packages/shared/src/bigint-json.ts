@@ -46,6 +46,46 @@ export const jsonValueSchema: v.Type<JSONValue> = v.lazy(() => {
 
 export const jsonObjectSchema = v.readonly(v.record(jsonValueSchema));
 
+// Integers of up to 15 digits are safe, so only a run of 16 or more digits can
+// be an integer that needs the (much slower) custom number parsing.
+const UNSAFE_INTEGER_DIGITS = 16;
+
+function isDigit(c: number): boolean {
+  return c >= 48 && c <= 57;
+}
+
+/**
+ * Whether `str` has a run of 16 or more digits. Every such run covers one of
+ * every 16 consecutive indices, so only every 16th char needs to be checked and
+ * a digit there is expanded to its full run. This is several times faster than
+ * `/\d{16}/`, which restarts at every digit of a shorter run.
+ *
+ * A run inside a JSON string also matches; that merely takes the slow path.
+ */
+export function hasUnsafeIntegerDigits(str: string): boolean {
+  const n = str.length;
+  for (let i = UNSAFE_INTEGER_DIGITS - 1; i < n; i += UNSAFE_INTEGER_DIGITS) {
+    if (!isDigit(str.charCodeAt(i))) {
+      continue;
+    }
+    let start = i;
+    while (start > 0 && isDigit(str.charCodeAt(start - 1))) {
+      start--;
+    }
+    let end = i + 1;
+    while (end < n && isDigit(str.charCodeAt(end))) {
+      end++;
+    }
+    if (end - start >= UNSAFE_INTEGER_DIGITS) {
+      return true;
+    }
+    // The next run starts after `end`, and covers one of every 16 indices from
+    // there on.
+    i = end - 1;
+  }
+  return false;
+}
+
 /**
  * Parses JSON strings that may contain arbitrarily large integers. Integers
  * larger than {@link Number.MAX_SAFE_INTEGER} are deserialized as a `bigint`.
@@ -54,7 +94,9 @@ export function parse(
   str: string,
   reviver?: (k: string, v: unknown) => unknown,
 ): JSONValue {
-  return customParse(str, reviver, numberParser);
+  return hasUnsafeIntegerDigits(str)
+    ? customParse(str, reviver, numberParser)
+    : JSON.parse(str, reviver);
 }
 
 // oxlint-disable-next-line @typescript-eslint/no-explicit-any
