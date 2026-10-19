@@ -1661,6 +1661,21 @@ export const zeroOptions = {
     ],
   },
 
+  operatorStorageHeapProportion: {
+    type: v
+      .number()
+      .assert(value => value >= 0 && value <= 1, 'must be between 0 and 1')
+      .optional(() => 0.1),
+    desc: [
+      `The proportion of {bold --max-old-space-size} that the IVM operators`,
+      `of the client groups of one sync worker may keep in memory. Past it,`,
+      `the least recently used operators spill their state to the SQLite`,
+      `operator storage in {bold storageDBTmpDir}. 0 keeps all operator state`,
+      `in SQLite.`,
+    ],
+    hidden: true,
+  },
+
   initialSync: {
     tableCopyWorkers: {
       type: v.number().optional(() => 5),

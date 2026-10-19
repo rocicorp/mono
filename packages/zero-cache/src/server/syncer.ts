@@ -2,6 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pid} from 'node:process';
+import {getHeapStatistics} from 'node:v8';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
@@ -131,7 +132,19 @@ export default async function runWorker(
   const operatorStorage = DatabaseStorage.create(
     lc,
     path.join(tmpDir, `sync-worker-${randomUUID()}`),
+    {
+      maxMemoryBytes: Math.floor(
+        getHeapStatistics().heap_size_limit *
+          config.operatorStorageHeapProportion,
+      ),
+    },
   );
+  getOrCreateGauge('sync', 'ivm.operator-storage-memory-bytes', {
+    description:
+      'Estimated bytes of IVM operator state that the client groups of a ' +
+      'sync worker keep in memory rather than in SQLite',
+    unit: 'By',
+  }).addCallback(o => o.observe(operatorStorage.memoryBytes));
   const writeAuthzStorage = DatabaseStorage.create(
     lc,
     path.join(tmpDir, `mutagen-${randomUUID()}`),
