@@ -13,7 +13,7 @@
     "lint": "oxlint --quiet --config ../../oxlint.config.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
-    "bench": "vitest bench",
+    "bench": "vitest run --config vitest.config.bench.ts",
     "test-types": "vitest run --typecheck.only --no-browser.enabled",
     "test-types:watch": "vitest watch --typecheck.only --no-browser.enabled",
     "fmt": "oxfmt .",

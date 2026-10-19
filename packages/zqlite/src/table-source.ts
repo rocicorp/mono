@@ -103,6 +103,7 @@ export type TableSourceOptions = {
  */
 export class TableSource implements Source {
   readonly #dbCache = new WeakMap<Database, Statements>();
+  readonly #rawColumns = new WeakMap<Statement, readonly RawColumn[]>();
   readonly #connections: Connection[] = [];
   readonly #table: string;
   readonly #columns: Record<string, SchemaValue>;
@@ -467,14 +468,17 @@ export class TableSource implements Source {
     const {cache} = this.#stmts;
     for (const sqlAndBindings of queries) {
       const cachedStatement = cache.get(sqlAndBindings.text);
-      cachedStatement.statement.safeIntegers(true);
-      const rowIterator = cachedStatement.statement.iterate<SQLiteRow>(
+      // Raw rows skip building a row object per row in the native binding,
+      // which fromSQLiteTypes would only copy into another object.
+      cachedStatement.statement.safeIntegers(true).raw(true);
+      const columns = this.#rawColumnsFor(cachedStatement.statement);
+      const rowIterator = cachedStatement.statement.iterate<SQLiteValue[]>(
         ...sqlAndBindings.values,
       );
       try {
         debug?.initQuery(this.#table, sqlAndBindings.text);
         yield* this.#mapFromSQLiteTypes(
-          this.#columns,
+          columns,
           rowIterator,
           sqlAndBindings.text,
           debug,
@@ -552,9 +556,17 @@ export class TableSource implements Source {
       : generateWithPendingDeltaUnordered(baseRows, deltaRows, delta);
   }
 
+  #rawColumnsFor(statement: Statement): readonly RawColumn[] {
+    return getOrInsertComputed(this.#rawColumns, statement, () =>
+      statement
+        .columns()
+        .map(({name}) => rawColumn(this.#columns, name, this.#table)),
+    );
+  }
+
   *#mapFromSQLiteTypes(
-    valueTypes: Record<string, SchemaValue>,
-    rowIterator: IterableIterator<SQLiteRow>,
+    columns: readonly RawColumn[],
+    rowIterator: IterableIterator<readonly SQLiteValue[]>,
     query: string,
     debug: DebugDelegate | undefined,
   ): IterableIterator<Row> {
@@ -573,7 +585,7 @@ export class TableSource implements Source {
         break;
       }
       this.#rowsRead++;
-      const row = fromSQLiteTypes(valueTypes, result.value, this.#table);
+      const row = fromSQLiteRawRow(columns, result.value, this.#table);
       debug?.rowVended(this.#table, query, row);
       yield row;
     } while (!result.done);
@@ -887,14 +899,18 @@ export class TableSource implements Source {
     const keyCols = Object.keys(rowKey);
 
     const stmt = this.#getRowStmt(keyCols);
-    const raw = this.#stmts.cache.use(stmt, ({statement}) => {
-      const row = statement
+    const row = this.#stmts.cache.use(stmt, ({statement}) => {
+      const values = statement
         .safeIntegers(true)
-        .get<SQLiteRow>(...toSQLiteTypes(keyCols, rowKey, this.#columns));
+        .raw(true)
+        .get<SQLiteValue[] | undefined>(
+          ...toSQLiteTypes(keyCols, rowKey, this.#columns),
+        );
       recordIndexUsage(statement, this.#table);
-      return row;
+      return values === undefined
+        ? undefined
+        : fromSQLiteRawRow(this.#rawColumnsFor(statement), values, this.#table);
     });
-    const row = raw ? fromSQLiteTypes(this.#columns, raw, this.#table) : raw;
 
     const delta = this.#delta;
     if (delta === undefined || delta.isEmpty) {
