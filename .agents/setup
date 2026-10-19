@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+export CI=true
+export DEBIAN_FRONTEND=noninteractive
+
+echo '==> Checking native build prerequisites'
+missing=()
+for package in build-essential python3 pkg-config curl ca-certificates xz-utils; do
+  if [[ "$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || true)" != 'install ok installed' ]]; then
+    missing+=("$package")
+  fi
+done
+if ((${#missing[@]})); then
+  time sudo apt-get update
+  time sudo apt-get install -y "${missing[@]}"
+fi
+
+echo '==> Selecting the repository Node and pnpm versions'
+node_version="$(tr -d '[:space:]' < .nvmrc)"
+if [[ "$(node -p 'process.versions.node')" != "$node_version" && "$(node -p 'process.versions.node')" != "$node_version".* ]]; then
+  # n installs into /usr/local/bin, also available in new login shells.
+  if ! command -v n >/dev/null; then
+    time sudo npm install --global n@11.0.0
+  fi
+  time sudo n "$node_version"
+  hash -r
+fi
+package_manager="$(node -p 'require("./package.json").packageManager')"
+if [[ "$(pnpm --version 2>/dev/null || true)" != "${package_manager#pnpm@}" ]]; then
+  time sudo npm install --global "$package_manager"
+fi
+node --version
+pnpm --version
+
+# pnpm 11 otherwise auto-installs on run/exec, pruning private workspaces from
+# this public repository's lockfile. Keep installs explicit and frozen instead.
+# The global config command requires pnpm's global bin directory on PATH.
+PATH="${PNPM_HOME:-$HOME/.local/share/pnpm}/bin:$PATH" \
+  pnpm config set --global verify-deps-before-run false
+
+echo '==> Installing workspace dependencies from the lockfile'
+time pnpm install --frozen-lockfile
+
+echo '==> Checking Playwright system dependencies'
+# Playwright reports missing OS packages without updating apt on warm runs.
+if ! pnpm exec playwright install-deps --dry-run; then
+  time pnpm exec playwright install-deps
+fi
+
+echo '==> Installing the CI browsers (existing revisions are reused)'
+time pnpm exec playwright install chromium firefox webkit
+
+echo "==> Orb setup ready in ${SECONDS}s"

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# The published test suites need no persistent services or authentication.
+# Toolchains, node_modules, and Playwright browsers survive in the snapshot;
+# keep dependency installation in setup, never on the resume path.
