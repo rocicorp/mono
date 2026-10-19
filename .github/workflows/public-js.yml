@@ -10,6 +10,7 @@ name: Public JS
 # that breaks mono fails on its mono-internal pull request.
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
