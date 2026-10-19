@@ -1,7 +1,8 @@
+import {assert} from '../../../../../shared/src/asserts.ts';
 import {
-  jsonObjectSchema,
   parse,
   stringify,
+  type JSONValue,
 } from '../../../../../shared/src/bigint-json.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import type {Database, Statement} from '../../../../../zqlite/src/db.ts';
@@ -89,23 +90,53 @@ export const CREATE_CHANGELOG_SCHEMA =
  * fields are excluded, though the query should be ordered by
  * `<stateVersion, pos>`.
  */
-export const changeLogEntrySchema = v
-  .object({
-    stateVersion: v.string(),
-    table: v.string(),
-    rowKey: v.string(),
-    op: v.literalUnion(SET_OP, DEL_OP, TRUNCATE_OP, RESET_OP),
-  })
-  .map(val => ({
-    ...val,
-    // Note: sets the rowKey to `null` for table-wide ops / resets
-    rowKey:
-      val.op === 't' || val.op === 'r'
-        ? null
-        : v.parse(parse(val.rowKey), jsonObjectSchema),
-  }));
+export type ChangeLogEntry =
+  | {
+      readonly stateVersion: string;
+      readonly table: string;
+      readonly rowKey: Readonly<Record<string, JSONValue>>;
+      readonly op: typeof SET_OP | typeof DEL_OP;
+    }
+  | {
+      readonly stateVersion: string;
+      readonly table: string;
+      // Table-wide ops have no row.
+      readonly rowKey: null;
+      readonly op: typeof TRUNCATE_OP | typeof RESET_OP;
+    };
 
-export type ChangeLogEntry = v.Infer<typeof changeLogEntrySchema>;
+/**
+ * The {@link ChangeLogEntry} for the columns of a change log row. This does
+ * not validate what zero-cache itself wrote: the columns are
+ * `TEXT NOT NULL`, and `rowKey` is the JSON of an object (see
+ * {@link ChangeLog}).
+ */
+export function parseChangeLogEntry(
+  stateVersion: string,
+  table: string,
+  rowKey: string,
+  op: string,
+): ChangeLogEntry {
+  switch (op) {
+    case SET_OP:
+    case DEL_OP:
+      return {stateVersion, table, rowKey: parseRowKey(rowKey), op};
+    case TRUNCATE_OP:
+    case RESET_OP:
+      return {stateVersion, table, rowKey: null, op};
+    default:
+      throw new Error(`Invalid change log op "${op}" for table "${table}"`);
+  }
+}
+
+function parseRowKey(rowKey: string): Readonly<Record<string, JSONValue>> {
+  const key = parse(rowKey);
+  assert(
+    typeof key === 'object' && key !== null && !Array.isArray(key),
+    () => `Invalid change log rowKey ${rowKey}`,
+  );
+  return key as Readonly<Record<string, JSONValue>>;
+}
 
 const rawChangeLogEntrySchema = v.object({
   stateVersion: v.string(),

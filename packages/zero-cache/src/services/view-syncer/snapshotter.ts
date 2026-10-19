@@ -2,7 +2,6 @@ import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {stringify, type JSONValue} from '../../../../shared/src/bigint-json.ts';
 import {getOrInsertComputed} from '../../../../shared/src/map.ts';
-import * as v from '../../../../shared/src/valita.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../../zero-types/src/schema.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
@@ -21,7 +20,7 @@ import type {AppID} from '../../types/shards.ts';
 import {id} from '../../types/sql.ts';
 import {
   RESET_OP,
-  changeLogEntrySchema as schema,
+  parseChangeLogEntry,
   SET_OP,
   TRUNCATE_OP,
 } from '../replicator/schema/change-log.ts';
@@ -798,7 +797,7 @@ class Snapshot {
    */
   changesSince(prevVersion: string, tables?: string | undefined) {
     // Note: The queried fields are constrained to only those that are relevant
-    // to the snapshot diff, i.e. those defined in the changeLogEntrySchema.
+    // to the snapshot diff, i.e. those of a ChangeLogEntry.
     const cached = this.db.statementCache.get(
       tables === undefined
         ? `SELECT "stateVersion", "table", "rowKey", "op" FROM "_zero.changeLog2"
@@ -1141,14 +1140,8 @@ class Diff implements SnapshotDiff {
 
             this.changesScanned++;
             const parseStart = performance.now();
-            const {table, rowKey, op, stateVersion} = v.parse(
-              {
-                stateVersion: value[0],
-                table: value[1],
-                rowKey: value[2],
-                op: value[3],
-              },
-              schema,
+            const {table, rowKey, op, stateVersion} = parseChangeLogEntry(
+              ...value,
             );
             this.stats.parseMs += performance.now() - parseStart;
             this.changesScannedByTable.set(
