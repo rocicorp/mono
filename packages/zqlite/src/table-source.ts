@@ -1,7 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import SQLite3Database from '@rocicorp/zero-sqlite3';
 import type {LogConfig} from '../../otel/src/log-options.ts';
-import {timeSampled} from '../../otel/src/maybe-time.ts';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
 import {getOrInsertComputed} from '../../shared/src/map.ts';
 import {must} from '../../shared/src/must.ts';
@@ -44,7 +43,7 @@ import {
 } from '../../zql/src/ivm/source.ts';
 import type {Stream} from '../../zql/src/ivm/stream.ts';
 import {assertOrderingIncludesPK} from '../../zql/src/query/complete-ordering.ts';
-import type {Database, Statement} from './db.ts';
+import type {BatchCursor, Database, Statement} from './db.ts';
 import {FetchSQLCache, type FetchSQL} from './fetch-sql.ts';
 import {recordIndexUsage} from './index-usage.ts';
 import {compile, format, sql} from './internal/sql.ts';
@@ -65,6 +64,13 @@ type Statements = {
 };
 
 let eventCount = 0;
+
+// A fetch reads its rows in batches that start at one row and double up to the
+// maximum. Take, Cap and EXISTS often stop after a row or two, and the rows a
+// batch reads ahead are work SQLite does for nothing; doubling keeps them
+// fewer than the rows consumed.
+const FIRST_BATCH_ROWS = 1;
+const MAX_BATCH_ROWS = 128;
 
 export type TableSourceOptions = {
   /**
@@ -468,24 +474,18 @@ export class TableSource implements Source {
     const {cache} = this.#stmts;
     for (const sqlAndBindings of queries) {
       const cachedStatement = cache.get(sqlAndBindings.text);
-      // Raw rows skip building a row object per row in the native binding,
-      // which fromSQLiteTypes would only copy into another object.
-      cachedStatement.statement.safeIntegers(true).raw(true);
-      const columns = this.#rawColumnsFor(cachedStatement.statement);
-      const rowIterator = cachedStatement.statement.iterate<SQLiteValue[]>(
-        ...sqlAndBindings.values,
-      );
+      const cursor = cachedStatement.statement.batches(sqlAndBindings.values);
       try {
         debug?.initQuery(this.#table, sqlAndBindings.text);
-        yield* this.#mapFromSQLiteTypes(
-          columns,
-          rowIterator,
+        yield* this.#readRows(
+          cursor,
+          this.#rawColumnsFor(cachedStatement.statement),
           sqlAndBindings.text,
           debug,
         );
       } finally {
-        // Ensure the SQLite iterate() is closed.
-        rowIterator.return?.();
+        // Ensure the SQLite cursor is closed.
+        cursor.close();
         recordIndexUsage(cachedStatement.statement, this.#table);
         if (debug) {
           let totalNvisit = 0;
@@ -564,31 +564,45 @@ export class TableSource implements Source {
     );
   }
 
-  *#mapFromSQLiteTypes(
+  *#readRows(
+    cursor: BatchCursor,
     columns: readonly RawColumn[],
-    rowIterator: IterableIterator<readonly SQLiteValue[]>,
     query: string,
     debug: DebugDelegate | undefined,
   ): IterableIterator<Row> {
-    let result;
-    do {
-      result = timeSampled(
-        this.#lc,
-        ++eventCount,
-        this.#logConfig.ivmSampling,
-        () => rowIterator.next(),
-        this.#logConfig.slowRowThreshold,
-        () =>
-          `table-source.next took too long for ${query}. Are you missing an index?`,
-      );
-      if (result.done) {
-        break;
+    for (let capacity = FIRST_BATCH_ROWS; ;) {
+      const {ivmSampling, slowRowThreshold} = this.#logConfig;
+      const sampled = ivmSampling > 0 && ++eventCount % ivmSampling === 0;
+      const start = sampled ? performance.now() : 0;
+      const values = cursor.next(capacity);
+      const n = values.length / columns.length;
+      if (sampled) {
+        const duration = performance.now() - start;
+        // slowRowThreshold is per row: scale it by the rows actually read.
+        if (duration > slowRowThreshold * Math.max(n, 1)) {
+          this.#lc.warn?.(
+            `table-source.next took too long for ${query}. Are you missing an index? duration: ${duration}ms`,
+          );
+        }
       }
-      this.#rowsRead++;
-      const row = fromSQLiteRawRow(columns, result.value, this.#table);
-      debug?.rowVended(this.#table, query, row);
-      yield row;
-    } while (!result.done);
+      if (n === 0) {
+        return;
+      }
+      // Rows are converted only when they are consumed, so rows read ahead
+      // and never used cost no conversion and cannot fail the fetch.
+      for (let r = 0; r < n; r++) {
+        const row = fromSQLiteRawRow(
+          columns,
+          values,
+          this.#table,
+          r * columns.length,
+        );
+        this.#rowsRead++;
+        debug?.rowVended(this.#table, query, row);
+        yield row;
+      }
+      capacity = Math.min(capacity * 2, MAX_BATCH_ROWS);
+    }
   }
 
   *push(change: SourceChange): Stream<'yield'> {
@@ -1098,16 +1112,20 @@ function invalidColumnError(
   );
 }
 
-/** Like {@link fromSQLiteTypes}, for a row read with `raw(true)`. */
+/**
+ * Like {@link fromSQLiteTypes}, for a row read with `raw(true)`: the row's
+ * values are `values[offset]` up to `values[offset + columns.length - 1]`.
+ */
 export function fromSQLiteRawRow(
   columns: readonly RawColumn[],
   values: readonly SQLiteValue[],
   tableName: string,
+  offset = 0,
 ): Row {
   const newRow: Writable<Row> = {};
   for (let i = 0; i < columns.length; i++) {
     const {name, type} = columns[i];
-    const value = fromSQLiteType(type, values[i], name, tableName);
+    const value = fromSQLiteType(type, values[offset + i], name, tableName);
     if (name === '__proto__') {
       // An own property, not the legacy setter.
       assignProperty<string, Value>(newRow, name, value);
