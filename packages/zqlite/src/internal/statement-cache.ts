@@ -107,7 +107,16 @@ export class StatementCache {
    * @returns
    */
   get(sql: string): CachedStatement {
-    sql = normalizeWhitespace(sql);
+    return this.getExact(normalizeWhitespace(sql));
+  }
+
+  /**
+   * Like {@link get}, but keys the statement by `sql` exactly as given,
+   * without normalizing its whitespace. This is for callers that pass the
+   * same text for a statement every time, such as the SQL of a fetch shape,
+   * which then skip the normalization on every call.
+   */
+  getExact(sql: string): CachedStatement {
     const statements = this.#cache.get(sql);
     if (statements && statements.length > 0) {
       const statement = statements.pop()!;

@@ -473,7 +473,9 @@ export class TableSource implements Source {
   ): Generator<Row, void, undefined> {
     const {cache} = this.#stmts;
     for (const sqlAndBindings of queries) {
-      const cachedStatement = cache.get(sqlAndBindings.text);
+      // The text of a fetch shape is the same string every time, so it needs
+      // no normalizing.
+      const cachedStatement = cache.getExact(sqlAndBindings.text);
       const cursor = cachedStatement.statement.batches(sqlAndBindings.values);
       try {
         debug?.initQuery(this.#table, sqlAndBindings.text);
