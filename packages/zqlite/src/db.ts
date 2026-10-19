@@ -2,6 +2,7 @@ import {trace, type Attributes} from '@opentelemetry/api';
 import type {LogContext} from '@rocicorp/logger';
 import SQLite3Database, {
   SqliteError,
+  type ColumnDefinition,
   type RunResult,
   type Statement as SQLite3Statement,
 } from '@rocicorp/zero-sqlite3';
@@ -202,6 +203,9 @@ export class Statement {
   readonly #lc: LogContext;
   readonly #threshold: number;
   readonly #attrs: Attributes;
+  // Mirrors the native statement's mode, so that setting the mode it is
+  // already in, as callers sharing a cached statement do, stays in JS.
+  #mode: 'object' | 'raw' | 'pluck' = 'object';
   readonly scanStatus: SQLite3Statement['scanStatusV2'];
   readonly scanStatusReset: SQLite3Statement['scanStatusReset'];
 
@@ -222,6 +226,35 @@ export class Statement {
   safeIntegers(useBigInt: boolean): this {
     this.#stmt.safeIntegers(useBigInt);
     return this;
+  }
+
+  /**
+   * Return rows as arrays of column values instead of objects. Turning it
+   * off has no effect in pluck mode, as in better-sqlite3.
+   */
+  raw(enabled: boolean): this {
+    if (enabled ? this.#mode !== 'raw' : this.#mode === 'raw') {
+      this.#stmt.raw(enabled);
+      this.#mode = enabled ? 'raw' : 'object';
+    }
+    return this;
+  }
+
+  /**
+   * Return the first column of each row instead of the row. Turning it off
+   * has no effect in raw mode, as in better-sqlite3.
+   */
+  pluck(enabled: boolean): this {
+    if (enabled ? this.#mode !== 'pluck' : this.#mode === 'pluck') {
+      this.#stmt.pluck(enabled);
+      this.#mode = enabled ? 'pluck' : 'object';
+    }
+    return this;
+  }
+
+  /** The result columns, in the order of the values in a raw row. */
+  columns(): ColumnDefinition[] {
+    return this.#stmt.columns();
   }
 
   run(...params: unknown[]): RunResult {

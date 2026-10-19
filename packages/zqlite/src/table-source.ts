@@ -5,6 +5,7 @@ import {timeSampled} from '../../otel/src/maybe-time.ts';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
 import {getOrInsertComputed} from '../../shared/src/map.ts';
 import {must} from '../../shared/src/must.ts';
+import {assignProperty} from '../../shared/src/objects.ts';
 import type {Writable} from '../../shared/src/writable.ts';
 import type {Condition, Ordering} from '../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../zero-protocol/src/data.ts';
@@ -1042,12 +1043,61 @@ export function fromSQLiteTypes(
   for (const key of Object.keys(row)) {
     const valueType = valueTypes[key];
     if (valueType === undefined) {
-      const columnList = Object.keys(valueTypes).sort().join(', ');
-      throw new Error(
-        `Invalid column "${key}" for table "${tableName}". Synced columns include ${columnList}`,
-      );
+      throw invalidColumnError(valueTypes, key, tableName);
     }
     newRow[key] = fromSQLiteType(valueType.type, row[key], key, tableName);
+  }
+  return newRow;
+}
+
+/** A result column of a raw row and the type it converts to. */
+export type RawColumn = {
+  readonly name: string;
+  readonly type: ValueType;
+};
+
+export function rawColumn(
+  valueTypes: Record<string, SchemaValue>,
+  name: string,
+  tableName: string,
+): RawColumn {
+  // Not a column that `valueTypes` merely inherits, e.g. `toString`.
+  const valueType = Object.hasOwn(valueTypes, name)
+    ? valueTypes[name]
+    : undefined;
+  if (valueType === undefined) {
+    throw invalidColumnError(valueTypes, name, tableName);
+  }
+  return {name, type: valueType.type};
+}
+
+function invalidColumnError(
+  valueTypes: Record<string, SchemaValue>,
+  name: string,
+  tableName: string,
+): Error {
+  const columnList = Object.keys(valueTypes).sort().join(', ');
+  return new Error(
+    `Invalid column "${name}" for table "${tableName}". Synced columns include ${columnList}`,
+  );
+}
+
+/** Like {@link fromSQLiteTypes}, for a row read with `raw(true)`. */
+export function fromSQLiteRawRow(
+  columns: readonly RawColumn[],
+  values: readonly SQLiteValue[],
+  tableName: string,
+): Row {
+  const newRow: Writable<Row> = {};
+  for (let i = 0; i < columns.length; i++) {
+    const {name, type} = columns[i];
+    const value = fromSQLiteType(type, values[i], name, tableName);
+    if (name === '__proto__') {
+      // An own property, not the legacy setter.
+      assignProperty<string, Value>(newRow, name, value);
+    } else {
+      newRow[name] = value;
+    }
   }
   return newRow;
 }
