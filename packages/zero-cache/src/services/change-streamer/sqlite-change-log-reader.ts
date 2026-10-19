@@ -3,10 +3,7 @@ import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {Database, type Statement} from '../../../../zqlite/src/db.ts';
 import {CHANGE_LOG_STREAM_TABLE} from '../replicator/change-log-db.ts';
-import {
-  reconstructWatermarkedChange,
-  type ChangeLogEntry,
-} from './change-log-codec.ts';
+import {reconstructWatermarkedChange} from './change-log-codec.ts';
 import type {WatermarkedChange} from './change-streamer.ts';
 
 export type CatchupPlan =
@@ -33,9 +30,13 @@ type PlanRow = {
   readonly boundaryExists: number;
 };
 
-type ChangeLogRow = ChangeLogEntry & {
-  readonly pos: number;
-};
+/** A row of {@link SQLITE_CHANGE_LOG_READ_BATCH_SQL}, read with `raw(true)`. */
+type RawChangeLogRow = readonly [
+  watermark: string,
+  pos: number,
+  tag: string,
+  change: string,
+];
 
 type PreparedStatements = {
   readonly plan: Statement;
@@ -182,7 +183,7 @@ export class SQLiteChangeLogReader implements Disposable {
       if (remainingRows === 0) {
         break;
       }
-      const rows = statements.readBatch.all<ChangeLogRow>(
+      const rows = statements.readBatch.all<RawChangeLogRow>(
         lastWatermark,
         lastPos,
         throughWatermark,
@@ -194,12 +195,12 @@ export class SQLiteChangeLogReader implements Disposable {
         break;
       }
 
-      const changes = rows.map(reconstructWatermarkedChange);
+      const changes = rows.map(([watermark, , tag, change]) =>
+        reconstructWatermarkedChange(watermark, tag, change),
+      );
       const last = rows.at(-1);
       assert(last !== undefined, 'non-empty batch must have a final row');
-      lastWatermark = last.watermark;
-      lastPos = last.pos;
-      lastTag = last.tag;
+      [lastWatermark, lastPos, lastTag] = last;
       rowsRead += rows.length;
 
       // all() has exhausted the SELECT and closed its implicit read
@@ -250,7 +251,7 @@ export class SQLiteChangeLogReader implements Disposable {
     if (this.#statements === undefined && this.#streamTableExists()) {
       this.#statements = {
         plan: this.#db.prepare(SQLITE_CHANGE_LOG_PLAN_SQL),
-        readBatch: this.#db.prepare(SQLITE_CHANGE_LOG_READ_BATCH_SQL),
+        readBatch: this.#db.prepare(SQLITE_CHANGE_LOG_READ_BATCH_SQL).raw(true),
       };
     }
     return this.#statements;
