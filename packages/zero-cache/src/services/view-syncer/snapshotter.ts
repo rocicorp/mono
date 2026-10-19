@@ -390,6 +390,14 @@ export type Change = {
 };
 
 /** See `Snapshot.countChangesSince()`. */
+/** An entry of {@link Snapshot.changesSince}, in the order of its SELECT. */
+type RawChangeLogEntry = readonly [
+  stateVersion: string,
+  table: string,
+  rowKey: string,
+  op: string,
+];
+
 /** Where an entry is in the order that the change log is read in. */
 type ChangeLogPosition = {
   readonly stateVersion: string;
@@ -799,11 +807,13 @@ class Snapshot {
          WHERE "stateVersion" > ? AND ${CHANGE_LOG_TABLES_FILTER}
          ORDER BY "stateVersion" ASC, "pos" ASC`,
     );
+    // Raw rows skip building a row object per entry. See RawChangeLogEntry.
+    cached.statement.raw(true);
     return {
       changes:
         tables === undefined
-          ? cached.statement.iterate(prevVersion)
-          : cached.statement.iterate(
+          ? cached.statement.iterate<RawChangeLogEntry>(prevVersion)
+          : cached.statement.iterate<RawChangeLogEntry>(
               prevVersion,
               RESET_OP,
               TRUNCATE_OP,
@@ -1131,7 +1141,15 @@ class Diff implements SnapshotDiff {
 
             this.changesScanned++;
             const parseStart = performance.now();
-            const {table, rowKey, op, stateVersion} = v.parse(value, schema);
+            const {table, rowKey, op, stateVersion} = v.parse(
+              {
+                stateVersion: value[0],
+                table: value[1],
+                rowKey: value[2],
+                op: value[3],
+              },
+              schema,
+            );
             this.stats.parseMs += performance.now() - parseStart;
             this.changesScannedByTable.set(
               table,
