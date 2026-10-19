@@ -1,7 +1,8 @@
 import {LogContext} from '@rocicorp/logger';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {assert, assertNotUndefined} from '../../../shared/src/asserts.ts';
-import {chunkRefCountKey} from '../dag/key.ts';
+import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
+import {chunkRefCountKey, headKey} from '../dag/key.ts';
 import {StoreImpl, WriteImpl} from '../dag/store-impl.ts';
 import type {Store} from '../dag/store.ts';
 import {TestStore} from '../dag/test-store.ts';
@@ -17,6 +18,7 @@ import {IDBStore} from '../kv/idb-store.ts';
 import {dropMemStore, hasMemStore, MemStore} from '../kv/mem-store.ts';
 import type {CreateStore} from '../kv/store.ts';
 import {TestMemStore} from '../kv/test-mem-store.ts';
+import {StorageFailureError} from '../storage-failure.ts';
 import type {ClientGroupID, ClientID} from '../sync/ids.ts';
 import {
   withRead,
@@ -25,7 +27,11 @@ import {
 } from '../with-transactions.ts';
 import {type ClientGroupMap, setClientGroups} from './client-groups.ts';
 import {makeClientMap, setClientsForTesting} from './clients-test-helpers.ts';
-import type {ClientMap, OnClientsDeleted} from './clients.ts';
+import {
+  CLIENTS_HEAD_NAME,
+  type ClientMap,
+  type OnClientsDeleted,
+} from './clients.ts';
 import {
   collectIDBDatabases,
   dropAllDatabases,
@@ -1080,4 +1086,145 @@ test('a corrupt database found during collection is skipped and does not break c
     await withRead(healthyDagStore, read => getDeletedClients(read)),
   ).toEqual([{clientGroupID: 'make-client-group-id', clientID: 'staleClient'}]);
   await healthyDagStore.close();
+});
+
+test('an unreadable database found during collection is skipped and does not break collecting the others', async () => {
+  // Its own stores, registry included, so nothing is shared with the other
+  // tests' databases.
+  const prefix = 'unreadable-test-';
+  const kvStoreProvider = {
+    create: (name: string) => new MemStore(prefix + name),
+    drop: (name: string) => dropMemStore(prefix + name),
+  };
+  const store = new IDBDatabasesStore(kvStoreProvider.create);
+
+  const makeDb = (name: string): IndexedDBDatabase => ({
+    name,
+    replicacheName: 'app',
+    replicacheFormatVersion: FormatVersion.Latest,
+    schemaVersion: '1',
+  });
+  await store.putDatabaseForTesting(makeDb('healthy'));
+  await store.putDatabaseForTesting(makeDb('unreadable'));
+  await store.putDatabaseForTesting(makeDb('stale'));
+
+  const now = 10_000;
+  const maxAge = 1_000;
+  // healthy has an actively heartbeating client, so it is kept; stale has
+  // none, so it is collected and its client becomes a deleted client written
+  // into the survivors.
+  for (const [name, clientID, hashSuffix, heartbeatTimestampMs] of [
+    ['healthy', 'healthyClient', 'h1', now],
+    ['stale', 'staleClient', 's1', 0],
+  ] as const) {
+    const dagStore = new StoreImpl(
+      kvStoreProvider.create(name),
+      newRandomHash,
+      assertHash,
+    );
+    await setClientsForTesting(
+      makeClientMap({
+        [clientID]: {headHash: fakeHash(hashSuffix), heartbeatTimestampMs},
+      }),
+      dagStore,
+    );
+    await dagStore.close();
+  }
+
+  // The unreadable database's clients head points at a chunk the store does
+  // not have, so reading its clients fails.
+  const unreadableDagStore = new StoreImpl(
+    kvStoreProvider.create('unreadable'),
+    newRandomHash,
+    assertHash,
+  );
+  await withWriteNoImplicitCommit(unreadableDagStore, async dagWrite => {
+    assert(dagWrite instanceof WriteImpl, 'Expected WriteImpl');
+    await dagWrite.kvWrite.put(headKey(CLIENTS_HEAD_NAME), fakeHash('9'));
+    await dagWrite.commit();
+  });
+  await unreadableDagStore.close();
+
+  const newDagStore = (name: string, kvCreateStore: CreateStore): Store =>
+    new StoreImpl(kvCreateStore(name), newRandomHash, assertHash);
+  const onClientsDeleted = vi.fn<OnClientsDeleted>();
+  const sink = new TestLogSink();
+
+  await collectIDBDatabases(
+    store,
+    now,
+    maxAge,
+    kvStoreProvider,
+    true,
+    onClientsDeleted,
+    newDagStore,
+    new LogContext('debug', {}, sink),
+  );
+
+  // The unreadable database is left alone (neither dropped nor updated), but
+  // collecting the others was not aborted by it.
+  expect(hasMemStore(prefix + 'unreadable')).toBe(true);
+  expect(hasMemStore(prefix + 'stale')).toBe(false);
+  expect(Object.keys(await store.getDatabases()).sort()).toEqual([
+    'healthy',
+    'unreadable',
+  ]);
+  expect(onClientsDeleted).toHaveBeenCalledExactlyOnceWith([
+    {clientGroupID: 'make-client-group-id', clientID: 'staleClient'},
+  ]);
+  const healthyDagStore = new StoreImpl(
+    kvStoreProvider.create('healthy'),
+    newRandomHash,
+    assertHash,
+  );
+  expect(
+    await withRead(healthyDagStore, read => getDeletedClients(read)),
+  ).toEqual([{clientGroupID: 'make-client-group-id', clientID: 'staleClient'}]);
+  await healthyDagStore.close();
+
+  // It is reported by name, at warn.
+  expect(sink.messages).toEqual([
+    [
+      'warn',
+      {},
+      [
+        'Skipping database unreadable in collection: it could not be read.',
+        expect.any(Error),
+      ],
+    ],
+  ]);
+});
+
+test('a storage failure while gathering a database still fails the collection run', async () => {
+  const store = new IDBDatabasesStore(_ => new TestMemStore());
+  await store.putDatabaseForTesting({
+    name: 'db',
+    replicacheName: 'app',
+    replicacheFormatVersion: FormatVersion.Latest,
+    schemaVersion: '1',
+  });
+
+  // The storage failed, not the database's contents: that reaches the caller,
+  // which stops the process and reports it, rather than being skipped.
+  const failure = new StorageFailureError('io-error', 'disk I/O error');
+  const newDagStore = (): Store => ({
+    read: () => Promise.reject(failure),
+    write: () => Promise.reject(failure),
+    close: () => Promise.resolve(),
+  });
+  const sink = new TestLogSink();
+
+  await expect(
+    collectIDBDatabases(
+      store,
+      10_000,
+      1_000,
+      {create: _ => new TestMemStore(), drop: () => Promise.resolve()},
+      true,
+      vi.fn<OnClientsDeleted>(),
+      newDagStore,
+      new LogContext('debug', {}, sink),
+    ),
+  ).rejects.toBe(failure);
+  expect(sink.messages).toEqual([]);
 });
