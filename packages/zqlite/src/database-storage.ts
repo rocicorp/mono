@@ -79,10 +79,14 @@ export class DatabaseStorage {
 
   constructor(db: Database, options = defaultOptions) {
     this.#stmts = {
-      get: db.prepare(`
+      get: db
+        .prepare(
+          `
         SELECT val FROM storage WHERE
           clientGroupID = ? AND op = ? AND key = ?
-      `),
+      `,
+        )
+        .pluck(true),
       set: db.prepare(`
         INSERT INTO storage (clientGroupID, op, key, val)
           VALUES(?, ?, ?, ?)
@@ -94,10 +98,14 @@ export class DatabaseStorage {
         DELETE FROM storage WHERE
           clientGroupID = ? AND op = ? AND key = ?
       `),
-      scan: db.prepare(`
+      scan: db
+        .prepare(
+          `
         SELECT key, val FROM storage WHERE
           clientGroupID = ? AND op = ? AND key >= ?
-      `),
+      `,
+        )
+        .raw(true),
       clear: db.prepare(`
         DELETE FROM storage WHERE clientGroupID = ?
       `),
@@ -119,8 +127,8 @@ export class DatabaseStorage {
 
   #get(cgID: string, opID: number, key: string): JSONValue | undefined {
     this.#maybeCheckpoint();
-    const row = this.#stmts.get.get<{val: string}>(cgID, opID, key);
-    return row ? JSON.parse(row.val) : undefined;
+    const val = this.#stmts.get.get<string | undefined>(cgID, opID, key);
+    return val === undefined ? undefined : JSON.parse(val);
   }
 
   #set(cgID: string, opID: number, key: string, val: JSONValue) {
@@ -162,10 +170,11 @@ export class DatabaseStorage {
     opts: {prefix: string} = {prefix: ''},
   ): Stream<[string, JSONValue]> {
     const {prefix} = opts;
-    for (const {key, val} of this.#stmts.scan.iterate<{
-      key: string;
-      val: string;
-    }>(cgID, opID, prefix)) {
+    for (const [key, val] of this.#stmts.scan.iterate<[string, string]>(
+      cgID,
+      opID,
+      prefix,
+    )) {
       if (!key.startsWith(prefix)) {
         return;
       }
