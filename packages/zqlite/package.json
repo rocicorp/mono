@@ -22,7 +22,7 @@
   "dependencies": {
     "@databases/escape-identifier": "^1.0.3",
     "@databases/sql": "^3.3.0",
-    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/api": "^1.9.1",
     "@rocicorp/logger": "^6.1.0",
     "@rocicorp/zero-sqlite3": "^1.1.5",
     "zql": "workspace:*"
@@ -30,7 +30,7 @@
   "devDependencies": {
     "@rocicorp/logger": "^6.1.0",
     "fast-check": "^3.18.0",
-    "nanoid": "^5.1.2",
+    "nanoid": "^5.1.16",
     "otel": "workspace:*",
     "oxfmt": "^0.65.0",
     "shared": "workspace:*",

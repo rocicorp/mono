@@ -30,11 +30,11 @@
     "@rocicorp/resolver": "^1.0.2"
   },
   "devDependencies": {
-    "@faker-js/faker": "^9.6.0",
+    "@faker-js/faker": "^10.6.0",
     "@standard-schema/spec": "^1.0.0",
     "ast-to-zql": "workspace:*",
     "datadog": "workspace:*",
-    "esbuild": "0.27.7",
+    "esbuild": "0.28.2",
     "fast-check": "^3.18.0",
     "oxfmt": "^0.65.0",
     "playwright": "^1.60.0",

@@ -37,7 +37,7 @@
     "semver": "^7.5.4"
   },
   "devDependencies": {
-    "@faker-js/faker": "^9.6.0",
+    "@faker-js/faker": "^10.6.0",
     "@mitata/counters": "^0.0.8",
     "@types/command-line-args": "^5.2.3",
     "@types/command-line-usage": "^5.0.4",
