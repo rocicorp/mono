@@ -25,7 +25,7 @@ permissions:
 jobs:
   checks:
     name: Public Checks
-    if: github.repository == 'rocicorp/mono' || github.repository == 'rocicorp/mono-internal'
+    if: github.repository == 'rocicorp/mono' || github.repository == 'rocicorp/mono-internal' || github.repository == 'wevm/zero'
     # ubuntu-latest has 4 cores on public repos but only 2 on private ones,
     # where timing-sensitive tests flake; mono-internal uses a larger runner.
     runs-on: ${{ github.repository == 'rocicorp/mono-internal' && 'ubuntu-x64-8-core' || 'ubuntu-latest' }}
@@ -77,7 +77,7 @@ jobs:
 
   test:
     name: Public Test
-    if: github.repository == 'rocicorp/mono' || github.repository == 'rocicorp/mono-internal'
+    if: github.repository == 'rocicorp/mono' || github.repository == 'rocicorp/mono-internal' || github.repository == 'wevm/zero'
     # See Public Checks. x64, since this runs WebKit and Firefox too.
     runs-on: ${{ github.repository == 'rocicorp/mono-internal' && 'ubuntu-x64-8-core' || 'ubuntu-latest' }}
     steps:
