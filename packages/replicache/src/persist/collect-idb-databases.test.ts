@@ -31,6 +31,7 @@ import {
   dropAllDatabases,
   dropDatabase,
 } from './collect-idb-databases.ts';
+import {getIDBDatabasesDBName} from './idb-databases-store-db-name.ts';
 import {
   IDBDatabasesStore,
   type IndexedDBDatabase,
@@ -1080,4 +1081,50 @@ test('a corrupt database found during collection is skipped and does not break c
     await withRead(healthyDagStore, read => getDeletedClients(read)),
   ).toEqual([{clientGroupID: 'make-client-group-id', clientID: 'staleClient'}]);
   await healthyDagStore.close();
+});
+
+describe('a malformed registry entry', () => {
+  // Its own stores, registry included, so nothing is shared with the other
+  // tests' databases.
+  const prefix = 'malformed-registry-test-';
+  const kvStore = {
+    create: (name: string) => new MemStore(prefix + name),
+    drop: (name: string) => dropMemStore(prefix + name),
+  };
+  const valid: IndexedDBDatabase = {
+    name: 'valid',
+    replicacheName: 'app',
+    replicacheFormatVersion: FormatVersion.Latest,
+    schemaVersion: '1',
+  };
+
+  beforeEach(async () => {
+    await withWrite(kvStore.create('valid'), w => w.put('foo', 'bar'));
+    await withWrite(kvStore.create(getIDBDatabasesDBName()), w =>
+      w.put('dbs', {valid, bad: {name: 'bad'}}),
+    );
+    return async () => {
+      await kvStore.drop('valid');
+      await kvStore.drop(getIDBDatabasesDBName());
+    };
+  });
+
+  test('does not stop dropDatabase', async () => {
+    await dropDatabase('valid', {kvStore});
+    expect(hasMemStore(prefix + 'valid')).toBe(false);
+    expect(await new IDBDatabasesStore(kvStore.create).getDatabases()).toEqual(
+      {},
+    );
+  });
+
+  test('does not stop dropAllDatabases', async () => {
+    expect(await dropAllDatabases({kvStore})).toEqual({
+      dropped: ['valid'],
+      errors: [],
+    });
+    expect(hasMemStore(prefix + 'valid')).toBe(false);
+    expect(await new IDBDatabasesStore(kvStore.create).getDatabases()).toEqual(
+      {},
+    );
+  });
 });
