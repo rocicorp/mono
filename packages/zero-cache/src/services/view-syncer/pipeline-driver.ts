@@ -65,8 +65,12 @@ import {
   type LoadedPermissions,
 } from '../../auth/load-permissions.ts';
 import type {LogConfig, ZeroConfig} from '../../config/zero-config.ts';
-import {computeZqlSpecs, mustGetTableSpec} from '../../db/lite-tables.ts';
-import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
+import {
+  computeZqlSpecs,
+  mustGetTableSpec,
+  type LiteTableSpecWithReplicationStatus,
+} from '../../db/lite-tables.ts';
+import type {LiteAndZqlSpec} from '../../db/specs.ts';
 import {LogThrottle} from '../../observability/log-throttle.ts';
 import {
   getOrCreateCounter,
@@ -674,7 +678,7 @@ export class PipelineDriver {
 
   #initAndResetCommon(clientSchema: ClientSchema) {
     const {db} = this.#snapshotter.current();
-    const fullTables = new Map<string, LiteTableSpec>();
+    const fullTables = new Map<string, LiteTableSpecWithReplicationStatus>();
     computeZqlSpecs(
       this.#lc,
       db.db,
@@ -682,11 +686,18 @@ export class PipelineDriver {
       this.#tableSpecs,
       fullTables,
     );
+    // Only computed while something is being backfilled, which is rare.
+    const tableSpecsWithBackfills = [...fullTables.values()].some(
+      t => t.backfilling?.length,
+    )
+      ? computeZqlSpecs(this.#lc, db.db, {includeBackfillingColumns: true})
+      : this.#tableSpecs;
     checkClientSchema(
       this.#shardID,
       clientSchema,
       this.#tableSpecs,
       fullTables,
+      tableSpecsWithBackfills,
     );
     this.#allTableNames.clear();
     for (const table of fullTables.keys()) {

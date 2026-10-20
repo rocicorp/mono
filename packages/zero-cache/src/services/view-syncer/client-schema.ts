@@ -6,18 +6,38 @@ import {
   intersection,
 } from '../../../../shared/src/set-utils.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
+import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 import {ProtocolError} from '../../../../zero-protocol/src/error.ts';
-import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
+import type {LiteTableSpecWithReplicationStatus} from '../../db/lite-tables.ts';
+import type {LiteAndZqlSpec} from '../../db/specs.ts';
 import {liteTypeToZqlValueType} from '../../types/lite.ts';
 import {appSchema, upstreamSchema, type ShardID} from '../../types/shards.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/constants.ts';
 
+// Backfills can take minutes, so clients waiting for one retry at a slower
+// pace than for a transient connection error.
+const BACKFILL_MIN_BACKOFF_MS = 5_000;
+const BACKFILL_MAX_BACKOFF_MS = 30_000;
+
+/**
+ * Throws a `SchemaVersionNotSupported` error if the client schema is not
+ * compatible with the replica, or a `ServerOverloaded` error (which clients
+ * retry with backoff) if the only incompatibilities are tables or columns
+ * that are still being backfilled.
+ *
+ * @param tableSpecsWithBackfills the table specs computed with backfilling
+ *     columns included. Permanent incompatibilities are checked against
+ *     these, so that a table or column that will not be syncable after its
+ *     backfill completes is not reported as retriable. Defaults to
+ *     `tableSpecs`, for replicas with nothing being backfilled.
+ */
 export function checkClientSchema(
   shardID: ShardID,
   clientSchema: ClientSchema,
   tableSpecs: Map<string, LiteAndZqlSpec>,
-  fullTables: Map<string, LiteTableSpec>,
+  fullTables: Map<string, LiteTableSpecWithReplicationStatus>,
+  tableSpecsWithBackfills: Map<string, LiteAndZqlSpec> = tableSpecs,
 ) {
   if (fullTables.size === 0) {
     throw new ProtocolError({
@@ -28,6 +48,65 @@ export function checkClientSchema(
       origin: ErrorOrigin.ZeroCache,
     });
   }
+  const errors = findIncompatibilities(
+    shardID,
+    clientSchema,
+    tableSpecsWithBackfills,
+    fullTables,
+  );
+  if (errors.length) {
+    throw new ProtocolError({
+      kind: 'SchemaVersionNotSupported',
+      message: errors.join('\n'),
+      origin: ErrorOrigin.ZeroCache,
+    });
+  }
+  const backfilling = findBackfilling(clientSchema, tableSpecs, fullTables);
+  if (backfilling.length) {
+    throw new ProtocolError({
+      kind: ErrorKind.ServerOverloaded,
+      message: backfilling.join('\n'),
+      minBackoffMs: BACKFILL_MIN_BACKOFF_MS,
+      maxBackoffMs: BACKFILL_MAX_BACKOFF_MS,
+      origin: ErrorOrigin.ZeroCache,
+    });
+  }
+}
+
+function findBackfilling(
+  clientSchema: ClientSchema,
+  tableSpecs: Map<string, LiteAndZqlSpec>,
+  fullTables: Map<string, LiteTableSpecWithReplicationStatus>,
+): string[] {
+  const backfilling: string[] = [];
+  for (const table of toSorted(Object.keys(clientSchema.tables))) {
+    const columns = fullTables.get(table)?.backfilling;
+    if (!columns?.length) {
+      continue;
+    }
+    if (!tableSpecs.has(table)) {
+      backfilling.push(`The "${table}" table is being backfilled.`);
+      continue;
+    }
+    for (const column of toSorted(
+      Object.keys(clientSchema.tables[table].columns),
+    )) {
+      if (columns.includes(column)) {
+        backfilling.push(
+          `The "${table}"."${column}" column is being backfilled.`,
+        );
+      }
+    }
+  }
+  return backfilling;
+}
+
+function findIncompatibilities(
+  shardID: ShardID,
+  clientSchema: ClientSchema,
+  tableSpecs: Map<string, LiteAndZqlSpec>,
+  fullTables: Map<string, LiteTableSpecWithReplicationStatus>,
+): string[] {
   const errors: string[] = [];
   const clientTables = new Set(Object.keys(clientSchema.tables));
   const missingTables = difference(clientTables, tableSpecs);
@@ -131,11 +210,5 @@ export function checkClientSchema(
       }
     }
   }
-  if (errors.length) {
-    throw new ProtocolError({
-      kind: 'SchemaVersionNotSupported',
-      message: errors.join('\n'),
-      origin: ErrorOrigin.ZeroCache,
-    });
-  }
+  return errors;
 }
