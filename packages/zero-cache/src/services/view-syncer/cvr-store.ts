@@ -303,6 +303,9 @@ export class CVRStore {
 
   load(lc: LogContext, lastConnectTime: number): Promise<CVR> {
     const start = performance.now();
+    // Another view-syncer may have written the CVR since the row records
+    // were cached, so reload them along with the CVR.
+    this.#rowCache.clear();
     return startAsyncSpan(tracer, 'cvr.load', async () => {
       try {
         let err: RowsVersionBehindError | undefined;
