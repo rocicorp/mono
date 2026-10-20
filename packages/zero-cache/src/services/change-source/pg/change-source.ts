@@ -1055,27 +1055,6 @@ class ChangeMaker {
     lsn: bigint,
     msg: Message,
   ): Promise<ChangeStreamData[]> {
-    const deferred = this.#deferredSchemaChanges;
-    if (deferred && endsSchemaChangeDeferral(msg)) {
-      // Emit held back schema changes before the data or commit that must
-      // be ordered after them.
-      this.#deferredSchemaChanges = undefined;
-      lc.info?.(`${deferred.changes.length} schema change(s)`, {
-        changes: deferred.changes,
-      });
-      return [
-        ...deferred.changes,
-        ...(await this.#makeChangesImpl(lc, lsn, msg)),
-      ];
-    }
-    return this.#makeChangesImpl(lc, lsn, msg);
-  }
-
-  async #makeChangesImpl(
-    lc: LogContext,
-    lsn: bigint,
-    msg: Message,
-  ): Promise<ChangeStreamData[]> {
     switch (msg.tag) {
       case 'begin':
         return [
@@ -1180,17 +1159,6 @@ class ChangeMaker {
   // of the next one.
   #lastReplicationEvent: ReplicationEvent | undefined;
 
-  // Schema changes of an `ALTER PUBLICATION` that removed tables from the
-  // publication, held back until the next DDL event, data message or commit.
-  // If the next DDL event is another `ALTER PUBLICATION`, the two are diffed
-  // as one, from the schema before the held back event. This turns
-  // `DROP TABLE t` followed by `ADD TABLE t (cols)` into column changes of
-  // `t` (which keeps its ID), rather than a dropped and recreated table that
-  // must be fully backfilled.
-  #deferredSchemaChanges:
-    | {prevSchema: PublishedSchema; changes: Data[]}
-    | undefined;
-
   #handleDdlMessage(
     lc: LogContext,
     lsn: bigint,
@@ -1291,34 +1259,15 @@ class ChangeMaker {
     lc.info?.(`processing ${effectiveTag} command from ${msg.prefix}/${type}`, {
       event: summarizeReplicationEventForLog(event),
     });
-
-    const deferred = this.#deferredSchemaChanges;
-    this.#deferredSchemaChanges = undefined;
-    const isAlterPublication = effectiveTag === 'ALTER PUBLICATION';
-    const preceding = deferred && !isAlterPublication ? deferred.changes : [];
-    const fromSchema =
-      deferred && isAlterPublication ? deferred.prevSchema : prevSchema;
-
     const changes = this.#makeSchemaChanges(
       lc,
-      fromSchema,
+      prevSchema,
       schema,
       event,
       effectiveTag,
     ).map(change => ['data', change] satisfies Data);
-    if (preceding.length) {
-      lc.info?.(`${preceding.length} schema change(s)`, {changes: preceding});
-    }
 
-    if (
-      isAlterPublication &&
-      changes.some(([, change]) => change.tag === 'drop-table')
-    ) {
-      lc.info?.(`deferring ${changes.length} schema change(s)`, {changes});
-      this.#deferredSchemaChanges = {prevSchema: fromSchema, changes};
-    } else {
-      lc.info?.(`${changes.length} schema change(s)`, {changes});
-    }
+    lc.info?.(`${changes.length} schema change(s)`, {changes});
 
     const replicaIdentities =
       replicaIdentitiesForTablesWithoutPrimaryKeys(schema);
@@ -1332,7 +1281,7 @@ class ChangeMaker {
       }, SET_REPLICA_IDENTITY_DELAY_MS);
     }
 
-    return this.#deferredSchemaChanges ? preceding : [...preceding, ...changes];
+    return changes;
   }
 
   /**
@@ -1845,19 +1794,6 @@ function getMetadata(table: PublishedTableWithReplicaIdentity): TableMetadata {
       ]),
     ),
   };
-}
-
-function endsSchemaChangeDeferral(msg: Message): boolean {
-  switch (msg.tag) {
-    case 'insert':
-    case 'update':
-    case 'delete':
-    case 'truncate':
-    case 'commit':
-      return true;
-    default:
-      return false;
-  }
 }
 
 // Avoid sending the `columns` from the Postgres MessageRelation message.
