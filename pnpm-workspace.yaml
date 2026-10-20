@@ -14,6 +14,21 @@ allowBuilds:
   prisma: true
   protobufjs: true
   ssh2: false
+# `pnpm audit` (run in CI by .github/workflows/audit.yml) fails on any advisory
+# not listed here. Only list advisories that have no fixed release to update or
+# override to, and remove them once one ships.
+auditConfig:
+  ignoreGhsas:
+    # braces <=3.0.3, via chokidar/micromatch (Docusaurus, metro, Tailwind 3).
+    # No 3.0.4 on npm yet.
+    - GHSA-vfj7-8cjw-p6xm
+    # node-forge <=1.4.0, via @expo/cli (Expo devDependencies). No 1.4.1 on npm
+    # yet.
+    - GHSA-86w9-cpqp-85rv
+    # sprintf-js 1.0.3, via argparse 1 (js-yaml 3 in Docusaurus,
+    # @tantaman/api-extractor in zql-viz). No 1.1.4 on npm yet.
+    - GHSA-hp3w-g68c-fv3c
+
 minimumReleaseAgeExclude:
   - '@rocicorp/zero-virtual@0.7.0'
   - '@badrap/valita@0.5.5'
