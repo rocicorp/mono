@@ -1,6 +1,6 @@
 import {
   rowAttributes,
-  useZeroVirtualizer,
+  useZeroWindowVirtualizer,
   type RowKey,
   type VirtualRow,
 } from '@rocicorp/zero-virtual/react';
@@ -11,6 +11,7 @@ import React, {
   memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -395,8 +396,23 @@ export function ListPage({onReady}: {onReady: () => void}) {
   }, [listContext, permalinkID, setListContext]);
 
   const listRef = useRef<HTMLDivElement>(null);
-  const tableWrapperRef = useRef<HTMLDivElement>(null);
-  const size = useElementSize(tableWrapperRef);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const headerSize = useElementSize(headerRef);
+
+  // The header is sticky over the window-scrolled list. Its height feeds the
+  // document's scroll-padding-top (see index.css) so rows the virtualizer
+  // scrolls to (permalinks, j/k) don't land under it.
+  const headerHeight = headerSize?.height;
+  useLayoutEffect(() => {
+    if (headerHeight === undefined) {
+      return;
+    }
+    const {style} = document.documentElement;
+    style.setProperty('--list-header-height', `${headerHeight}px`);
+    return () => {
+      style.removeProperty('--list-header-height');
+    };
+  }, [headerHeight]);
 
   // oxlint-disable-next-line no-explicit-any
   (globalThis as any).permalinkNavigate = (id: string | number) => {
@@ -418,7 +434,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     total,
     scrollToItem,
     firstVisibleItem,
-  } = useZeroVirtualizer<typeof listContextParams, Issue, IssueRowSort>({
+  } = useZeroWindowVirtualizer<typeof listContextParams, Issue, IssueRowSort>({
     estimateSize: () => ITEM_SIZE,
     getScrollElement: () => listRef.current,
     getRowKey: row => row.id,
@@ -648,191 +664,189 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   return (
     <>
-      <div className="list-view-header-container">
-        <ToastContainer position="bottom" />
-        <h1
-          className={classNames('list-view-header', {
-            'search-mode': searchMode,
-          })}
-          ref={searchBox}
-        >
-          {searchMode ? (
-            <div className="search-input-container">
-              <input
-                type="text"
-                className="search-input"
-                value={textFilter ?? ''}
-                onChange={e => onTextFilterChange(e.target.value)}
-                onFocus={() => setForceSearchMode(true)}
-                onBlur={() => setForceSearchMode(false)}
-                onKeyUp={handleSearchKeyUp}
-                placeholder="Search…"
-                autoFocus={true}
-              />
-              {textFilter && (
+      <div className="list-view-sticky-header" ref={headerRef}>
+        <div className="list-view-header-container">
+          <ToastContainer position="bottom" />
+          <h1
+            className={classNames('list-view-header', {
+              'search-mode': searchMode,
+            })}
+            ref={searchBox}
+          >
+            {searchMode ? (
+              <div className="search-input-container">
+                <input
+                  type="text"
+                  className="search-input"
+                  value={textFilter ?? ''}
+                  onChange={e => onTextFilterChange(e.target.value)}
+                  onFocus={() => setForceSearchMode(true)}
+                  onBlur={() => setForceSearchMode(false)}
+                  onKeyUp={handleSearchKeyUp}
+                  placeholder="Search…"
+                  autoFocus={true}
+                />
+                {textFilter && (
+                  <Button
+                    className="clear-search"
+                    onAction={() => setTextFilter('')} // Clear the search field
+                    aria-label="Clear search"
+                  >
+                    &times;
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <>
+                <span className="list-view-title list-view-title-full">
+                  {title}
+                </span>
+                <span className="list-view-title list-view-title-short">
+                  {shortTitle}
+                </span>
+              </>
+            )}
+            {complete || total || estimatedTotal ? (
+              <>
+                <span className="issue-count">
+                  {project?.issueCountEstimate
+                    ? `${(total ?? roundEstimatedTotal(estimatedTotal)).toLocaleString()} of ${formatIssueCountEstimate(project.issueCountEstimate)}`
+                    : (total?.toLocaleString() ??
+                      `${roundEstimatedTotal(estimatedTotal).toLocaleString()}+`)}
+                </span>
+                {isGigabugs(projectName) && (
+                  <button
+                    className="info-button"
+                    onMouseDown={() => setShowOnboarding(true)}
+                    aria-label="Show onboarding information"
+                    title="Show onboarding information"
+                  >
+                    <InfoIcon />
+                  </button>
+                )}
+              </>
+            ) : null}
+          </h1>
+          <Button
+            ref={startSearchButton}
+            style={{visibility: project?.supportsSearch ? 'visible' : 'hidden'}}
+            className="search-toggle"
+            eventName="Toggle Search"
+            onAction={toggleSearchMode}
+          ></Button>
+        </div>
+        <div className="list-view-filter-container">
+          {currentUserID !== undefined ? (
+            <Button
+              enabledOffline
+              className={classNames('select-toggle', {active: selectMode})}
+              eventName="Toggle issue selection"
+              onAction={toggleSelectMode}
+              title={selectMode ? 'Done selecting' : 'Select issues'}
+              aria-label={selectMode ? 'Done selecting' : 'Select issues'}
+              aria-pressed={selectMode}
+            ></Button>
+          ) : null}
+          {selectMode ? (
+            <>
+              <span className="bulk-action-count">
+                {selectedIDs.size.toLocaleString()} selected
+              </span>
+              <div className="edit-buttons">
                 <Button
-                  className="clear-search"
-                  onAction={() => setTextFilter('')} // Clear the search field
-                  aria-label="Clear search"
+                  className="delete-button"
+                  eventName="Delete selected issues"
+                  disabled={selectedIDs.size === 0}
+                  onAction={() => setDeleteConfirmationShown(true)}
                 >
-                  &times;
+                  Delete
                 </Button>
-              )}
-            </div>
+                <Button
+                  className="cancel-button"
+                  enabledOffline
+                  eventName="Cancel issue selection"
+                  onAction={exitSelectMode}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </>
           ) : (
             <>
-              <span className="list-view-title list-view-title-full">
-                {title}
-              </span>
-              <span className="list-view-title list-view-title-short">
-                {shortTitle}
-              </span>
+              <span className="filter-icon" aria-hidden="true"></span>
+              <span className="filter-label">Filtered by:</span>
+              <div className="set-filter-container">
+                {Array.from(qs.entries(), ([key, val]) => {
+                  if (
+                    key === 'label' ||
+                    key === 'creator' ||
+                    key === 'assignee'
+                  ) {
+                    return (
+                      <span
+                        className={classNames('pill', {
+                          label: key === 'label',
+                          user: key === 'creator' || key === 'assignee',
+                        })}
+                        onMouseDown={onDeleteFilter}
+                        data-key={key}
+                        data-value={val}
+                        key={key + '-' + val}
+                      >
+                        {key}: {val}
+                      </span>
+                    );
+                  }
+                  return null;
+                })}
+              </div>
+              <Filter projectName={projectName} onSelect={onFilter} />
+              <div className="sort-control-container">
+                <Button
+                  enabledOffline
+                  className="sort-control"
+                  eventName="Toggle sort type"
+                  onAction={toggleSortField}
+                >
+                  {sortField === 'modified' ? 'Modified' : 'Created'}
+                </Button>
+                <Button
+                  enabledOffline
+                  className={classNames('sort-direction', sortDirection)}
+                  eventName="Toggle sort direction"
+                  onAction={toggleSortDirection}
+                ></Button>
+              </div>
             </>
           )}
-          {complete || total || estimatedTotal ? (
-            <>
-              <span className="issue-count">
-                {project?.issueCountEstimate
-                  ? `${(total ?? roundEstimatedTotal(estimatedTotal)).toLocaleString()} of ${formatIssueCountEstimate(project.issueCountEstimate)}`
-                  : (total?.toLocaleString() ??
-                    `${roundEstimatedTotal(estimatedTotal).toLocaleString()}+`)}
-              </span>
-              {isGigabugs(projectName) && (
-                <button
-                  className="info-button"
-                  onMouseDown={() => setShowOnboarding(true)}
-                  aria-label="Show onboarding information"
-                  title="Show onboarding information"
-                >
-                  <InfoIcon />
-                </button>
-              )}
-            </>
-          ) : null}
-        </h1>
-        <Button
-          ref={startSearchButton}
-          style={{visibility: project?.supportsSearch ? 'visible' : 'hidden'}}
-          className="search-toggle"
-          eventName="Toggle Search"
-          onAction={toggleSearchMode}
-        ></Button>
-      </div>
-      <div className="list-view-filter-container">
-        {currentUserID !== undefined ? (
-          <Button
-            enabledOffline
-            className={classNames('select-toggle', {active: selectMode})}
-            eventName="Toggle issue selection"
-            onAction={toggleSelectMode}
-            title={selectMode ? 'Done selecting' : 'Select issues'}
-            aria-label={selectMode ? 'Done selecting' : 'Select issues'}
-            aria-pressed={selectMode}
-          ></Button>
-        ) : null}
-        {selectMode ? (
-          <>
-            <span className="bulk-action-count">
-              {selectedIDs.size.toLocaleString()} selected
-            </span>
-            <div className="edit-buttons">
-              <Button
-                className="delete-button"
-                eventName="Delete selected issues"
-                disabled={selectedIDs.size === 0}
-                onAction={() => setDeleteConfirmationShown(true)}
-              >
-                Delete
-              </Button>
-              <Button
-                className="cancel-button"
-                enabledOffline
-                eventName="Cancel issue selection"
-                onAction={exitSelectMode}
-              >
-                Cancel
-              </Button>
-            </div>
-          </>
-        ) : (
-          <>
-            <span className="filter-icon" aria-hidden="true"></span>
-            <span className="filter-label">Filtered by:</span>
-            <div className="set-filter-container">
-              {Array.from(qs.entries(), ([key, val]) => {
-                if (
-                  key === 'label' ||
-                  key === 'creator' ||
-                  key === 'assignee'
-                ) {
-                  return (
-                    <span
-                      className={classNames('pill', {
-                        label: key === 'label',
-                        user: key === 'creator' || key === 'assignee',
-                      })}
-                      onMouseDown={onDeleteFilter}
-                      data-key={key}
-                      data-value={val}
-                      key={key + '-' + val}
-                    >
-                      {key}: {val}
-                    </span>
-                  );
-                }
-                return null;
-              })}
-            </div>
-            <Filter projectName={projectName} onSelect={onFilter} />
-            <div className="sort-control-container">
-              <Button
-                enabledOffline
-                className="sort-control"
-                eventName="Toggle sort type"
-                onAction={toggleSortField}
-              >
-                {sortField === 'modified' ? 'Modified' : 'Created'}
-              </Button>
-              <Button
-                enabledOffline
-                className={classNames('sort-direction', sortDirection)}
-                eventName="Toggle sort direction"
-                onAction={toggleSortDirection}
-              ></Button>
-            </div>
-          </>
-        )}
+        </div>
       </div>
 
-      <div className="issue-list" ref={tableWrapperRef}>
-        {size && !rowsEmpty ? (
-          <div
-            style={{
-              width: size.width,
-              height: size.height,
-              overflow: 'auto',
-            }}
-            ref={listRef}
-          >
-            <div style={{paddingTop: spaceBefore, paddingBottom: spaceAfter}}>
-              {items.map(item => (
-                <Row
-                  key={item.key}
-                  item={item}
-                  sortField={sortField}
-                  permalinkID={permalinkID}
-                  projectName={projectName}
-                  listContext={listContext}
-                  isLoggedIn={login.loginState !== undefined}
-                  selectMode={selectMode}
-                  currentUserID={currentUserID}
-                  canDeleteAny={canDeleteAny}
-                  selected={selectedIDs.has(item.row?.id ?? '')}
-                  onToggleSelected={onToggleSelected}
-                />
-              ))}
-            </div>
-          </div>
+      {/* spaceBefore/spaceAfter render as spacer elements, NOT padding on the
+          container: native scroll anchoring does not compensate a padding
+          change on the anchor's ancestor, so paging would jump the viewport. */}
+      <div className="issue-list" ref={listRef}>
+        {!rowsEmpty ? (
+          <>
+            <div style={{height: spaceBefore}} />
+            {items.map(item => (
+              <Row
+                key={item.key}
+                item={item}
+                sortField={sortField}
+                permalinkID={permalinkID}
+                projectName={projectName}
+                listContext={listContext}
+                isLoggedIn={login.loginState !== undefined}
+                selectMode={selectMode}
+                currentUserID={currentUserID}
+                canDeleteAny={canDeleteAny}
+                selected={selectedIDs.has(item.row?.id ?? '')}
+                onToggleSelected={onToggleSelected}
+              />
+            ))}
+            <div style={{height: spaceAfter}} />
+          </>
         ) : null}
       </div>
       <OnboardingModal
