@@ -79,8 +79,8 @@ importers:
         specifier: ^2.11.29
         version: 2.11.29
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       oxlint:
         specifier: ^1.80.0
         version: 1.80.0(oxlint-tsgolint@7.0.2001)
@@ -118,8 +118,8 @@ importers:
         specifier: ^5.0.0
         version: 5.0.0(@vitest/browser@5.0.0)(vitest@5.0.0)
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       typescript:
         specifier: ~7.0.2
         version: 7.0.2
@@ -278,8 +278,8 @@ importers:
         specifier: ^0.45.2
         version: 0.45.2(@electric-sql/pglite@0.4.1)(@op-engineering/op-sqlite@18.2.5(react-native@0.88.0(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.1))(react@19.3.1))(@opentelemetry/api@1.9.1)(@prisma/client@7.8.0(prisma@7.8.0(@types/node@22.19.19)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(magicast@0.5.4)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2))(typescript@7.0.2))(@types/pg@8.20.0)(expo-sqlite@58.0.13(expo@58.0.14)(react-native@0.88.0(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.1))(react@19.3.1))(kysely@0.28.17)(mysql2@3.24.6(@types/node@22.19.19))(pg@8.20.0)(postgres@3.4.7(patch_hash=1ab70f82038a98cb34611424c35af68a1d87aa3bd8ed78a7f863c628ae3aeac7))(prisma@7.8.0(@types/node@22.19.19)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(magicast@0.5.4)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2))
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       postcss-preset-env:
         specifier: ^7.4.3
         version: 7.8.3(postcss@8.5.30)
@@ -342,8 +342,8 @@ importers:
         specifier: ^8.5.12
         version: 8.18.1
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../../packages/shared
@@ -443,8 +443,8 @@ importers:
         specifier: workspace:*
         version: link:../otel
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -470,8 +470,8 @@ importers:
   packages/ast-to-zql:
     dependencies:
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
     devDependencies:
       '@faker-js/faker':
         specifier: ^10.6.0
@@ -507,8 +507,8 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -538,8 +538,8 @@ importers:
         version: 6.1.0
     devDependencies:
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -599,8 +599,8 @@ importers:
         specifier: ^7.0.1
         version: 7.1.1
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       playwright:
         specifier: ^1.60.0
         version: 1.60.0
@@ -736,8 +736,8 @@ importers:
         specifier: ^8.5.12
         version: 8.18.1
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       ws:
         specifier: ^8.22.0
         version: 8.22.0
@@ -812,8 +812,8 @@ importers:
         specifier: ^1.0.34
         version: 1.0.34
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       package-up:
         specifier: ^5.0.0
         version: 5.0.0
@@ -846,8 +846,8 @@ importers:
         specifier: ^8.20.0
         version: 8.20.0
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       pg:
         specifier: ^8.16.3
         version: 8.20.0
@@ -1002,8 +1002,8 @@ importers:
         specifier: ^0.129.0
         version: 0.129.0
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       parse-prometheus-text-format:
         specifier: ^1.1.1
         version: 1.1.1
@@ -1250,8 +1250,8 @@ importers:
         specifier: workspace:*
         version: link:../otel
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -1302,8 +1302,8 @@ importers:
         specifier: ^3.18.0
         version: 3.23.2
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       playwright:
         specifier: ^1.60.0
         version: 1.60.0
@@ -1341,8 +1341,8 @@ importers:
         specifier: 0.28.2
         version: 0.28.2
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -1372,8 +1372,8 @@ importers:
         version: link:../zql
     devDependencies:
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       typescript:
         specifier: ~7.0.2
         version: 7.0.2
@@ -1388,8 +1388,8 @@ importers:
         version: 6.1.0
     devDependencies:
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       vitest:
         specifier: ^5.0.0
         version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@5.0.0)(@vitest/coverage-v8@5.0.0)(@vitest/ui@5.0.0)(vite@8.3.4(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.1))
@@ -1413,8 +1413,8 @@ importers:
         specifier: ^3.18.0
         version: 3.23.2
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -1447,8 +1447,8 @@ importers:
         specifier: ^19
         version: 19.3.0(@types/react@19.3.0)
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       react:
         specifier: ^19.2.6
         version: 19.3.1
@@ -1475,8 +1475,8 @@ importers:
         version: 1.0.2
     devDependencies:
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       replicache:
         specifier: workspace:*
         version: link:../replicache
@@ -1487,8 +1487,8 @@ importers:
   packages/zero-schema:
     devDependencies:
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -1527,8 +1527,8 @@ importers:
         specifier: ^0.28.17
         version: 0.28.17
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       pg:
         specifier: ^8.16.3
         version: 8.20.0
@@ -1572,8 +1572,8 @@ importers:
         specifier: ^0.8.10
         version: 0.8.10(solid-js@1.9.17)
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -1596,8 +1596,8 @@ importers:
   packages/zero-types:
     devDependencies:
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -1636,8 +1636,8 @@ importers:
         specifier: workspace:*
         version: link:../otel
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -1672,8 +1672,8 @@ importers:
         specifier: workspace:*
         version: link:../otel
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       rn-bench:
         specifier: workspace:*
         version: link:../../tools/rn-bench
@@ -1735,8 +1735,8 @@ importers:
         specifier: workspace:*
         version: link:../otel
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       pg:
         specifier: ^8.16.3
         version: 8.20.0
@@ -1805,8 +1805,8 @@ importers:
         specifier: workspace:*
         version: link:../otel
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -1836,8 +1836,8 @@ importers:
         specifier: ^6.1.0
         version: 6.1.0
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -1861,8 +1861,8 @@ importers:
         specifier: 8.10.147
         version: 8.10.147
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
 
   scripts:
     devDependencies:
@@ -1870,8 +1870,8 @@ importers:
         specifier: ^22.10.5
         version: 22.19.19
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       typescript:
         specifier: ~7.0.2
         version: 7.0.2
@@ -1898,8 +1898,8 @@ importers:
         specifier: ^8.5.12
         version: 8.18.1
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../../packages/shared
@@ -1929,8 +1929,8 @@ importers:
         specifier: ^1.0.5
         version: 1.0.5
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../../packages/shared
@@ -1938,8 +1938,8 @@ importers:
   tools/oxlint-plugin-zero:
     devDependencies:
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       oxlint:
         specifier: ^1.80.0
         version: 1.80.0(oxlint-tsgolint@7.0.2001)
@@ -1966,8 +1966,8 @@ importers:
         specifier: ^2.0.5
         version: 2.0.5
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../../packages/shared
@@ -2000,8 +2000,8 @@ importers:
         version: 8.22.0
     devDependencies:
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
 
   tools/sqlite-io-yield-simulator:
     dependencies:
@@ -2022,8 +2022,8 @@ importers:
         specifier: ^8.5.12
         version: 8.18.1
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../../packages/shared
@@ -2038,8 +2038,8 @@ importers:
         specifier: ^22.10.5
         version: 22.19.19
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       typescript:
         specifier: ~7.0.2
         version: 7.0.2
@@ -5073,8 +5073,20 @@ packages:
     cpu: [arm]
     os: [android]
 
+  '@oxfmt/binding-android-arm-eabi@0.74.0':
+    resolution: {integrity: sha512-xxQwrf5EPI5zxvuCTW8r6tzCTjPQ+h6+HqJ0iRKRy2zS1yBllt/xLVjoIyUc+FnR7g0a5g1SZv2yyDYhTItLbA==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm]
+    os: [android]
+
   '@oxfmt/binding-android-arm64@0.65.0':
     resolution: {integrity: sha512-6DXH5sftNlaHpWJG50hFMF+Qxtq5D2TmahvcDPxWNcGIf8qrC9Y0YgHYcYZ2hlWzaccKXh/f3GcssH8vtkl4JA==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [android]
+
+  '@oxfmt/binding-android-arm64@0.74.0':
+    resolution: {integrity: sha512-FJW3sATVvrWbV64al8xofCPZj4500Z/1W0ad7Tg1rcCUyh0EMbuSrsf3jsZS7CEbwQ5fQ0mRhmkc129GFgofSQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [android]
@@ -5085,8 +5097,20 @@ packages:
     cpu: [arm64]
     os: [darwin]
 
+  '@oxfmt/binding-darwin-arm64@0.74.0':
+    resolution: {integrity: sha512-TfmNKBD30dGyMu9GCLiaw2rt/z7fms9LS+5cKcNOyWst0QgAs8oZs6wPxMbVaaDVE0/PCdCosgWM1vbu6f5NUg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [darwin]
+
   '@oxfmt/binding-darwin-x64@0.65.0':
     resolution: {integrity: sha512-sTNwIx1gre3MyiHOPLu7IGW4UyMScYL4DTmJT01p4vzB0En+OJUQz6KuH8t0PpsClRSaMuY3b0QmtoPItfO8Lg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [x64]
+    os: [darwin]
+
+  '@oxfmt/binding-darwin-x64@0.74.0':
+    resolution: {integrity: sha512-5Usf8+DfC4Q3o/MD8FkN47GrI6y0KbhQ4KhZ2HGzMZcXjcW1AeldwbUn51aKih+1TVuJFF9qkNm6X1nzm6NYng==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [darwin]
@@ -5097,8 +5121,20 @@ packages:
     cpu: [x64]
     os: [freebsd]
 
+  '@oxfmt/binding-freebsd-x64@0.74.0':
+    resolution: {integrity: sha512-eL+1O3gykw1XihbZh2MRAciQvU2988LByrnjhyo/dmNG74X4oZ7XzigRoWPRFLfJCp8hzRkp/LbEhwe7uuT2eA==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [x64]
+    os: [freebsd]
+
   '@oxfmt/binding-linux-arm-gnueabihf@0.65.0':
     resolution: {integrity: sha512-gIdXFAt/bURnjxuoedDEWdZ0PEWEmdDcm8qdpoFYYvW3QMk/5D4vUaH4mlMeRpeTdST4izUgHVO6RawQ4QulJw==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm]
+    os: [linux]
+
+  '@oxfmt/binding-linux-arm-gnueabihf@0.74.0':
+    resolution: {integrity: sha512-Xt0QtO2hJ4stnul8IL4LJGVLyp0xnc6ccN9fZ30yuubv8FWSRYxWwd1Za62KsEqAfmPSazoS/cLSUUJpja6npA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm]
     os: [linux]
@@ -5109,8 +5145,21 @@ packages:
     cpu: [arm]
     os: [linux]
 
+  '@oxfmt/binding-linux-arm-musleabihf@0.74.0':
+    resolution: {integrity: sha512-/4wYQ0gZl4vUR0QoBTGaay73FmQ1GAjUa9z9101TR2xbGNrg4a+grazlR0yzEOe3/E+PJr5BGfj66MMzm/54vg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm]
+    os: [linux]
+
   '@oxfmt/binding-linux-arm64-gnu@0.65.0':
     resolution: {integrity: sha512-p3RFkB+u7u+8up99b/NEcI1hdpLDiGgJYNwDorB60n7eH+eKposAKuMBxx+NqB3b+sJP4CZmYDh9G7X62tUsKg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@oxfmt/binding-linux-arm64-gnu@0.74.0':
+    resolution: {integrity: sha512-846bKzF+HJd+JkOFh3rxzmYvSq4Cm+GMT+p+mW7S13ZYo6GAAGv8bL8cAOi/XcdeMqxEJDCIMTVQLVBXHMCdig==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [linux]
@@ -5123,8 +5172,22 @@ packages:
     os: [linux]
     libc: [musl]
 
+  '@oxfmt/binding-linux-arm64-musl@0.74.0':
+    resolution: {integrity: sha512-nI5FJwZ4Flo6CBdscpwxymZXxO3m3IErQJX55ZS6h+ObfGXu8FostL85L/RWPFaCLnIVE4/WfLw+2q8XvVEeUA==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
   '@oxfmt/binding-linux-ppc64-gnu@0.65.0':
     resolution: {integrity: sha512-S8svxTp81obnF3admN9yd+u2rOYXtyzThLGBTg1PY6TPtGcC09BaaXLQD+TBSMa7yvqhCDZ8DFri+S/yG60qCg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [ppc64]
+    os: [linux]
+    libc: [glibc]
+
+  '@oxfmt/binding-linux-ppc64-gnu@0.74.0':
+    resolution: {integrity: sha512-BoQYKuqUdsKAFAkK6DLBvkdv4+t0hppSm79sB0wIcE2o/eOwNj+6Z3OlKY4q3Eta/tlssP65FaS9vHn8TeF7vQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [ppc64]
     os: [linux]
@@ -5137,8 +5200,22 @@ packages:
     os: [linux]
     libc: [glibc]
 
+  '@oxfmt/binding-linux-riscv64-gnu@0.74.0':
+    resolution: {integrity: sha512-FSroRrM12+jCdSQklF9aOxsKpI6wFs4ZCo/1cSYG80RWZS6z4LV+l9tXRMT8lDGu+yohIZBwi9M76FzGPFDE2A==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [riscv64]
+    os: [linux]
+    libc: [glibc]
+
   '@oxfmt/binding-linux-riscv64-musl@0.65.0':
     resolution: {integrity: sha512-YwSLVvpaz4o/nv/miiPEBJz+eJ+VmbgNIrao6RccK9ce+L5EA8wP+ZD0uFeq6wKOza6zoWv/dR0sj6lip6R3EA==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [riscv64]
+    os: [linux]
+    libc: [musl]
+
+  '@oxfmt/binding-linux-riscv64-musl@0.74.0':
+    resolution: {integrity: sha512-0VLQD0dhGBLY9Ik/w+otMvD81D0YXi4VDwql65macV+O9UzmSWmUr6CKf+dMtysDeC0PnG3y6kBkRO08BJx52g==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [riscv64]
     os: [linux]
@@ -5151,8 +5228,22 @@ packages:
     os: [linux]
     libc: [glibc]
 
+  '@oxfmt/binding-linux-s390x-gnu@0.74.0':
+    resolution: {integrity: sha512-6X7BbZNz34+OHM6Oqjf6TRcUyRn6aRcB4VtIDZAF/uQRyeVhg+G2hv6MlMvmnRekVSyTJ/8rG/u8W2dRFW6glg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [s390x]
+    os: [linux]
+    libc: [glibc]
+
   '@oxfmt/binding-linux-x64-gnu@0.65.0':
     resolution: {integrity: sha512-cjZlx6S/VkeCNWCbwZriTnLnZeTcV3DEyeRGSw/2wwLP9viq+C0bJ4bC1k/ZLkFxDcB1lUgSasPkYGP1bdraOg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@oxfmt/binding-linux-x64-gnu@0.74.0':
+    resolution: {integrity: sha512-4kYIQK53yJXrxwxSzx8H2bojlf6/KezLGYLRXzV9QCCkoiCsvBTCid9Bg83dUPTLPa3g9K0730f6MKDbck1+OA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [linux]
@@ -5165,8 +5256,21 @@ packages:
     os: [linux]
     libc: [musl]
 
+  '@oxfmt/binding-linux-x64-musl@0.74.0':
+    resolution: {integrity: sha512-MfWz4wDREjp/JQDmuxtKieix4FHGa1z5rBvB3betdcPwZvf5fqeQrlCm1mmoyuUVQOh9Pt3M61HwN94kJCxw7Q==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
   '@oxfmt/binding-openharmony-arm64@0.65.0':
     resolution: {integrity: sha512-KXQ7xi1e/voP0IQaw6fG6XY4Z5+Llf1XmRSZS1t7pVFCecFJ0iXaboKmVwjFtp5MLlT5iWQrJ2U1C3GJdZ2u+Q==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [openharmony]
+
+  '@oxfmt/binding-openharmony-arm64@0.74.0':
+    resolution: {integrity: sha512-6rmAApkq5s1kbDjvNI6Nl5A+JqQkLORb2sR941pf5HWsrd01WGKyagK/B4vX9+kh1FfvRkNgEu59FHvVk4H8cQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [openharmony]
@@ -5177,14 +5281,32 @@ packages:
     cpu: [arm64]
     os: [win32]
 
+  '@oxfmt/binding-win32-arm64-msvc@0.74.0':
+    resolution: {integrity: sha512-+5SpRUnZNGeXTyumHnpHa791tQtt04qZs076WT8eTcGF2OJ631VLnf7S0kQSPuDG+PtJM0phadEB2WAr5n1w9g==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [win32]
+
   '@oxfmt/binding-win32-ia32-msvc@0.65.0':
     resolution: {integrity: sha512-LJ+ZacAPSjegDOnSLyA1TMWAhdDrsK4el3REdr1oL2UtVBCMhO2II/Sb3cEW6mF2MfLhl8hDNCSvc7KSbgk3LQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [ia32]
     os: [win32]
 
+  '@oxfmt/binding-win32-ia32-msvc@0.74.0':
+    resolution: {integrity: sha512-1Fg+wYBO3Dsti1QX+/6EYHjeQzLC84tLOAqPu/r7ah3UJlUs9C/DB703Ay9Vcg+8VMzqZA2P5VGhzJraVUD4OQ==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [ia32]
+    os: [win32]
+
   '@oxfmt/binding-win32-x64-msvc@0.65.0':
     resolution: {integrity: sha512-higu9cWEO6XXFzATD1jf0mCK34rNfN2H9JrJie7QB1IhleVpTh0QlLH9Ip2C1H/Nd5n0v5pvRtC+5R0uE4HpVg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [x64]
+    os: [win32]
+
+  '@oxfmt/binding-win32-x64-msvc@0.74.0':
+    resolution: {integrity: sha512-y9jXUgPBm2TZIWbQhMYRRYAQM57+r4fbykgc+j24ICIIZl+pcuoNhnq1CRGm3oFiHnEUnZO00qOtSPGQdJ2ziQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [win32]
@@ -10274,6 +10396,22 @@ packages:
       svelte: ^5.0.0
       vite-plus: '*'
     peerDependenciesMeta:
+      svelte:
+        optional: true
+      vite-plus:
+        optional: true
+
+  oxfmt@0.74.0:
+    resolution: {integrity: sha512-G4OP7FgwGYZR5ttRpCOOfJdyRsSyvtn34vSXnjDq6Oqed5Dufg5mB44mank+51nAdHOKuTJ0lj0mksY7L+N61A==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    hasBin: true
+    peerDependencies:
+      '@astrojs/compiler-rs': ^0.4.0 || ^0.5.0
+      svelte: ^5.0.0
+      vite-plus: '*'
+    peerDependenciesMeta:
+      '@astrojs/compiler-rs':
+        optional: true
       svelte:
         optional: true
       vite-plus:
@@ -17540,58 +17678,115 @@ snapshots:
   '@oxfmt/binding-android-arm-eabi@0.65.0':
     optional: true
 
+  '@oxfmt/binding-android-arm-eabi@0.74.0':
+    optional: true
+
   '@oxfmt/binding-android-arm64@0.65.0':
+    optional: true
+
+  '@oxfmt/binding-android-arm64@0.74.0':
     optional: true
 
   '@oxfmt/binding-darwin-arm64@0.65.0':
     optional: true
 
+  '@oxfmt/binding-darwin-arm64@0.74.0':
+    optional: true
+
   '@oxfmt/binding-darwin-x64@0.65.0':
+    optional: true
+
+  '@oxfmt/binding-darwin-x64@0.74.0':
     optional: true
 
   '@oxfmt/binding-freebsd-x64@0.65.0':
     optional: true
 
+  '@oxfmt/binding-freebsd-x64@0.74.0':
+    optional: true
+
   '@oxfmt/binding-linux-arm-gnueabihf@0.65.0':
+    optional: true
+
+  '@oxfmt/binding-linux-arm-gnueabihf@0.74.0':
     optional: true
 
   '@oxfmt/binding-linux-arm-musleabihf@0.65.0':
     optional: true
 
+  '@oxfmt/binding-linux-arm-musleabihf@0.74.0':
+    optional: true
+
   '@oxfmt/binding-linux-arm64-gnu@0.65.0':
+    optional: true
+
+  '@oxfmt/binding-linux-arm64-gnu@0.74.0':
     optional: true
 
   '@oxfmt/binding-linux-arm64-musl@0.65.0':
     optional: true
 
+  '@oxfmt/binding-linux-arm64-musl@0.74.0':
+    optional: true
+
   '@oxfmt/binding-linux-ppc64-gnu@0.65.0':
+    optional: true
+
+  '@oxfmt/binding-linux-ppc64-gnu@0.74.0':
     optional: true
 
   '@oxfmt/binding-linux-riscv64-gnu@0.65.0':
     optional: true
 
+  '@oxfmt/binding-linux-riscv64-gnu@0.74.0':
+    optional: true
+
   '@oxfmt/binding-linux-riscv64-musl@0.65.0':
+    optional: true
+
+  '@oxfmt/binding-linux-riscv64-musl@0.74.0':
     optional: true
 
   '@oxfmt/binding-linux-s390x-gnu@0.65.0':
     optional: true
 
+  '@oxfmt/binding-linux-s390x-gnu@0.74.0':
+    optional: true
+
   '@oxfmt/binding-linux-x64-gnu@0.65.0':
+    optional: true
+
+  '@oxfmt/binding-linux-x64-gnu@0.74.0':
     optional: true
 
   '@oxfmt/binding-linux-x64-musl@0.65.0':
     optional: true
 
+  '@oxfmt/binding-linux-x64-musl@0.74.0':
+    optional: true
+
   '@oxfmt/binding-openharmony-arm64@0.65.0':
+    optional: true
+
+  '@oxfmt/binding-openharmony-arm64@0.74.0':
     optional: true
 
   '@oxfmt/binding-win32-arm64-msvc@0.65.0':
     optional: true
 
+  '@oxfmt/binding-win32-arm64-msvc@0.74.0':
+    optional: true
+
   '@oxfmt/binding-win32-ia32-msvc@0.65.0':
     optional: true
 
+  '@oxfmt/binding-win32-ia32-msvc@0.74.0':
+    optional: true
+
   '@oxfmt/binding-win32-x64-msvc@0.65.0':
+    optional: true
+
+  '@oxfmt/binding-win32-x64-msvc@0.74.0':
     optional: true
 
   '@oxlint-tsgolint/darwin-arm64@7.0.2001':
@@ -23556,6 +23751,30 @@ snapshots:
       '@oxfmt/binding-win32-arm64-msvc': 0.65.0
       '@oxfmt/binding-win32-ia32-msvc': 0.65.0
       '@oxfmt/binding-win32-x64-msvc': 0.65.0
+
+  oxfmt@0.74.0:
+    dependencies:
+      tinypool: 2.2.0
+    optionalDependencies:
+      '@oxfmt/binding-android-arm-eabi': 0.74.0
+      '@oxfmt/binding-android-arm64': 0.74.0
+      '@oxfmt/binding-darwin-arm64': 0.74.0
+      '@oxfmt/binding-darwin-x64': 0.74.0
+      '@oxfmt/binding-freebsd-x64': 0.74.0
+      '@oxfmt/binding-linux-arm-gnueabihf': 0.74.0
+      '@oxfmt/binding-linux-arm-musleabihf': 0.74.0
+      '@oxfmt/binding-linux-arm64-gnu': 0.74.0
+      '@oxfmt/binding-linux-arm64-musl': 0.74.0
+      '@oxfmt/binding-linux-ppc64-gnu': 0.74.0
+      '@oxfmt/binding-linux-riscv64-gnu': 0.74.0
+      '@oxfmt/binding-linux-riscv64-musl': 0.74.0
+      '@oxfmt/binding-linux-s390x-gnu': 0.74.0
+      '@oxfmt/binding-linux-x64-gnu': 0.74.0
+      '@oxfmt/binding-linux-x64-musl': 0.74.0
+      '@oxfmt/binding-openharmony-arm64': 0.74.0
+      '@oxfmt/binding-win32-arm64-msvc': 0.74.0
+      '@oxfmt/binding-win32-ia32-msvc': 0.74.0
+      '@oxfmt/binding-win32-x64-msvc': 0.74.0
 
   oxlint-tsgolint@7.0.2001:
     optionalDependencies:
