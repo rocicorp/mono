@@ -31,7 +31,7 @@
     "@faker-js/faker": "^10.6.0",
     "@types/pg": "^8.20.0",
     "oxfmt": "^0.74.0",
-    "pg": "^8.16.3",
+    "pg": "^8.20.0",
     "postgres": "3.4.7",
     "shared": "workspace:*",
     "vitest": "^5.0.0",

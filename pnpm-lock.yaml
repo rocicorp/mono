@@ -8,7 +8,7 @@ overrides:
   '@graphql-tools/utils@<12.0.1': ^12.0.1
   '@hono/node-server@<1.19.15': ^1.19.15
   '@opentelemetry/propagator-jaeger@<2.9.0': ^2.9.0
-  '@types/node': ^22.10.5
+  '@types/node': ^22.19.19
   '@xmldom/xmldom@>=0.8.0 <0.8.15': ^0.8.15
   '@xmldom/xmldom@>=0.9.0 <0.9.12': ^0.9.12
   ajv@>=7.0.0-alpha.0 <8.18.0: ^8.18.0
@@ -64,7 +64,7 @@ importers:
         specifier: 1.10.0
         version: 1.10.0
       '@types/node':
-        specifier: ^22.10.5
+        specifier: ^22.19.19
         version: 22.19.19
       '@vitest/browser':
         specifier: ^5.0.0
@@ -91,13 +91,13 @@ importers:
         specifier: ^1.60.0
         version: 1.60.0
       syncpack:
-        specifier: ^14.3.0
+        specifier: ^14.3.1
         version: 14.3.1
       tsnapi:
-        specifier: ^0.3.2
+        specifier: ^0.3.3
         version: 0.3.3(vitest@5.0.0)
       turbo:
-        specifier: ^2.4.4
+        specifier: ^2.9.14
         version: 2.9.14
       typescript:
         specifier: ~7.0.2
@@ -112,7 +112,7 @@ importers:
   apps/otel-proxy:
     devDependencies:
       '@types/node':
-        specifier: ^22.10.5
+        specifier: ^22.19.19
         version: 22.19.19
       '@vitest/coverage-v8':
         specifier: ^5.0.0
@@ -130,31 +130,31 @@ importers:
   apps/zbugs:
     dependencies:
       '@aws-sdk/client-s3':
-        specifier: ^3.844.0
+        specifier: ^3.1048.0
         version: 3.1048.0
       '@aws-sdk/s3-request-presigner':
-        specifier: ^3.844.0
+        specifier: ^3.1048.0
         version: 3.1048.0
       '@dotenvx/dotenvx':
-        specifier: ^1.39.0
+        specifier: ^1.66.0
         version: 1.66.0
       '@faker-js/faker':
         specifier: ^10.6.0
         version: 10.6.0
       '@fastify/cookie':
-        specifier: ^10.0.0
+        specifier: ^10.0.1
         version: 10.0.1
       '@fastify/oauth2':
-        specifier: ^8.0.0
+        specifier: ^8.2.0
         version: 8.2.0
       '@floating-ui/react':
         specifier: ^0.26.28
         version: 0.26.28(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@headlessui/react':
-        specifier: ^2.1.8
+        specifier: ^2.2.10
         version: 2.2.10(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@octokit/core':
-        specifier: ^6.1.2
+        specifier: ^6.1.6
         version: 6.1.6
       '@rocicorp/zero':
         specifier: workspace:*
@@ -172,43 +172,43 @@ importers:
         specifier: ^0.2.3
         version: 0.2.3
       emoji-picker-element:
-        specifier: ^1.22.8
+        specifier: ^1.29.1
         version: 1.29.1
       emoji-picker-element-data:
-        specifier: ^1.6.1
+        specifier: ^1.8.0
         version: 1.8.0
       fastify:
         specifier: ^5.12.7
         version: 5.12.7
       jose:
-        specifier: ^5.9.3
+        specifier: ^5.10.0
         version: 5.10.0
       js-cookie:
-        specifier: ^3.0.5
+        specifier: ^3.0.7
         version: 3.0.7
       nanoid:
         specifier: ^5.1.16
         version: 5.1.16
       pg:
-        specifier: ^8.16.3
+        specifier: ^8.20.0
         version: 8.20.0
       postgres:
         specifier: 3.4.7
         version: 3.4.7(patch_hash=1ab70f82038a98cb34611424c35af68a1d87aa3bd8ed78a7f863c628ae3aeac7)
       react:
-        specifier: ^19.2.6
+        specifier: ^19.3.1
         version: 19.3.1
       react-dom:
-        specifier: ^19.2.6
+        specifier: ^19.3.1
         version: 19.3.1(react@19.3.1)
       react-dropzone:
-        specifier: ^14.3.8
+        specifier: ^14.4.1
         version: 14.4.1(react@19.3.1)
       react-markdown:
-        specifier: ^9.0.1
+        specifier: ^9.1.0
         version: 9.1.0(@types/react@19.3.0)(react@19.3.1)
       react-textarea-autosize:
-        specifier: ^8.5.3
+        specifier: ^8.5.9
         version: 8.5.9(@types/react@19.3.0)(react@19.3.1)
       react-toastify:
         specifier: ^10.0.6
@@ -220,7 +220,7 @@ importers:
         specifier: ^6.0.0
         version: 6.0.0
       remark-gfm:
-        specifier: ^4.0.0
+        specifier: ^4.0.1
         version: 4.0.1
       unified:
         specifier: ^11.0.5
@@ -229,23 +229,23 @@ importers:
         specifier: ^5.1.0
         version: 5.1.0
       use-debounce:
-        specifier: ^10.0.4
+        specifier: ^10.1.1
         version: 10.1.1(react@19.3.1)
       usehooks-ts:
-        specifier: ^3.1.0
+        specifier: ^3.1.1
         version: 3.1.1(react@19.3.1)
       wouter:
-        specifier: ^3.7.1
+        specifier: ^3.9.0
         version: 3.9.0(react@19.3.1)
       zod:
-        specifier: ^4.1.11
+        specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
       '@rocicorp/logger':
         specifier: ^6.1.0
         version: 6.1.0
       '@tailwindcss/forms':
-        specifier: ^0.5.0
+        specifier: ^0.5.11
         version: 0.5.11(tailwindcss@3.4.19(tsx@4.22.0)(yaml@2.9.0))
       '@types/hast':
         specifier: ^3.0.4
@@ -257,19 +257,19 @@ importers:
         specifier: ^0.53.2
         version: 0.53.2
       '@types/node':
-        specifier: ^22.10.5
+        specifier: ^22.19.19
         version: 22.19.19
       '@types/pg':
         specifier: ^8.20.0
         version: 8.20.0
       '@types/react':
-        specifier: ^19
+        specifier: ^19.3.0
         version: 19.3.0
       '@types/react-dom':
-        specifier: ^19
+        specifier: ^19.3.0
         version: 19.3.0(@types/react@19.3.0)
       '@vitejs/plugin-react':
-        specifier: ^6.0.1
+        specifier: ^6.0.2
         version: 6.0.2(babel-plugin-react-compiler@1.0.0)(vite@8.3.4(@types/node@22.19.19)(esbuild@0.28.2)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
       drizzle-kit:
         specifier: ^0.31.10
@@ -281,16 +281,16 @@ importers:
         specifier: ^0.74.0
         version: 0.74.0
       postcss-preset-env:
-        specifier: ^7.4.3
+        specifier: ^7.8.3
         version: 7.8.3(postcss@8.5.30)
       rehype-video:
-        specifier: ^2.3.0
+        specifier: ^2.3.1
         version: 2.3.1
       shared:
         specifier: workspace:*
         version: link:../../packages/shared
       tailwindcss:
-        specifier: ^3.0.23
+        specifier: ^3.4.19
         version: 3.4.19(tsx@4.22.0)(yaml@2.9.0)
       typescript:
         specifier: ~7.0.2
@@ -317,7 +317,7 @@ importers:
   apps/zero-throughput:
     dependencies:
       '@dotenvx/dotenvx':
-        specifier: ^1.39.0
+        specifier: ^1.66.0
         version: 1.66.0
       '@rocicorp/zero':
         specifier: workspace:*
@@ -332,14 +332,14 @@ importers:
         specifier: ^8.22.0
         version: 8.22.0
       zod:
-        specifier: ^4.1.11
+        specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
       '@types/node':
-        specifier: ^22.10.5
+        specifier: ^22.19.19
         version: 22.19.19
       '@types/ws':
-        specifier: ^8.5.12
+        specifier: ^8.18.1
         version: 8.18.1
       oxfmt:
         specifier: ^0.74.0
@@ -366,7 +366,7 @@ importers:
         specifier: ^4.7.0
         version: 4.7.0(monaco-editor@0.52.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@xyflow/react':
-        specifier: ^12.8.2
+        specifier: ^12.10.2
         version: 12.10.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       lucide-react:
         specifier: ^0.539.0
@@ -375,29 +375,29 @@ importers:
         specifier: ^0.52.2
         version: 0.52.2
       react:
-        specifier: ^19.2.6
+        specifier: ^19.3.1
         version: 19.3.1
       react-dom:
-        specifier: ^19.2.6
+        specifier: ^19.3.1
         version: 19.3.1(react@19.3.1)
       react-resizable-panels:
-        specifier: ^3.0.4
+        specifier: ^3.0.6
         version: 3.0.6(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       typescript-6:
-        specifier: npm:typescript@~6.0.2
+        specifier: npm:typescript@~6.0.3
         version: typescript@6.0.3
     devDependencies:
       '@tantaman/api-extractor':
-        specifier: ^7.52.13
+        specifier: ^7.55.0
         version: 7.55.0(@types/node@22.19.19)
       '@types/react':
-        specifier: ^19
+        specifier: ^19.3.0
         version: 19.3.0
       '@types/react-dom':
-        specifier: ^19
+        specifier: ^19.3.0
         version: 19.3.0(@types/react@19.3.0)
       '@vitejs/plugin-react':
-        specifier: ^6.0.1
+        specifier: ^6.0.2
         version: 6.0.2(babel-plugin-react-compiler@1.0.0)(vite@8.3.4(@types/node@22.19.19)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
       shared:
         specifier: workspace:*
@@ -418,7 +418,7 @@ importers:
   packages/analyze-query:
     dependencies:
       '@dotenvx/dotenvx':
-        specifier: ^1.39.0
+        specifier: ^1.66.0
         version: 1.66.0
       '@rocicorp/logger':
         specifier: ^6.1.0
@@ -434,7 +434,7 @@ importers:
         specifier: ^10.6.0
         version: 10.6.0
       '@types/ws':
-        specifier: ^8.5.12
+        specifier: ^8.18.1
         version: 8.18.1
       ast-to-zql:
         specifier: workspace:*
@@ -563,7 +563,7 @@ importers:
         version: 1.0.2
     devDependencies:
       '@op-engineering/op-sqlite':
-        specifier: '>=15'
+        specifier: ^18.2.5
         version: 18.2.5(react-native@0.88.0(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.1))(react@19.3.1)
       '@rocicorp/zero-sqlite3':
         specifier: ^1.1.7
@@ -575,10 +575,10 @@ importers:
         specifier: ^5.0.4
         version: 5.0.4
       command-line-args:
-        specifier: ^6.0.1
+        specifier: ^6.0.2
         version: 6.0.2
       command-line-usage:
-        specifier: ^7.0.3
+        specifier: ^7.0.4
         version: 7.0.4
       compare-utf8:
         specifier: ^0.2.3
@@ -590,13 +590,13 @@ importers:
         specifier: ^58.0.14
         version: 58.0.14(@babel/core@7.29.7)(@expo/dom-webview@58.0.2)(react-dom@19.3.1(react@19.3.1))(react-native@0.88.0(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.1))(react@19.3.1)(typescript@7.0.2)
       expo-sqlite:
-        specifier: '>=15'
+        specifier: ^58.0.13
         version: 58.0.13(expo@58.0.14)(react-native@0.88.0(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.1))(react@19.3.1)
       hash-wasm:
-        specifier: ^4.9.0
+        specifier: ^4.12.0
         version: 4.12.0
       idb:
-        specifier: ^7.0.1
+        specifier: ^7.1.1
         version: 7.1.1
       oxfmt:
         specifier: ^0.74.0
@@ -617,7 +617,7 @@ importers:
         specifier: ^5.0.0
         version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@5.0.0)(@vitest/coverage-v8@5.0.0)(@vitest/ui@5.0.0)(vite@8.3.4(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.1))
       xbytes:
-        specifier: ^1.7.0
+        specifier: ^1.9.1
         version: 1.9.1
 
   packages/replicache-doc:
@@ -638,16 +638,16 @@ importers:
         specifier: ^2.1.1
         version: 2.1.1
       docusaurus-plugin-script-tags:
-        specifier: ^2.0.0-beta.6
+        specifier: 2.0.0-beta.6
         version: 2.0.0-beta.6
       prism-react-renderer:
         specifier: ^2.4.1
         version: 2.4.1(react@19.3.1)
       react:
-        specifier: ^19.2.6
+        specifier: ^19.3.1
         version: 19.3.1
       react-dom:
-        specifier: ^19.2.6
+        specifier: ^19.3.1
         version: 19.3.1(react@19.3.1)
     devDependencies:
       '@docusaurus/module-type-aliases':
@@ -666,10 +666,10 @@ importers:
         specifier: 15.2.1
         version: 15.2.1
       typedoc:
-        specifier: ^0.28.17
+        specifier: ^0.28.19
         version: 0.28.19(typescript@6.0.3)
       typedoc-plugin-markdown:
-        specifier: ^4.10.0
+        specifier: ^4.11.0
         version: 4.11.0(typedoc@0.28.19(typescript@6.0.3))
       typescript:
         specifier: ~6.0.2
@@ -687,10 +687,10 @@ importers:
         specifier: ^5.0.4
         version: 5.0.4
       command-line-args:
-        specifier: ^6.0.1
+        specifier: ^6.0.2
         version: 6.0.2
       command-line-usage:
-        specifier: ^7.0.3
+        specifier: ^7.0.4
         version: 7.0.4
       compare-utf8:
         specifier: ^0.2.3
@@ -699,13 +699,13 @@ importers:
         specifier: 0.28.2
         version: 0.28.2
       get-port:
-        specifier: ^7.0.0
+        specifier: ^7.2.0
         version: 7.2.0
       hash-wasm:
-        specifier: ^4.9.0
+        specifier: ^4.12.0
         version: 4.12.0
       idb:
-        specifier: ^7.0.1
+        specifier: ^7.1.1
         version: 7.1.1
       playwright:
         specifier: ^1.60.0
@@ -729,11 +729,11 @@ importers:
         specifier: ^8.3.4
         version: 8.3.4(@types/node@22.19.19)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0)
       xbytes:
-        specifier: ^1.7.0
+        specifier: ^1.9.1
         version: 1.9.1
     devDependencies:
       '@types/ws':
-        specifier: ^8.5.12
+        specifier: ^8.18.1
         version: 8.18.1
       oxfmt:
         specifier: ^0.74.0
@@ -748,7 +748,7 @@ importers:
         specifier: 0.5.5
         version: 0.5.5
       '@dotenvx/dotenvx':
-        specifier: ^1.39.0
+        specifier: ^1.66.0
         version: 1.66.0
       '@rocicorp/logger':
         specifier: ^6.1.0
@@ -757,25 +757,25 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2
       chalk-template:
-        specifier: ^1.1.0
+        specifier: ^1.1.2
         version: 1.1.2
       command-line-args:
-        specifier: ^6.0.1
+        specifier: ^6.0.2
         version: 6.0.2
       command-line-usage:
-        specifier: ^7.0.3
+        specifier: ^7.0.4
         version: 7.0.4
       defu:
-        specifier: ^6.1.4
+        specifier: ^6.1.7
         version: 6.1.7
       json-custom-numbers:
         specifier: ^3.1.1
         version: 3.1.1
       kasi:
-        specifier: ^1.1.0
+        specifier: ^1.1.2
         version: 1.1.2
       semver:
-        specifier: ^7.5.4
+        specifier: ^7.8.0
         version: 7.8.0
     devDependencies:
       '@faker-js/faker':
@@ -791,10 +791,10 @@ importers:
         specifier: ^5.0.4
         version: 5.0.4
       '@types/node':
-        specifier: ^22.10.5
+        specifier: ^22.19.19
         version: 22.19.19
       '@types/semver':
-        specifier: ^7.5.1
+        specifier: ^7.7.1
         version: 7.7.1
       '@types/strip-ansi':
         specifier: ^3.0.0
@@ -803,7 +803,7 @@ importers:
         specifier: ^0.2.3
         version: 0.2.3
       fast-check:
-        specifier: ^3.18.0
+        specifier: ^3.23.2
         version: 3.23.2
       js-xxhash:
         specifier: ^4.0.0
@@ -818,7 +818,7 @@ importers:
         specifier: ^1.60.0
         version: 1.60.0
       type-fest:
-        specifier: ^4.30.0
+        specifier: ^4.41.0
         version: 4.41.0
       typescript:
         specifier: ~7.0.2
@@ -846,7 +846,7 @@ importers:
         specifier: ^0.74.0
         version: 0.74.0
       pg:
-        specifier: ^8.16.3
+        specifier: ^8.20.0
         version: 8.20.0
       postgres:
         specifier: 3.4.7
@@ -885,16 +885,16 @@ importers:
         specifier: ^3.3.0
         version: 3.3.0
       '@dotenvx/dotenvx':
-        specifier: ^1.39.0
+        specifier: ^1.66.0
         version: 1.66.0
       '@drdgvhbh/postgres-error-codes':
         specifier: ^0.0.6
         version: 0.0.6
       '@fastify/cors':
-        specifier: ^10.0.0
+        specifier: ^10.1.0
         version: 10.1.0
       '@fastify/websocket':
-        specifier: ^11.0.0
+        specifier: ^11.2.0
         version: 11.2.0
       '@google-cloud/precise-date':
         specifier: ^4.0.0
@@ -942,40 +942,40 @@ importers:
         specifier: ^1.1.7
         version: 1.1.7
       '@standard-schema/spec':
-        specifier: ^1.0.0
+        specifier: ^1.1.0
         version: 1.1.0
       '@types/basic-auth':
         specifier: ^1.1.8
         version: 1.1.8
       '@types/ws':
-        specifier: ^8.5.12
+        specifier: ^8.18.1
         version: 8.18.1
       basic-auth:
         specifier: ^2.0.1
         version: 2.0.1
       chalk-template:
-        specifier: ^1.1.0
+        specifier: ^1.1.2
         version: 1.1.2
       chokidar:
-        specifier: ^4.0.1
+        specifier: ^4.0.3
         version: 4.0.3
       cloudevents:
         specifier: ^10.0.0
         version: 10.0.0
       command-line-args:
-        specifier: ^6.0.1
+        specifier: ^6.0.2
         version: 6.0.2
       command-line-usage:
-        specifier: ^7.0.3
+        specifier: ^7.0.4
         version: 7.0.4
       compare-utf8:
         specifier: ^0.2.3
         version: 0.2.3
       defu:
-        specifier: ^6.1.4
+        specifier: ^6.1.7
         version: 6.1.7
       eventemitter3:
-        specifier: ^5.0.1
+        specifier: ^5.0.4
         version: 5.0.4
       fastify:
         specifier: ^5.12.7
@@ -984,13 +984,13 @@ importers:
         specifier: ^4.0.1
         version: 4.0.1
       jose:
-        specifier: ^5.9.3
+        specifier: ^5.10.0
         version: 5.10.0
       json-custom-numbers:
         specifier: ^3.1.1
         version: 3.1.1
       kasi:
-        specifier: ^1.1.0
+        specifier: ^1.1.2
         version: 1.1.2
       nanoid:
         specifier: ^5.1.16
@@ -1011,7 +1011,7 @@ importers:
         specifier: 3.4.7
         version: 3.4.7(patch_hash=1ab70f82038a98cb34611424c35af68a1d87aa3bd8ed78a7f863c628ae3aeac7)
       semver:
-        specifier: ^7.5.4
+        specifier: ^7.8.0
         version: 7.8.0
       url-pattern:
         specifier: ^1.0.3
@@ -1024,7 +1024,7 @@ importers:
         version: 8.22.0
     devDependencies:
       '@op-engineering/op-sqlite':
-        specifier: '>=15'
+        specifier: ^18.2.5
         version: 18.2.5(react-native@0.88.0(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.1))(react@19.3.1)
       analyze-query:
         specifier: workspace:*
@@ -1036,7 +1036,7 @@ importers:
         specifier: ^58.0.14
         version: 58.0.14(@babel/core@7.29.7)(@expo/dom-webview@58.0.2)(react-dom@19.3.1(react@19.3.1))(react-native@0.88.0(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.1))(react@19.3.1)(typescript@7.0.2)
       expo-sqlite:
-        specifier: '>=15'
+        specifier: ^58.0.13
         version: 58.0.13(expo@58.0.14)(react-native@0.88.0(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.1))(react@19.3.1)
       react-native:
         specifier: ^0.88.0
@@ -1048,10 +1048,10 @@ importers:
         specifier: workspace:*
         version: link:../shared
       syncpack:
-        specifier: ^14.3.0
+        specifier: ^14.3.1
         version: 14.3.1
       typedoc:
-        specifier: ^0.28.17
+        specifier: ^0.28.19
         version: 0.28.19(typescript@7.0.2)
       typescript:
         specifier: ~7.0.2
@@ -1096,10 +1096,10 @@ importers:
         specifier: ^0.0.6
         version: 0.0.6
       '@fastify/cors':
-        specifier: ^10.0.0
+        specifier: ^10.1.0
         version: 10.1.0
       '@fastify/websocket':
-        specifier: ^11.0.0
+        specifier: ^11.2.0
         version: 11.2.0
       '@google-cloud/precise-date':
         specifier: ^4.0.0
@@ -1162,10 +1162,10 @@ importers:
         specifier: ^0.2.3
         version: 0.2.3
       defu:
-        specifier: ^6.1.4
+        specifier: ^6.1.7
         version: 6.1.7
       eventemitter3:
-        specifier: ^5.0.1
+        specifier: ^5.0.4
         version: 5.0.4
       fastify:
         specifier: ^5.12.7
@@ -1174,7 +1174,7 @@ importers:
         specifier: ^4.0.1
         version: 4.0.1
       jose:
-        specifier: ^5.9.3
+        specifier: ^5.10.0
         version: 5.10.0
       json-custom-numbers:
         specifier: ^3.1.1
@@ -1217,10 +1217,10 @@ importers:
         specifier: workspace:*
         version: link:../zero-events
       '@testcontainers/postgresql':
-        specifier: ^10.9.0
+        specifier: ^10.28.0
         version: 10.28.0
       '@types/node':
-        specifier: ^22.10.5
+        specifier: ^22.19.19
         version: 22.19.19
       '@types/pg-format':
         specifier: ^1.0.5
@@ -1229,19 +1229,19 @@ importers:
         specifier: ^3.0.0
         version: 3.0.0
       '@types/ws':
-        specifier: ^8.5.12
+        specifier: ^8.18.1
         version: 8.18.1
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
       fast-check:
-        specifier: ^3.18.0
+        specifier: ^3.23.2
         version: 3.23.2
       mockttp:
-        specifier: ^4.2.1
+        specifier: ^4.4.1
         version: 4.4.1
       nock:
-        specifier: ^14.0.4
+        specifier: ^14.0.15
         version: 14.0.15
       otel:
         specifier: workspace:*
@@ -1284,7 +1284,7 @@ importers:
         specifier: ^10.6.0
         version: 10.6.0
       '@standard-schema/spec':
-        specifier: ^1.0.0
+        specifier: ^1.1.0
         version: 1.1.0
       ast-to-zql:
         specifier: workspace:*
@@ -1296,7 +1296,7 @@ importers:
         specifier: 0.28.2
         version: 0.28.2
       fast-check:
-        specifier: ^3.18.0
+        specifier: ^3.23.2
         version: 3.23.2
       oxfmt:
         specifier: ^0.74.0
@@ -1407,7 +1407,7 @@ importers:
         version: 0.2.3
     devDependencies:
       fast-check:
-        specifier: ^3.18.0
+        specifier: ^3.23.2
         version: 3.23.2
       oxfmt:
         specifier: ^0.74.0
@@ -1431,23 +1431,23 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2
       react-dom:
-        specifier: ^19.2.6
+        specifier: ^19.3.1
         version: 19.3.1(react@19.3.1)
     devDependencies:
       '@testing-library/react':
         specifier: ^16.3.2
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@types/react':
-        specifier: ^19
+        specifier: ^19.3.0
         version: 19.3.0
       '@types/react-dom':
-        specifier: ^19
+        specifier: ^19.3.0
         version: 19.3.0(@types/react@19.3.0)
       oxfmt:
         specifier: ^0.74.0
         version: 0.74.0
       react:
-        specifier: ^19.2.6
+        specifier: ^19.3.1
         version: 19.3.1
       shared:
         specifier: workspace:*
@@ -1506,13 +1506,13 @@ importers:
         version: 6.1.0
     devDependencies:
       '@prisma/adapter-pg':
-        specifier: ^7.7.0
+        specifier: ^7.8.0
         version: 7.8.0
       '@prisma/client':
-        specifier: ^7.7.0
+        specifier: ^7.8.0
         version: 7.8.0(prisma@7.8.0(@types/node@22.20.5)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(magicast@0.5.4)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
       '@standard-schema/spec':
-        specifier: ^1.0.0
+        specifier: ^1.1.0
         version: 1.1.0
       '@types/pg':
         specifier: ^8.20.0
@@ -1527,13 +1527,13 @@ importers:
         specifier: ^0.74.0
         version: 0.74.0
       pg:
-        specifier: ^8.16.3
+        specifier: ^8.20.0
         version: 8.20.0
       postgres:
         specifier: 3.4.7
         version: 3.4.7(patch_hash=1ab70f82038a98cb34611424c35af68a1d87aa3bd8ed78a7f863c628ae3aeac7)
       prisma:
-        specifier: ^7.7.0
+        specifier: ^7.8.0
         version: 7.8.0(@types/node@22.20.5)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(magicast@0.5.4)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3)
       shared:
         specifier: workspace:*
@@ -1575,10 +1575,10 @@ importers:
         specifier: workspace:*
         version: link:../shared
       solid-js:
-        specifier: ^1.9.4
+        specifier: ^1.9.17
         version: 1.9.17
       vite-plugin-solid:
-        specifier: ^2.11.11
+        specifier: ^2.11.12
         version: 2.11.12(solid-js@1.9.17)(vite@8.3.4(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.1))
       vitest:
         specifier: ^5.0.0
@@ -1621,10 +1621,10 @@ importers:
         specifier: ^6.1.0
         version: 6.1.0
       '@standard-schema/spec':
-        specifier: ^1.0.0
+        specifier: ^1.1.0
         version: 1.1.0
       fast-check:
-        specifier: ^3.18.0
+        specifier: ^3.23.2
         version: 3.23.2
       nanoid:
         specifier: ^5.1.16
@@ -1735,7 +1735,7 @@ importers:
         specifier: ^0.74.0
         version: 0.74.0
       pg:
-        specifier: ^8.16.3
+        specifier: ^8.20.0
         version: 8.20.0
       shared:
         specifier: workspace:*
@@ -1793,7 +1793,7 @@ importers:
         version: link:../zql
     devDependencies:
       fast-check:
-        specifier: ^3.18.0
+        specifier: ^3.23.2
         version: 3.23.2
       nanoid:
         specifier: ^5.1.16
@@ -1848,7 +1848,7 @@ importers:
   prod/sst:
     dependencies:
       '@dotenvx/dotenvx':
-        specifier: ^1.39.0
+        specifier: ^1.66.0
         version: 1.66.0
       sst:
         specifier: 3.8.9
@@ -1864,7 +1864,7 @@ importers:
   scripts:
     devDependencies:
       '@types/node':
-        specifier: ^22.10.5
+        specifier: ^22.19.19
         version: 22.19.19
       oxfmt:
         specifier: ^0.74.0
@@ -1879,7 +1879,7 @@ importers:
   tools/client-simulator:
     dependencies:
       '@dotenvx/dotenvx':
-        specifier: ^1.39.0
+        specifier: ^1.66.0
         version: 1.66.0
       '@rocicorp/logger':
         specifier: ^6.1.0
@@ -1892,7 +1892,7 @@ importers:
         version: 8.22.0
     devDependencies:
       '@types/ws':
-        specifier: ^8.5.12
+        specifier: ^8.18.1
         version: 8.18.1
       oxfmt:
         specifier: ^0.74.0
@@ -1907,7 +1907,7 @@ importers:
   tools/load-generator:
     dependencies:
       '@dotenvx/dotenvx':
-        specifier: ^1.39.0
+        specifier: ^1.66.0
         version: 1.66.0
       '@rocicorp/logger':
         specifier: ^6.1.0
@@ -1953,10 +1953,10 @@ importers:
         specifier: ^6.1.0
         version: 6.1.0
       find-process:
-        specifier: ^1.4.10
+        specifier: ^1.4.11
         version: 1.4.11
       pidusage:
-        specifier: ^4.0.0
+        specifier: ^4.0.1
         version: 4.0.1
     devDependencies:
       '@types/pidusage':
@@ -1978,16 +1978,16 @@ importers:
         specifier: ^5.0.4
         version: 5.0.4
       '@types/node':
-        specifier: ^22.10.5
+        specifier: ^22.19.19
         version: 22.19.19
       '@types/ws':
-        specifier: ^8.5.12
+        specifier: ^8.18.1
         version: 8.18.1
       command-line-args:
-        specifier: ^6.0.1
+        specifier: ^6.0.2
         version: 6.0.2
       command-line-usage:
-        specifier: ^7.0.3
+        specifier: ^7.0.4
         version: 7.0.4
       typescript:
         specifier: ~7.0.2
@@ -2016,7 +2016,7 @@ importers:
         version: link:../../packages/zqlite
     devDependencies:
       '@types/ws':
-        specifier: ^8.5.12
+        specifier: ^8.18.1
         version: 8.18.1
       oxfmt:
         specifier: ^0.74.0
@@ -2032,7 +2032,7 @@ importers:
         version: 0.129.0
     devDependencies:
       '@types/node':
-        specifier: ^22.10.5
+        specifier: ^22.19.19
         version: 22.19.19
       oxfmt:
         specifier: ^0.74.0
@@ -5954,7 +5954,7 @@ packages:
   '@rushstack/node-core-library@5.18.0':
     resolution: {integrity: sha512-XDebtBdw5S3SuZIt+Ra2NieT8kQ3D2Ow1HxhDQ/2soinswnOu9e7S69VSwTOLlQnx5mpWbONu+5JJjDxMAb6Fw==}
     peerDependencies:
-      '@types/node': ^22.10.5
+      '@types/node': ^22.19.19
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -5962,7 +5962,7 @@ packages:
   '@rushstack/problem-matcher@0.1.1':
     resolution: {integrity: sha512-Fm5XtS7+G8HLcJHCWpES5VmeMyjAKaWeyZU5qPzZC+22mPlJzAsOxymHiWIfuirtPckX3aptWws+K2d0BzniJA==}
     peerDependencies:
-      '@types/node': ^22.10.5
+      '@types/node': ^22.19.19
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -5973,7 +5973,7 @@ packages:
   '@rushstack/terminal@0.19.3':
     resolution: {integrity: sha512-0P8G18gK9STyO+CNBvkKPnWGMxESxecTYqOcikHOVIHXa9uAuTK+Fw8TJq2Gng1w7W6wTC9uPX6hGNvrMll2wA==}
     peerDependencies:
-      '@types/node': ^22.10.5
+      '@types/node': ^22.19.19
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -10165,7 +10165,7 @@ packages:
     resolution: {integrity: sha512-enu73KhbAua2L3dIxjc6qg6ZJ7H3pt1BImZASWNWY5xSsmJ1ZuUPULTDGXgmJbI61vb+nJAG19IZclIq19UidQ==}
     engines: {node: '>= 8.0'}
     peerDependencies:
-      '@types/node': ^22.10.5
+      '@types/node': ^22.19.19
 
   mz@2.7.0:
     resolution: {integrity: sha512-z81GNO7nnYMEhrGh9LeymoE4+Yr0Wn5McHIZMK5cfQCl+NDX08sCZgUc9/6MHni9IWuFLm1Z3HTCXu2z9fN62Q==}
@@ -12828,7 +12828,7 @@ packages:
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
     peerDependencies:
-      '@types/node': ^22.10.5
+      '@types/node': ^22.19.19
       '@vitejs/devtools': ^0.7.1
       esbuild: 0.28.2
       jiti: '>=1.21.0'
@@ -12881,7 +12881,7 @@ packages:
     peerDependencies:
       '@edge-runtime/vm': '*'
       '@opentelemetry/api': ^1.9.0
-      '@types/node': ^22.10.5
+      '@types/node': ^22.19.19
       '@vitest/browser-playwright': 5.0.0
       '@vitest/browser-preview': 5.0.0
       '@vitest/browser-webdriverio': ^5.0.0-beta.5 || >=5.0.0
