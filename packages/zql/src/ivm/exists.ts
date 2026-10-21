@@ -260,14 +260,30 @@ export class Exists implements FilterOperator {
       () =>
         `Exists: relationship "${this.#relationshipName}" not found on node`,
     );
-    let size = 0;
+    if (this.#inPush) {
+      let size = 0;
+      for (const n of relationship()) {
+        if (n === 'yield') {
+          yield 'yield';
+        } else {
+          size++;
+        }
+      }
+      return size;
+    }
+    // During a fetch, keep the children read to count them and make the
+    // node's relationship return them, so that the consumer of the node does
+    // not fetch them again. The exists subquery is limited, so this holds at
+    // most a few nodes. `node.relationships` is created per node by the Join.
+    const children: Node[] = [];
     for (const n of relationship()) {
       if (n === 'yield') {
         yield 'yield';
       } else {
-        size++;
+        children.push(n);
       }
     }
-    return size;
+    node.relationships[this.#relationshipName] = () => children;
+    return children.length;
   }
 }
