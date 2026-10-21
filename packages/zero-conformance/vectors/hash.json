@@ -1,0 +1,1075 @@
+{
+  "formatVersion": 1,
+  "kind": "hash",
+  "description": "h32, h64, and h128 (shared/src/hash.ts) of strings; wide hashes in decimal.",
+  "cases": [
+    {
+      "input": "",
+      "h32": 46947589,
+      "h64": "201638359568529298",
+      "h128": "3719571214403283497883493104908516086"
+    },
+    {
+      "input": "a",
+      "h32": 1426945110,
+      "h64": "6128682584748879983",
+      "h128": "113054239149863338656013733210046359280"
+    },
+    {
+      "input": "A",
+      "h32": 275094093,
+      "h64": "1181520136379610050",
+      "h128": "21795199573729072896849746215440001737"
+    },
+    {
+      "input": "abc",
+      "h32": 852579327,
+      "h64": "3661800329566857471",
+      "h128": "67548293528545111057375047383885910287"
+    },
+    {
+      "input": "ab",
+      "h32": 1234828371,
+      "h64": "5303547470388537970",
+      "h128": "97833182869027046486904590795959279413"
+    },
+    {
+      "input": "b",
+      "h32": 2718739903,
+      "h64": "11676898972004176550",
+      "h128": "215400766911123199251351360484621795855"
+    },
+    {
+      "input": "Z",
+      "h32": 144536474,
+      "h64": "620779431106008842",
+      "h128": "11451359291835555502145238511894596724"
+    },
+    {
+      "input": "z",
+      "h32": 2804950734,
+      "h64": "12047171673028654218",
+      "h128": "222231092664402911292778171937139127959"
+    },
+    {
+      "input": " ",
+      "h32": 120460436,
+      "h64": "517373637092243339",
+      "h128": "9543859073924896079499808327478153593"
+    },
+    {
+      "input": "0",
+      "h32": 1212501170,
+      "h64": "5207652873615968876",
+      "h128": "96064239784311890462413639803208153488"
+    },
+    {
+      "input": "9",
+      "h32": 493800275,
+      "h64": "2120856033867429369",
+      "h128": "39122888473935146813506194566757574178"
+    },
+    {
+      "input": "\u0000",
+      "h32": 3479547966,
+      "h64": "14944544718881249643",
+      "h128": "275678191727310068899274308667179144507"
+    },
+    {
+      "input": "\u001f",
+      "h32": 2050290091,
+      "h64": "8805928891305891088",
+      "h128": "162440716589204668740503777272972862648"
+    },
+    {
+      "input": "\"",
+      "h32": 2578345570,
+      "h64": "11073909901333898205",
+      "h128": "204277581845224612180601860208842698555"
+    },
+    {
+      "input": "\\",
+      "h32": 1906917413,
+      "h64": "8190147928666406131",
+      "h128": "151081562765931586805445544610899338098"
+    },
+    {
+      "input": "\n",
+      "h32": 2177487698,
+      "h64": "9352238450756091061",
+      "h128": "172518349217403521068000152632977947466"
+    },
+    {
+      "input": "é",
+      "h32": 866461991,
+      "h64": "3721425915952903948",
+      "h128": "68648191460853370828026129761628416652"
+    },
+    {
+      "input": "é",
+      "h32": 2756231243,
+      "h64": "11837923048951082859",
+      "h128": "218371136848268094025665572416038917212"
+    },
+    {
+      "input": "ß",
+      "h32": 3617067294,
+      "h64": "15535185735313888468",
+      "h128": "286573595396878635048861986030974070783"
+    },
+    {
+      "input": "İ",
+      "h32": 2330854336,
+      "h64": "10010943146792216606",
+      "h128": "184669306165332571534516685129229310716"
+    },
+    {
+      "input": "ı",
+      "h32": 1369852355,
+      "h64": "5883471065170563511",
+      "h128": "108530885004276715595772458130503631456"
+    },
+    {
+      "input": "ﬀ",
+      "h32": 4225668063,
+      "h64": "18149106136618485662",
+      "h128": "334791916068792706251637145729982494802"
+    },
+    {
+      "input": " ",
+      "h32": 489771870,
+      "h64": "2103554164811042542",
+      "h128": "38803725323455144442831915344271258299"
+    },
+    {
+      "input": "",
+      "h32": 319710069,
+      "h64": "1373144294318139149",
+      "h128": "25330041373561217680747049806408957790"
+    },
+    {
+      "input": "�",
+      "h32": 1973258321,
+      "h64": "8475079955709316008",
+      "h128": "156337630947195434262906348206834796013"
+    },
+    {
+      "input": "￿",
+      "h32": 1127487448,
+      "h64": "4842521718114061174",
+      "h128": "89328758805430353823803323646137721246"
+    },
+    {
+      "input": "😀",
+      "h32": 1127825596,
+      "h64": "4843974051481038868",
+      "h128": "89355549627360700229774766935676228297"
+    },
+    {
+      "input": "😀a",
+      "h32": 1032446750,
+      "h64": "4434325028368566358",
+      "h128": "81798858937959790830086099990489128977"
+    },
+    {
+      "input": "a😀",
+      "h32": 1679733645,
+      "h64": "7214401074380399329",
+      "h128": "133082210264190453419552015768215903143"
+    },
+    {
+      "input": "𝒜",
+      "h32": 3702349041,
+      "h64": "15901468051534883171",
+      "h128": "293330311542932877046182197306416630085"
+    },
+    {
+      "input": "中文",
+      "h32": 4167075137,
+      "h64": "17897451433939562671",
+      "h128": "330149706173529144339476792651214810249"
+    },
+    {
+      "input": "Ω",
+      "h32": 2204773769,
+      "h64": "9469431234740186696",
+      "h128": "174680174510843660873973749386381965100"
+    },
+    {
+      "input": "ω",
+      "h32": 2980047985,
+      "h64": "12799208637219248696",
+      "h128": "236103726076796282272865994370385679397"
+    },
+    {
+      "input": "􏿿",
+      "h32": 2754081772,
+      "h64": "11828691143820226054",
+      "h128": "218200838257006412463398607892041056416"
+    },
+    {
+      "input": "",
+      "h32": 46947589,
+      "h64": "201638359568529298",
+      "h128": "3719571214403283497883493104908516086"
+    },
+    {
+      "input": "x",
+      "h32": 784609514,
+      "h64": "3369872205741831720",
+      "h128": "62163170140426669133212497609523263792"
+    },
+    {
+      "input": "xx",
+      "h32": 147859612,
+      "h64": "635052199793632595",
+      "h128": "11714645403039406213657041830526249078"
+    },
+    {
+      "input": "xxx",
+      "h32": 3858467804,
+      "h64": "16571993031695922253",
+      "h128": "305699314246992739410177282980086648650"
+    },
+    {
+      "input": "xxxx",
+      "h32": 1978068271,
+      "h64": "8495738533509599706",
+      "h128": "156718714444804085274396383437905703906"
+    },
+    {
+      "input": "xxxxx",
+      "h32": 3559223605,
+      "h64": "15286748986515356809",
+      "h128": "281990746273287652604944776888154037061"
+    },
+    {
+      "input": "xxxxxx",
+      "h32": 3394013617,
+      "h64": "14577177488768651623",
+      "h128": "268901462452355408240726287413290470756"
+    },
+    {
+      "input": "xxxxxxx",
+      "h32": 30467228,
+      "h64": "130855749200120000",
+      "h128": "2413862516068137018923287610946491896"
+    },
+    {
+      "input": "xxxxxxxx",
+      "h32": 11697914,
+      "h64": "50242158744375729",
+      "h128": "926804244068187512598585300488357905"
+    },
+    {
+      "input": "xxxxxxxxx",
+      "h32": 3044067341,
+      "h64": "13074169679395605709",
+      "h128": "241175862052063998072916132624204804398"
+    },
+    {
+      "input": "xxxxxxxxxx",
+      "h32": 3280233027,
+      "h64": "14088493577631734094",
+      "h128": "259886835410673269661744578568836186162"
+    },
+    {
+      "input": "xxxxxxxxxxx",
+      "h32": 1180127420,
+      "h64": "5068608677074642530",
+      "h128": "93499327075779472557755257782487068329"
+    },
+    {
+      "input": "xxxxxxxxxxxx",
+      "h32": 238654662,
+      "h64": "1025013972174769520",
+      "h128": "18908170416684416887530675000648146778"
+    },
+    {
+      "input": "xxxxxxxxxxxxx",
+      "h32": 4068533980,
+      "h64": "17474220388850809761",
+      "h128": "322342471400728291557533998410023498503"
+    },
+    {
+      "input": "xxxxxxxxxxxxxx",
+      "h32": 4034851963,
+      "h64": "17329557226757307754",
+      "h128": "319673907072695899166704505539725297095"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxx",
+      "h32": 775798960,
+      "h64": "3332031162495114825",
+      "h128": "61465126100172307400512928739278746496"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxx",
+      "h32": 404385805,
+      "h64": "1736823807844833832",
+      "h128": "32038744284439345550627841881067865826"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxx",
+      "h32": 1212095327,
+      "h64": "5205909791200776917",
+      "h128": "96032085589099460854280302154821195774"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxx",
+      "h32": 2425307592,
+      "h64": "10416616790615343714",
+      "h128": "192152664050387000959808349821268636977"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxx",
+      "h32": 1918637870,
+      "h64": "8240486906430541329",
+      "h128": "152010153005678744664413187137346231583"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxx",
+      "h32": 3597749392,
+      "h64": "15452215979485677146",
+      "h128": "285043073545257449311708091751143866552"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxx",
+      "h32": 1950877529,
+      "h64": "8378955187085152077",
+      "h128": "154564441941240936420426593811863560587"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxx",
+      "h32": 3261358638,
+      "h64": "14007428693722580953",
+      "h128": "258391452243836146181744605990887667061"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxx",
+      "h32": 2074752488,
+      "h64": "8910994085127036226",
+      "h128": "164378827330678023222208571608449841844"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxx",
+      "h32": 4168937102,
+      "h64": "17905448512837698057",
+      "h128": "330297226241300310987485840466751342392"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxx",
+      "h32": 3794197029,
+      "h64": "16295952155664954748",
+      "h128": "300607258852966896567299494608620296050"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "h32": 2559233379,
+      "h64": "10991823669633066148",
+      "h128": "202763358137064139304032963158714807811"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "h32": 3959739024,
+      "h64": "17006949612327710139",
+      "h128": "313722846973083143332330322059312947933"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "h32": 487919779,
+      "h64": "2095599494043938651",
+      "h128": "38656987547623760121663697854832233093"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "h32": 4171578245,
+      "h64": "17916792137970644356",
+      "h128": "330506479190995870840284397694115081983"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "h32": 3511744226,
+      "h64": "15082826603845548182",
+      "h128": "278229042269276628942083730900129532792"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "h32": 1805892444,
+      "h64": "7756248989758667966",
+      "h128": "143077540086046405010665296164152129086"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "h32": 634320413,
+      "h64": "2724385432498411277",
+      "h128": "50256040831440701901274569913328635344"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "h32": 827008391,
+      "h64": "3551973994876243027",
+      "h128": "65522355239953777315381685368733664710"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "h32": 2437475156,
+      "h64": "10468876080050458819",
+      "h128": "193116677788070482705384823773830118220"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "h32": 287539582,
+      "h64": "1234973101450515398",
+      "h128": "22781232740372999796096807120656931657"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "h32": 1539568550,
+      "h64": "6612396572517905142",
+      "h128": "121977187287112018050209378505958365291"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "h32": 1409749493,
+      "h64": "6054827968071526741",
+      "h128": "111691861937354282136714057431857958046"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "h32": 403555270,
+      "h64": "1733256688012604541",
+      "h128": "31972942537813958050241204095650002964"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "h32": 2935402065,
+      "h64": "12607455873833226032",
+      "h128": "232566511925187738786969198583388266596"
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "h32": 971545987,
+      "h64": "4172758242878378813",
+      "h128": "76973803387839416184469024113239233064"
+    },
+    {
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "h32": 251786041,
+      "h64": "1081412812359617141",
+      "h128": "19948545387628346853695927392777230364"
+    },
+    {
+      "input": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "h32": 1468547551,
+      "h64": "6307363706963837538",
+      "h128": "116350324082165879053057789308813434487"
+    },
+    {
+      "input": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+      "h32": 3937565075,
+      "h64": "16911713226648394727",
+      "h128": "311966045739951714546225703544097249364"
+    },
+    {
+      "input": "é\nİ𝒜Aa_𝒜A 中",
+      "h32": 3399627430,
+      "h64": "14601288632918545445",
+      "h128": "269346234557812818830038302251088742654"
+    },
+    {
+      "input": "İ A \"B 😀中\n𝒜_😀\naßabA𝒜A\\İ𝒜\n%%b𝒜__\\é",
+      "h32": 1313192138,
+      "h64": "5640117287651680975",
+      "h128": "104041800151015436452470601184502920933"
+    },
+    {
+      "input": "ß_中😀Aİ中\\%ßb\\ a\\\nAß😀B\"B中中%éßé😀𝒜𝒜\"aBAa\"中AB",
+      "h32": 1769176975,
+      "h64": "7598557252235373749",
+      "h128": "140168640961415615291471647894210270628"
+    },
+    {
+      "input": "𝒜%%\n\nßİ  \\_ 𝒜中\n\"中中İßéé😀",
+      "h32": 1161259165,
+      "h64": "4987570138144899057",
+      "h128": "92004429888035146355473051664468952540"
+    },
+    {
+      "input": "İ中\n\\%\"b_😀A😀_Aa\\\"",
+      "h32": 1918873557,
+      "h64": "8241499172638029104",
+      "h128": "152028826021342736213854744460950495730"
+    },
+    {
+      "input": "😀_\n\n\n%Ba",
+      "h32": 3917411849,
+      "h64": "16825155777060010309",
+      "h128": "310369342619721771012541758318447579356"
+    },
+    {
+      "input": "B中éé\nßa %",
+      "h32": 1470304614,
+      "h64": "6314910234236445814",
+      "h128": "116489532939408953275922030572290290766"
+    },
+    {
+      "input": "a_ßa中 _a\\a😀BA\\é中İ%",
+      "h32": 626700626,
+      "h64": "2691658693678805670",
+      "h128": "49652339056068301844881026656776641697"
+    },
+    {
+      "input": "İß",
+      "h32": 4218360726,
+      "h64": "18117721363137679933",
+      "h128": "334212969184580936462135547166212268614"
+    },
+    {
+      "input": "a\"_\\\\%ß\"_İB \"İ\"Aa%\"a\"",
+      "h32": 2983009920,
+      "h64": "12811930051107213478",
+      "h128": "236338394743043302996065291860207016744"
+    },
+    {
+      "input": "a\"Béé𝒜",
+      "h32": 2648986937,
+      "h64": "11377312263366690340",
+      "h128": "209874367569002500358811404826066415842"
+    },
+    {
+      "input": "İ AB\n\nßA😀%aA\\éb😀%中😀",
+      "h32": 903885035,
+      "h64": "3882156668562011302",
+      "h128": "71613150519008297966158191459365460998"
+    },
+    {
+      "input": "ß\"%中B%😀é中中é中 Aa\n\\\n",
+      "h32": 3075907135,
+      "h64": "13210920551947301047",
+      "h128": "243698470399881594232345029066799940363"
+    },
+    {
+      "input": "_𝒜aéBéa𝒜b%bAba_éß_Ba😀aa\n__%\"𝒜\\%\n Bb中b中",
+      "h32": 2795349650,
+      "h64": "12005935328780030325",
+      "h128": "221470416375513161547084503417954266829"
+    },
+    {
+      "input": "%a𝒜😀aa\n_\\Ba😀_中\nA_aé中ßB𝒜中b😀a\\𝒜%\n",
+      "h32": 82703243,
+      "h64": "355207725226978874",
+      "h128": "6552426000266623350243019319616959152"
+    },
+    {
+      "input": "ß𝒜中_é\\İ__%\nB_𝒜İ中\"İİ%\"😀_中 \\__a😀𝒜A\"中\n",
+      "h32": 2917963830,
+      "h64": "12532559222697309931",
+      "h128": "231184912569705586691998493361752399307"
+    },
+    {
+      "input": " _中%B𝒜Bß中_\"aß😀ß b",
+      "h32": 2334543971,
+      "h64": "10026790007554750332",
+      "h128": "184961629150190740966752782976715561700"
+    },
+    {
+      "input": "𝒜b\\_A%b%é😀B\n",
+      "h32": 3655479708,
+      "h64": "15700165800513909744",
+      "h128": "289616940436887342947288547704879301458"
+    },
+    {
+      "input": "\"𝒜\n\"é_ßéA \"éA%𝒜\n\"ßbİİİ \nA%%ß%中a",
+      "h32": 1894878408,
+      "h64": "8138440792885323825",
+      "h128": "150127734465393411669326434688560267741"
+    },
+    {
+      "input": "\"B中A",
+      "h32": 1897414694,
+      "h64": "8149334061467451050",
+      "h128": "150328679803054093498496731725386087556"
+    },
+    {
+      "input": "_éb中\"中\"b\néß%😀aéßé Abé\\A",
+      "h32": 1133315836,
+      "h64": "4867554455385052298",
+      "h128": "89790531303332737553158750850568433003"
+    },
+    {
+      "input": "\n😀😀😀中%ßA%\\ _ B_%ß\\a𝒜\"é",
+      "h32": 1341754949,
+      "h64": "5762793629124694271",
+      "h128": "106304779226067113760716150211373041222"
+    },
+    {
+      "input": "\"\"\"Aß\\\nB\\ßaa",
+      "h32": 2437396994,
+      "h64": "10468540378453530012",
+      "h128": "193110485186626801398040928483384452870"
+    },
+    {
+      "input": "\nİ\\%_\\A😀é𝒜bİé中\"B😀😀%\\中abİ\n _",
+      "h32": 2454694686,
+      "h64": "10542833401892174349",
+      "h128": "194480949576461578635031073381873050237"
+    },
+    {
+      "input": "\" %baaBBaé😀İb  İ𝒜é",
+      "h32": 2986921718,
+      "h64": "12828731098407346804",
+      "h128": "236648319362759151296481865766256843494"
+    },
+    {
+      "input": " é",
+      "h32": 2593085755,
+      "h64": "11137218515062257178",
+      "h128": "205445419640332985222336366463419520176"
+    },
+    {
+      "input": "%B _\n\n",
+      "h32": 336792386,
+      "h64": "1446512287027567471",
+      "h128": "26683441958273830165021271076283455716"
+    },
+    {
+      "input": "İ𝒜A_  A\n😀\n_\"b\né_\n\\𝒜",
+      "h32": 3341959820,
+      "h64": "14353608134496516336",
+      "h128": "264777335791372825424206486799251285701"
+    },
+    {
+      "input": "中B\"B中",
+      "h32": 1787891600,
+      "h64": "7678935952098415246",
+      "h128": "141651366266766654775255934855154442377"
+    },
+    {
+      "input": "\\𝒜 b中\"bß\n\"\nb中",
+      "h32": 116187506,
+      "h64": "499021539215115666",
+      "h128": "9205322621169853534499327966649473327"
+    },
+    {
+      "input": "éß\\\"_%%中𝒜ßß𝒜𝒜BB_b😀béß \"B\né𝒜\\\\İ%a中\"İaİİ\\",
+      "h32": 228676426,
+      "h64": "982157771279432148",
+      "h128": "18117613046796646254012052614332296118"
+    },
+    {
+      "input": "\\𝒜中中é_𝒜😀😀İB😀%éBAİéé𝒜\"é𝒜\\%%ß",
+      "h32": 563438336,
+      "h64": "2419949227527266221",
+      "h128": "44640184071566605505207966351578966070"
+    },
+    {
+      "input": "ßB_\n%aaßb\"ßb\"\\ab_A_ 中a",
+      "h32": 4116930186,
+      "h64": "17682080510116048292",
+      "h128": "326176813860838379181488143916561723805"
+    },
+    {
+      "input": "A_\\中\nBb",
+      "h32": 1874093456,
+      "h64": "8049170105741730196",
+      "h128": "148480980946371346428501762346815036308"
+    },
+    {
+      "input": "\\A𝒜İ𝒜😀Aaİ😀 é\\ba%😀_\\ß𝒜ßa\nb ß𝒜\"_AA\n",
+      "h32": 3512392309,
+      "h64": "15085610100192184339",
+      "h128": "278280388714013131641832812713009379104"
+    },
+    {
+      "input": "B\n\"Bb\na_é éb 中A%\n",
+      "h32": 1001682417,
+      "h64": "4302193222063805922",
+      "h128": "79361457323058912880232863843560542668"
+    },
+    {
+      "input": "Aa_\n\n𝒜_中é \\ Bİ𝒜中 b𝒜B𝒜b😀_ß中\n_𝒜İ中_𝒜",
+      "h32": 4116868749,
+      "h64": "17681816640829520655",
+      "h128": "326171946331640891521391193183988366537"
+    },
+    {
+      "input": "%\n𝒜aa",
+      "h32": 1749333306,
+      "h64": "7513329343038218315",
+      "h128": "138596463532518332496562335328627001786"
+    },
+    {
+      "input": "aAİB%A",
+      "h32": 4247419059,
+      "h64": "18242525953234460733",
+      "h128": "336515207517320477491131574046169361668"
+    },
+    {
+      "input": "𝒜😀\n İ\né",
+      "h32": 2845918412,
+      "h64": "12223126509125335347",
+      "h128": "225476886494409899407796903583885725628"
+    },
+    {
+      "input": "中𝒜a%ßa_éß_\\\n\nİİ\"\\İB%é\nß%é𝒜é 𝒜\nb𝒜",
+      "h32": 2678245955,
+      "h64": "11502978787857112874",
+      "h128": "212192505784909878479556309836299358905"
+    },
+    {
+      "input": "%😀",
+      "h32": 341447480,
+      "h64": "1466505763864513259",
+      "h128": "27052256508628609077895188123765783547"
+    },
+    {
+      "input": "Aab𝒜\n中__中%\"中éBA%\n\n𝒜",
+      "h32": 1342803158,
+      "h64": "5767295650104800808",
+      "h128": "106387826854901610085738265291263181686"
+    },
+    {
+      "input": "𝒜ßß_a \n b中éb\na\"a中\n𝒜A\"\"𝒜 İ𝒜中% \"%\\_𝒜",
+      "h32": 2191658095,
+      "h64": "9413099844175257973",
+      "h128": "173641043765776243800246275553929415239"
+    },
+    {
+      "input": "\"İ_İb𝒜𝒜中\\é_é😀é😀",
+      "h32": 953228944,
+      "h64": "4094087140930662357",
+      "h128": "75522577704213177691317961226036497752"
+    },
+    {
+      "input": "B😀b😀İİ😀a _a%𝒜a中AB\n \né%é%aAB\"_😀a\\\\ 😀b\na",
+      "h32": 318272771,
+      "h64": "1366971146538897868",
+      "h128": "25216166896348365301453137160458090211"
+    },
+    {
+      "input": "\n中a_a bß béa𝒜%ßİ\nİAé😀a aé\\",
+      "h32": 4257782109,
+      "h64": "18287034914652242868",
+      "h128": "337336252937580917166325804621215073824"
+    },
+    {
+      "input": "%bßİ中Aß%\"%",
+      "h32": 2130457153,
+      "h64": "9150243798623610316",
+      "h128": "168792205565257659443346574790265189856"
+    },
+    {
+      "input": "中__%bBb%%\\中",
+      "h32": 2955721066,
+      "h64": "12694725318211876684",
+      "h128": "234176349031095538054772759105420947594"
+    },
+    {
+      "input": "\"aßA😀 BbßB\"İİ\\a𝒜𝒜A𝒜\n",
+      "h32": 3927160349,
+      "h64": "16867025265669681648",
+      "h128": "311141698360601475363295622211322978161"
+    },
+    {
+      "input": "%İ中",
+      "h32": 3141106639,
+      "h64": "13490950291717580347",
+      "h128": "248864107342451421850621799362646338541"
+    },
+    {
+      "input": "",
+      "h32": 46947589,
+      "h64": "201638359568529298",
+      "h128": "3719571214403283497883493104908516086"
+    },
+    {
+      "input": "b\nß\\%😀😀\"Bß\né%Bb𝒜😀_é😀中ß中",
+      "h32": 3569451073,
+      "h64": "15330675626273432182",
+      "h128": "282801049754922903853566917489433032120"
+    },
+    {
+      "input": "\"Bİ中ß_ßA中𝒜é\nAéA\n\"\\\"ßAİ\nbAA中é中\n ",
+      "h32": 710633660,
+      "h64": "3052148332977905836",
+      "h128": "56302199173442671709801861030156515882"
+    },
+    {
+      "input": "A中😀𝒜\"ßİA中%é中",
+      "h32": 1979960802,
+      "h64": "8503866894755738604",
+      "h128": "156868656244450268391848091264666407557"
+    },
+    {
+      "input": "\\abé😀\\\n\\A中😀中_a\n\n_中İß中𝒜Baßé𝒜ß%\\_\n B\"",
+      "h32": 2737414483,
+      "h64": "11757105682223034968",
+      "h128": "216880319567524665113645459530141959276"
+    },
+    {
+      "input": "b𝒜ßé\"",
+      "h32": 4250925200,
+      "h64": "18257584712192172596",
+      "h128": "336792992589881069413141793999284495639"
+    },
+    {
+      "input": "𝒜B_ 𝒜İAİ é𝒜Aéébb",
+      "h32": 1873260948,
+      "h64": "8045594510117446742",
+      "h128": "148415022848979113818175741149483661612"
+    },
+    {
+      "input": "A😀a\"abB中é😀Aßb_\n ab𝒜𝒜\"中%AA\n😀é_%𝒜%Aß_A\"\"İ",
+      "h32": 2743525045,
+      "h64": "11783350344767559040",
+      "h128": "217364448140784371563684653799307501932"
+    },
+    {
+      "input": "_A𝒜İ 𝒜é𝒜𝒜_ß中中_ \né\\中😀aİİéé中𝒜中b",
+      "h32": 2774911138,
+      "h64": "11918152590948774473",
+      "h128": "219851110676650443401956591998328040192"
+    },
+    {
+      "input": "%_éé\n",
+      "h32": 3016274498,
+      "h64": "12954800327420064584",
+      "h128": "238973886165926635268431584373752052191"
+    },
+    {
+      "input": "\\\\中b😀_% 中😀éaßa%ß_é𝒜İ中B_é😀 _",
+      "h32": 2435661397,
+      "h64": "10461086046272333352",
+      "h128": "192972977028639849518343443499912947332"
+    },
+    {
+      "input": "𝒜 AB",
+      "h32": 4206124213,
+      "h64": "18065165941805016690",
+      "h128": "333243492777571322251706715821002052523"
+    },
+    {
+      "input": "ab\n_中B\\İ\"%\\b\nBaßİßa😀ßİ😀中中\\\"\"_éé😀",
+      "h32": 1494498535,
+      "h64": "6418822334550769408",
+      "h128": "118406372860068914466751524862774505305"
+    },
+    {
+      "input": "𝒜ß\n\"\nßB中İ𝒜\nİ𝒜%😀 ßA𝒜 中ßßABa\\aA\"",
+      "h32": 957683648,
+      "h64": "4113219949637951986",
+      "h128": "75875515729847791168803712406501501711"
+    },
+    {
+      "input": "AA\"b𝒜aß_Babé\\\\ß\nß%😀 𝒜",
+      "h32": 1953566671,
+      "h64": "8390504966451144836",
+      "h128": "154777497765313216219719277544199287859"
+    },
+    {
+      "input": "A_中A\" bß %%a ",
+      "h32": 273780283,
+      "h64": "1175877363672901957",
+      "h128": "21691108789742315372814728831566252851"
+    },
+    {
+      "input": "éß😀İ\n\"A\\_%B \\éİ\"𝒜\\B%aaİ Abé\\",
+      "h32": 195784990,
+      "h64": "840890131388299857",
+      "h128": "15511685047827966603201963772739362448"
+    },
+    {
+      "input": "😀A中b\"İ中_%%é_\"\nİ_\n\"\n\"A\\\\é",
+      "h32": 2208192298,
+      "h64": "9484113703841472802",
+      "h128": "174951018260725233950011910541758749474"
+    },
+    {
+      "input": "B\\A 😀\"😀𝒜AB😀\"ééé",
+      "h32": 228543709,
+      "h64": "981587759374665199",
+      "h128": "18107098183070442628488472746370968463"
+    },
+    {
+      "input": "\\%B\\",
+      "h32": 10471842,
+      "h64": "44976222954444857",
+      "h128": "829664874242745172172195387602952521"
+    },
+    {
+      "input": "AB\n\"%ß😀  B%中éab é中ßbé\n\n_%ßb",
+      "h32": 469264619,
+      "h64": "2015476193254086159",
+      "h128": "37178973523612500842191616363541095142"
+    },
+    {
+      "input": "b",
+      "h32": 2718739903,
+      "h64": "11676898972004176550",
+      "h128": "215400766911123199251351360484621795855"
+    },
+    {
+      "input": "😀\n",
+      "h32": 3262101978,
+      "h64": "14010621314339134371",
+      "h128": "258450345699274155883361944573385607671"
+    },
+    {
+      "input": "\né\"_\n%中b\"\\éß\n\"\"\\\"%😀bé\\B",
+      "h32": 770543245,
+      "h64": "3309458039642643848",
+      "h128": "61048725479968370741265885320820277286"
+    },
+    {
+      "input": "\"A\"% ß𝒜𝒜%a",
+      "h32": 720698375,
+      "h64": "3095375951661095820",
+      "h128": "57099607992207382842348475435795750636"
+    },
+    {
+      "input": "ß😀é𝒜\n中%a𝒜\nİİa",
+      "h32": 3263515421,
+      "h64": "14016692005383032189",
+      "h128": "258562330183311499599773783125209566205"
+    },
+    {
+      "input": "%\"B😀b\n😀%\n𝒜bb\\\\İé",
+      "h32": 1116499877,
+      "h64": "4795330458920454059",
+      "h128": "88458233724569790378501849673001993851"
+    },
+    {
+      "input": "𝒜% 😀_中 ßİ中😀\\B\"_\"A%B\"😀",
+      "h32": 215600628,
+      "h64": "925997646902249444",
+      "h128": "17081641605263059882700022020769150031"
+    },
+    {
+      "input": "中\\%é 𝒜İ\nb😀a",
+      "h32": 93859310,
+      "h64": "403122668609858188",
+      "h128": "7436300698156881036926162321615747152"
+    },
+    {
+      "input": "_%b\"中İ_İéAbéßBbİBAaßßA𝒜\n",
+      "h32": 746843290,
+      "h64": "3207667506961164625",
+      "h128": "59171021574466555456570234168801321992"
+    },
+    {
+      "input": "\\中a中\"é\\",
+      "h32": 3069781744,
+      "h64": "13184612197849052705",
+      "h128": "243213166924830679229947541281092525847"
+    },
+    {
+      "input": "a😀😀ß中\"ß \"_\n😀B%İ\\_\nßß_😀ßé \\bA\\a ß%\\\\é",
+      "h32": 2686967023,
+      "h64": "11540435489678727627",
+      "h128": "212883459977258456184162653942584175410"
+    },
+    {
+      "input": "中ß\n\n𝒜b éßB😀b\\a\"\néİabA😀%",
+      "h32": 1742652495,
+      "h64": "7484635477247643194",
+      "h128": "138067155133794223645172319365876535423"
+    },
+    {
+      "input": "A aİaaİ_b\\_ba\nb%😀bB%ba😀",
+      "h32": 3990190579,
+      "h64": "17137738044859729187",
+      "h128": "316135467715802927233636894736815475889"
+    },
+    {
+      "input": "\"_b\n\nßBA_aB\"中AA\n😀_é𝒜\"",
+      "h32": 1046162932,
+      "h64": "4493235582414135132",
+      "h128": "82885566851678832856407469506156660222"
+    },
+    {
+      "input": "\\ßa\\ß_B😀a \"é%_\né\\%İ%中B𝒜",
+      "h32": 1795519016,
+      "h64": "7711695457193748375",
+      "h128": "142255672473241649025435763671919008233"
+    },
+    {
+      "input": "%\n𝒜bİB\\𝒜 A\" A😀_\nA\"\n 中 a\néß AéİA\n\"baé",
+      "h32": 1521821832,
+      "h64": "6536175000878374010",
+      "h128": "120571147462181669112712065379421979854"
+    },
+    {
+      "input": "𝒜B\\bA\"b%ß \\\"𝒜İ _Bßİ𝒜\n",
+      "h32": 1270954229,
+      "h64": "5458706850323743182",
+      "h128": "100695368241327241951929237476046186505"
+    },
+    {
+      "input": "𝒜",
+      "h32": 3702349041,
+      "h64": "15901468051534883171",
+      "h128": "293330311542932877046182197306416630085"
+    },
+    {
+      "input": "%\"𝒜😀%éß𝒜aé_𝒜中",
+      "h32": 2780208526,
+      "h64": "11940904696360470225",
+      "h128": "220270812942318057025315622863557370450"
+    },
+    {
+      "input": "İßİ😀%中AAé _b中\\é\\_B\"",
+      "h32": 27475118,
+      "h64": "118004736676360654",
+      "h128": "2176803176954312079703362314649385471"
+    },
+    {
+      "input": "\"\n_𝒜Bßß%ß_中\\\"\"\\ \\__é%",
+      "h32": 1879938904,
+      "h64": "8074276111725808186",
+      "h128": "148944105013472653632961034061797175748"
+    },
+    {
+      "input": "a\"😀%B𝒜B\"%中\\__a\"AB\"",
+      "h32": 2830318661,
+      "h64": "12156126086732739353",
+      "h128": "224240946849703242515298020540472967932"
+    },
+    {
+      "input": "A\"\\𝒜😀ß\n\\_\n\n\na  A _aAB%𝒜%Bb_ ß",
+      "h32": 3962245802,
+      "h64": "17017716140989112599",
+      "h128": "313921454371862293189197239073928333454"
+    },
+    {
+      "input": "a\\𝒜\\\né%\na\"中%中 aa \\ ßA\n__\"%𝒜中BABß",
+      "h32": 3132017394,
+      "h64": "13451912278596096066",
+      "h128": "248143983105253285962210629179202343898"
+    },
+    {
+      "input": " \\%ß_éé%ß中\n𝒜ß\nBA",
+      "h32": 3814896092,
+      "h64": "16384853954763958197",
+      "h128": "302247207588638555601666867979708368893"
+    },
+    {
+      "input": "𝒜aİB\"B a%\\b",
+      "h32": 1501241954,
+      "h64": "6447785099021273112",
+      "h128": "118940641563923424221304835316589112871"
+    },
+    {
+      "input": "ß 𝒜İa",
+      "h32": 1708734135,
+      "h64": "7338957228914824589",
+      "h128": "135379865769692413672366829071488175231"
+    },
+    {
+      "input": "İAİ_A _\\𝒜ß %Bİßb_\nb",
+      "h32": 2359739838,
+      "h64": "10135005433966287109",
+      "h128": "186957851426031709093953994788834149136"
+    }
+  ]
+}

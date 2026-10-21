@@ -1,0 +1,6622 @@
+{
+  "formatVersion": 1,
+  "kind": "protocol-downstream",
+  "description": "Downstream messages (`downstreamSchema`). `ok` is whether valita accepts the message in `passthrough` mode; `output` is its `strip` output, with each mutation result as the client reads it (`{error, message?, details?}` if it has an `error` key, else `{data?}`).",
+  "cases": [
+    {
+      "message": [
+        "connected",
+        {
+          "wsid": "ws1"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "connected",
+        {
+          "wsid": "ws1"
+        }
+      ]
+    },
+    {
+      "message": [
+        "connected",
+        {
+          "wsid": "ws1",
+          "timestamp": 1700000000000
+        }
+      ],
+      "ok": true,
+      "output": [
+        "connected",
+        {
+          "wsid": "ws1",
+          "timestamp": 1700000000000
+        }
+      ]
+    },
+    {
+      "message": [
+        "connected",
+        {
+          "wsid": "ws1",
+          "timestamp": null
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "connected",
+        {
+          "wsid": 1
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "connected",
+        {}
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "connected",
+        {
+          "wsid": "ws1"
+        },
+        "extra"
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "connected"
+      ],
+      "ok": false
+    },
+    {
+      "message": [],
+      "ok": false
+    },
+    {
+      "message": "connected",
+      "ok": false
+    },
+    {
+      "message": null,
+      "ok": false
+    },
+    {
+      "message": {},
+      "ok": false
+    },
+    {
+      "message": 5,
+      "ok": false
+    },
+    {
+      "message": [
+        "unknownMessage",
+        {}
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        1,
+        {}
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pong",
+        {}
+      ],
+      "ok": true,
+      "output": [
+        "pong",
+        {}
+      ]
+    },
+    {
+      "message": [
+        "pong",
+        {
+          "zExtra": 1
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pong",
+        {}
+      ]
+    },
+    {
+      "message": [
+        "pong",
+        []
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pong",
+        null
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "AuthInvalidated",
+          "message": "m"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "AuthInvalidated",
+          "message": "m"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "ClientNotFound",
+          "message": "m"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "ClientNotFound",
+          "message": "m"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "InvalidConnectionRequest",
+          "message": "m"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "InvalidConnectionRequest",
+          "message": "m"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "InvalidConnectionRequestBaseCookie",
+          "message": "m"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "InvalidConnectionRequestBaseCookie",
+          "message": "m"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "InvalidConnectionRequestLastMutationID",
+          "message": "m"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "InvalidConnectionRequestLastMutationID",
+          "message": "m"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "InvalidConnectionRequestClientDeleted",
+          "message": "m"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "InvalidConnectionRequestClientDeleted",
+          "message": "m"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "InvalidMessage",
+          "message": "m"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "InvalidMessage",
+          "message": "m"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "InvalidPush",
+          "message": "m"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "InvalidPush",
+          "message": "m"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "MutationFailed",
+          "message": "m"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "MutationFailed",
+          "message": "m"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "MutationRateLimited",
+          "message": "m"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "MutationRateLimited",
+          "message": "m"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "Unauthorized",
+          "message": "m"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "Unauthorized",
+          "message": "m"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "VersionNotSupported",
+          "message": "m"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "VersionNotSupported",
+          "message": "m"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "SchemaVersionNotSupported",
+          "message": "m"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "SchemaVersionNotSupported",
+          "message": "m"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "Internal",
+          "message": "m"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "Internal",
+          "message": "m"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "InvalidMessage",
+          "message": "m",
+          "origin": "server"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "InvalidMessage",
+          "message": "m",
+          "origin": "server"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "InvalidMessage",
+          "message": "m",
+          "origin": "zeroCache"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "InvalidMessage",
+          "message": "m",
+          "origin": "zeroCache"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "InvalidMessage",
+          "message": "m",
+          "origin": "client"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "InvalidMessage"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "error",
+        {
+          "message": "m"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "NoSuchKind",
+          "message": "m"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "Rebalance",
+          "message": "m",
+          "minBackoffMs": 100,
+          "maxBackoffMs": 1000,
+          "reconnectParams": {
+            "a": "b",
+            "": ""
+          },
+          "origin": "zeroCache"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "Rebalance",
+          "message": "m",
+          "minBackoffMs": 100,
+          "maxBackoffMs": 1000,
+          "reconnectParams": {
+            "a": "b",
+            "": ""
+          },
+          "origin": "zeroCache"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "Rehome",
+          "message": "m",
+          "minBackoffMs": 100,
+          "maxBackoffMs": 1000,
+          "reconnectParams": {
+            "a": "b",
+            "": ""
+          },
+          "origin": "zeroCache"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "Rehome",
+          "message": "m",
+          "minBackoffMs": 100,
+          "maxBackoffMs": 1000,
+          "reconnectParams": {
+            "a": "b",
+            "": ""
+          },
+          "origin": "zeroCache"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "ServerOverloaded",
+          "message": "m",
+          "minBackoffMs": 100,
+          "maxBackoffMs": 1000,
+          "reconnectParams": {
+            "a": "b",
+            "": ""
+          },
+          "origin": "zeroCache"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "ServerOverloaded",
+          "message": "m",
+          "minBackoffMs": 100,
+          "maxBackoffMs": 1000,
+          "reconnectParams": {
+            "a": "b",
+            "": ""
+          },
+          "origin": "zeroCache"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "Rebalance",
+          "message": "m",
+          "origin": "server"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "Rehome",
+          "message": "m",
+          "reconnectParams": {
+            "a": 1
+          }
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "mutationIDs": [
+            {
+              "id": 1,
+              "clientID": "c"
+            }
+          ],
+          "origin": "server",
+          "reason": "database"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "mutationIDs": [
+            {
+              "id": 1,
+              "clientID": "c"
+            }
+          ],
+          "origin": "server",
+          "reason": "database"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "mutationIDs": [
+            {
+              "id": 1,
+              "clientID": "c"
+            }
+          ],
+          "origin": "server",
+          "reason": "parse"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "mutationIDs": [
+            {
+              "id": 1,
+              "clientID": "c"
+            }
+          ],
+          "origin": "server",
+          "reason": "parse"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "mutationIDs": [
+            {
+              "id": 1,
+              "clientID": "c"
+            }
+          ],
+          "origin": "server",
+          "reason": "oooMutation"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "mutationIDs": [
+            {
+              "id": 1,
+              "clientID": "c"
+            }
+          ],
+          "origin": "server",
+          "reason": "oooMutation"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "mutationIDs": [
+            {
+              "id": 1,
+              "clientID": "c"
+            }
+          ],
+          "origin": "server",
+          "reason": "unsupportedPushVersion"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "mutationIDs": [
+            {
+              "id": 1,
+              "clientID": "c"
+            }
+          ],
+          "origin": "server",
+          "reason": "unsupportedPushVersion"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "mutationIDs": [
+            {
+              "id": 1,
+              "clientID": "c"
+            }
+          ],
+          "origin": "server",
+          "reason": "internal"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "mutationIDs": [
+            {
+              "id": 1,
+              "clientID": "c"
+            }
+          ],
+          "origin": "server",
+          "reason": "internal"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "mutationIDs": [
+            {
+              "id": 1,
+              "clientID": "c"
+            }
+          ],
+          "origin": "server",
+          "reason": "http"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "mutationIDs": [
+            {
+              "id": 1,
+              "clientID": "c"
+            }
+          ],
+          "origin": "server",
+          "reason": "timeout"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "mutationIDs": [],
+          "origin": "zeroCache",
+          "reason": "timeout"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "mutationIDs": [],
+          "origin": "zeroCache",
+          "reason": "timeout"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "mutationIDs": [],
+          "origin": "zeroCache",
+          "reason": "parse"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "mutationIDs": [],
+          "origin": "zeroCache",
+          "reason": "parse"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "mutationIDs": [],
+          "origin": "zeroCache",
+          "reason": "internal"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "mutationIDs": [],
+          "origin": "zeroCache",
+          "reason": "internal"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "mutationIDs": [],
+          "origin": "zeroCache",
+          "reason": "database"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "mutationIDs": [],
+          "origin": "zeroCache",
+          "reason": "oooMutation"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "mutationIDs": [
+            {
+              "id": 1,
+              "clientID": "c"
+            },
+            {
+              "id": 2,
+              "clientID": "c"
+            }
+          ],
+          "origin": "zeroCache",
+          "reason": "http",
+          "status": 500,
+          "bodyPreview": "<html>",
+          "details": {
+            "a": [
+              1,
+              null
+            ]
+          }
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "mutationIDs": [
+            {
+              "id": 1,
+              "clientID": "c"
+            },
+            {
+              "id": 2,
+              "clientID": "c"
+            }
+          ],
+          "message": "m",
+          "origin": "zeroCache",
+          "reason": "http",
+          "status": 500,
+          "bodyPreview": "<html>",
+          "details": {
+            "a": [
+              1,
+              null
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "mutationIDs": [],
+          "origin": "zeroCache",
+          "reason": "http"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "origin": "server",
+          "reason": "parse"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "PushFailed",
+          "message": "m",
+          "mutationIDs": [],
+          "origin": "client",
+          "reason": "parse"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "TransformFailed",
+          "message": "m",
+          "queryIDs": [
+            "q"
+          ],
+          "origin": "server",
+          "reason": "database"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "TransformFailed",
+          "message": "m",
+          "queryIDs": [
+            "q"
+          ],
+          "origin": "server",
+          "reason": "database"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "TransformFailed",
+          "message": "m",
+          "queryIDs": [
+            "q"
+          ],
+          "origin": "server",
+          "reason": "parse"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "TransformFailed",
+          "message": "m",
+          "queryIDs": [
+            "q"
+          ],
+          "origin": "server",
+          "reason": "parse"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "TransformFailed",
+          "message": "m",
+          "queryIDs": [
+            "q"
+          ],
+          "origin": "server",
+          "reason": "internal"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "TransformFailed",
+          "message": "m",
+          "queryIDs": [
+            "q"
+          ],
+          "origin": "server",
+          "reason": "internal"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "TransformFailed",
+          "message": "m",
+          "queryIDs": [
+            "q"
+          ],
+          "origin": "server",
+          "reason": "oooMutation"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "TransformFailed",
+          "message": "m",
+          "queryIDs": [
+            "q"
+          ],
+          "origin": "server",
+          "reason": "http"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "TransformFailed",
+          "message": "m",
+          "queryIDs": [],
+          "origin": "zeroCache",
+          "reason": "timeout"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "TransformFailed",
+          "message": "m",
+          "queryIDs": [],
+          "origin": "zeroCache",
+          "reason": "timeout"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "TransformFailed",
+          "message": "m",
+          "queryIDs": [],
+          "origin": "zeroCache",
+          "reason": "parse"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "TransformFailed",
+          "message": "m",
+          "queryIDs": [],
+          "origin": "zeroCache",
+          "reason": "parse"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "TransformFailed",
+          "message": "m",
+          "queryIDs": [],
+          "origin": "zeroCache",
+          "reason": "internal"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "TransformFailed",
+          "message": "m",
+          "queryIDs": [],
+          "origin": "zeroCache",
+          "reason": "internal"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "TransformFailed",
+          "message": "m",
+          "queryIDs": [],
+          "origin": "zeroCache",
+          "reason": "database"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "TransformFailed",
+          "message": "m",
+          "queryIDs": [
+            "q1",
+            "q2"
+          ],
+          "origin": "zeroCache",
+          "reason": "http",
+          "status": 404,
+          "details": "d"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "TransformFailed",
+          "queryIDs": [
+            "q1",
+            "q2"
+          ],
+          "message": "m",
+          "origin": "zeroCache",
+          "reason": "http",
+          "status": 404,
+          "details": "d"
+        }
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "TransformFailed",
+          "message": "m",
+          "mutationIDs": [],
+          "origin": "server",
+          "reason": "parse"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokeStart",
+        {
+          "pokeID": "p",
+          "baseCookie": null
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokeStart",
+        {
+          "pokeID": "p",
+          "baseCookie": null
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokeStart",
+        {
+          "pokeID": "p",
+          "baseCookie": "1",
+          "schemaVersions": {
+            "minSupportedVersion": 1,
+            "maxSupportedVersion": 2
+          },
+          "timestamp": 5
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokeStart",
+        {
+          "pokeID": "p",
+          "baseCookie": "1",
+          "schemaVersions": {
+            "minSupportedVersion": 1,
+            "maxSupportedVersion": 2
+          },
+          "timestamp": 5
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokeStart",
+        {
+          "pokeID": "p"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokeStart",
+        {
+          "pokeID": "p",
+          "baseCookie": 1
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokeStart",
+        {
+          "pokeID": "p",
+          "baseCookie": "1",
+          "schemaVersions": {
+            "minSupportedVersion": 1
+          }
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "p"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokePart",
+        {
+          "pokeID": "p"
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokePart",
+        {}
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "p",
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "t",
+              "value": {
+                "id": 1,
+                "x": null,
+                "j": {
+                  "a": [
+                    1
+                  ]
+                }
+              }
+            },
+            {
+              "op": "update",
+              "tableName": "t",
+              "id": {
+                "id": 1
+              },
+              "merge": {
+                "x": 2
+              },
+              "constrain": [
+                "id",
+                "x"
+              ]
+            },
+            {
+              "op": "update",
+              "tableName": "t",
+              "id": {
+                "id": "a",
+                "b": true
+              },
+              "merge": [
+                1,
+                2
+              ]
+            },
+            {
+              "op": "update",
+              "tableName": "t",
+              "id": {
+                "id": "a"
+              }
+            },
+            {
+              "op": "del",
+              "tableName": "t",
+              "id": {
+                "id": 1.5
+              }
+            },
+            {
+              "op": "del",
+              "tableName": "t",
+              "id": {}
+            },
+            {
+              "op": "clear"
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokePart",
+        {
+          "pokeID": "p",
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "t",
+              "value": {
+                "id": 1,
+                "x": null,
+                "j": {
+                  "a": [
+                    1
+                  ]
+                }
+              }
+            },
+            {
+              "op": "update",
+              "tableName": "t",
+              "id": {
+                "id": 1
+              },
+              "merge": {
+                "x": 2
+              },
+              "constrain": [
+                "id",
+                "x"
+              ]
+            },
+            {
+              "op": "update",
+              "tableName": "t",
+              "id": {
+                "id": "a",
+                "b": true
+              },
+              "merge": [
+                1,
+                2
+              ]
+            },
+            {
+              "op": "update",
+              "tableName": "t",
+              "id": {
+                "id": "a"
+              }
+            },
+            {
+              "op": "del",
+              "tableName": "t",
+              "id": {
+                "id": 1.5
+              }
+            },
+            {
+              "op": "del",
+              "tableName": "t",
+              "id": {}
+            },
+            {
+              "op": "clear"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "p",
+          "rowsPatch": [
+            {
+              "op": "update",
+              "tableName": "t",
+              "id": {
+                "id": 1
+              },
+              "merge": "x"
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "p",
+          "rowsPatch": [
+            {
+              "op": "update",
+              "tableName": "t",
+              "id": {
+                "id": 1
+              },
+              "merge": null
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "p",
+          "rowsPatch": [
+            {
+              "op": "del",
+              "tableName": "t",
+              "id": {
+                "id": null
+              }
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "p",
+          "rowsPatch": [
+            {
+              "op": "del",
+              "tableName": "t",
+              "id": []
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "p",
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "t",
+              "value": []
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "p",
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "t"
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "p",
+          "rowsPatch": [
+            {
+              "op": "upsert",
+              "tableName": "t",
+              "value": {}
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "p",
+          "rowsPatch": {}
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "p",
+          "lastMutationIDChanges": {
+            "c1": 5,
+            "c2": 0
+          },
+          "desiredQueriesPatches": {
+            "c1": [
+              {
+                "op": "put",
+                "hash": "h",
+                "ttl": 1000
+              },
+              {
+                "op": "del",
+                "hash": "h2"
+              },
+              {
+                "op": "clear"
+              }
+            ],
+            "c2": []
+          },
+          "gotQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "h"
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokePart",
+        {
+          "pokeID": "p",
+          "lastMutationIDChanges": {
+            "c1": 5,
+            "c2": 0
+          },
+          "desiredQueriesPatches": {
+            "c1": [
+              {
+                "op": "put",
+                "hash": "h",
+                "ttl": 1000
+              },
+              {
+                "op": "del",
+                "hash": "h2"
+              },
+              {
+                "op": "clear"
+              }
+            ],
+            "c2": []
+          },
+          "gotQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "h"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "p",
+          "lastMutationIDChanges": {
+            "c1": "5"
+          }
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "p",
+          "gotQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "h",
+              "ttl": null
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "p",
+          "gotQueriesPatch": [
+            {
+              "op": "add",
+              "hash": "h"
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "p",
+          "mutationsPatch": [
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 1,
+                  "clientID": "c"
+                },
+                "result": {}
+              }
+            },
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 2,
+                  "clientID": "c"
+                },
+                "result": {
+                  "data": {
+                    "a": 1
+                  }
+                }
+              }
+            },
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 3,
+                  "clientID": "c"
+                },
+                "result": {
+                  "data": null
+                }
+              }
+            },
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 4,
+                  "clientID": "c"
+                },
+                "result": {
+                  "error": "app",
+                  "message": "boom",
+                  "details": [
+                    1
+                  ]
+                }
+              }
+            },
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 5,
+                  "clientID": "c"
+                },
+                "result": {
+                  "error": "oooMutation"
+                }
+              }
+            },
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 6,
+                  "clientID": "c"
+                },
+                "result": {
+                  "error": "alreadyProcessed",
+                  "details": "x"
+                }
+              }
+            },
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 7,
+                  "clientID": "c"
+                },
+                "result": {
+                  "error": 5,
+                  "message": 6
+                }
+              }
+            },
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 8,
+                  "clientID": "c"
+                },
+                "result": {
+                  "error": null
+                }
+              }
+            },
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 9,
+                  "clientID": "c"
+                },
+                "result": {
+                  "data": 1,
+                  "error": "app",
+                  "zExtra": true
+                }
+              }
+            },
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 10,
+                  "clientID": "c"
+                },
+                "result": {
+                  "zExtra": true
+                }
+              }
+            },
+            {
+              "op": "del",
+              "id": {
+                "id": 11,
+                "clientID": "c"
+              }
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokePart",
+        {
+          "pokeID": "p",
+          "mutationsPatch": [
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 1,
+                  "clientID": "c"
+                },
+                "result": {}
+              }
+            },
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 2,
+                  "clientID": "c"
+                },
+                "result": {
+                  "data": {
+                    "a": 1
+                  }
+                }
+              }
+            },
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 3,
+                  "clientID": "c"
+                },
+                "result": {
+                  "data": null
+                }
+              }
+            },
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 4,
+                  "clientID": "c"
+                },
+                "result": {
+                  "error": "app",
+                  "message": "boom",
+                  "details": [
+                    1
+                  ]
+                }
+              }
+            },
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 5,
+                  "clientID": "c"
+                },
+                "result": {
+                  "error": "oooMutation"
+                }
+              }
+            },
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 6,
+                  "clientID": "c"
+                },
+                "result": {
+                  "error": "alreadyProcessed",
+                  "details": "x"
+                }
+              }
+            },
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 7,
+                  "clientID": "c"
+                },
+                "result": {
+                  "error": 5,
+                  "message": 6
+                }
+              }
+            },
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 8,
+                  "clientID": "c"
+                },
+                "result": {
+                  "error": null
+                }
+              }
+            },
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 9,
+                  "clientID": "c"
+                },
+                "result": {
+                  "data": 1
+                }
+              }
+            },
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 10,
+                  "clientID": "c"
+                },
+                "result": {}
+              }
+            },
+            {
+              "op": "del",
+              "id": {
+                "id": 11,
+                "clientID": "c"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "p",
+          "mutationsPatch": [
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 1,
+                  "clientID": "c"
+                },
+                "result": null
+              }
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "p",
+          "mutationsPatch": [
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 1,
+                  "clientID": "c"
+                },
+                "result": []
+              }
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "p",
+          "mutationsPatch": [
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 1,
+                  "clientID": "c"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "p",
+          "mutationsPatch": [
+            {
+              "op": "del",
+              "id": {
+                "id": 1
+              }
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokeEnd",
+        {
+          "pokeID": "p",
+          "cookie": "2"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokeEnd",
+        {
+          "pokeID": "p",
+          "cookie": "2"
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokeEnd",
+        {
+          "pokeID": "p",
+          "cookie": "",
+          "cancel": true
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokeEnd",
+        {
+          "pokeID": "p",
+          "cookie": "",
+          "cancel": true
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokeEnd",
+        {
+          "pokeID": "p",
+          "cookie": null
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokeEnd",
+        {
+          "pokeID": "p",
+          "cookie": "2",
+          "cancel": "yes"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "cookie": "1",
+          "requestID": "r",
+          "lastMutationIDChanges": {}
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pull",
+        {
+          "cookie": "1",
+          "requestID": "r",
+          "lastMutationIDChanges": {}
+        }
+      ]
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "cookie": "1",
+          "requestID": "r",
+          "lastMutationIDChanges": {
+            "c": 3
+          }
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pull",
+        {
+          "cookie": "1",
+          "requestID": "r",
+          "lastMutationIDChanges": {
+            "c": 3
+          }
+        }
+      ]
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "cookie": null,
+          "requestID": "r",
+          "lastMutationIDChanges": {}
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "cookie": "1",
+          "requestID": "r"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "deleteClients",
+        {}
+      ],
+      "ok": true,
+      "output": [
+        "deleteClients",
+        {}
+      ]
+    },
+    {
+      "message": [
+        "deleteClients",
+        {
+          "clientIDs": [
+            "a"
+          ],
+          "clientGroupIDs": [
+            "b",
+            ""
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "deleteClients",
+        {
+          "clientIDs": [
+            "a"
+          ],
+          "clientGroupIDs": [
+            "b",
+            ""
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "deleteClients",
+        {
+          "clientIDs": null
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "deleteClients",
+        {
+          "clientIDs": [
+            1
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "mutations": []
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pushResponse",
+        {
+          "mutations": []
+        }
+      ]
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "mutations": [
+            {
+              "id": {
+                "id": 1,
+                "clientID": "c"
+              },
+              "result": {
+                "error": "app"
+              }
+            },
+            {
+              "id": {
+                "id": 2,
+                "clientID": "c"
+              },
+              "result": {
+                "data": "x",
+                "zExtra": 1
+              }
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pushResponse",
+        {
+          "mutations": [
+            {
+              "id": {
+                "id": 1,
+                "clientID": "c"
+              },
+              "result": {
+                "error": "app"
+              }
+            },
+            {
+              "id": {
+                "id": 2,
+                "clientID": "c"
+              },
+              "result": {
+                "data": "x"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "error": "unsupportedPushVersion"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pushResponse",
+        {
+          "error": "unsupportedPushVersion"
+        }
+      ]
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "error": "unsupportedSchemaVersion",
+          "mutationIDs": [
+            {
+              "id": 1,
+              "clientID": "c"
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pushResponse",
+        {
+          "error": "unsupportedSchemaVersion",
+          "mutationIDs": [
+            {
+              "id": 1,
+              "clientID": "c"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "error": "http",
+          "status": 500,
+          "details": "x"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pushResponse",
+        {
+          "error": "http",
+          "status": 500,
+          "details": "x"
+        }
+      ]
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "error": "http",
+          "status": 500
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "error": "zeroPusher",
+          "details": "x",
+          "mutationIDs": []
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pushResponse",
+        {
+          "error": "zeroPusher",
+          "details": "x",
+          "mutationIDs": []
+        }
+      ]
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "error": "zeroPusher",
+          "details": "x",
+          "mutationIDs": null
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "error": "other"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "mutations": "x",
+          "error": "zeroPusher",
+          "details": "d"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pushResponse",
+        {
+          "error": "zeroPusher",
+          "details": "d"
+        }
+      ]
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "mutations": [
+            {
+              "id": {
+                "id": 1,
+                "clientID": "c"
+              }
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pushResponse",
+        {}
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "1",
+          "op": "version",
+          "value": "1.0"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "inspect",
+        {
+          "id": "1",
+          "op": "version",
+          "value": "1.0"
+        }
+      ]
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "1",
+          "op": "authenticated",
+          "value": true
+        }
+      ],
+      "ok": true,
+      "output": [
+        "inspect",
+        {
+          "id": "1",
+          "op": "authenticated",
+          "value": true
+        }
+      ]
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "1",
+          "op": "error",
+          "value": "nope",
+          "zExtra": 1
+        }
+      ],
+      "ok": true,
+      "output": [
+        "inspect",
+        {
+          "id": "1",
+          "op": "error",
+          "value": "nope"
+        }
+      ]
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "1",
+          "op": "metrics",
+          "value": {
+            "query-materialization-server": [
+              1
+            ],
+            "query-update-server": [
+              1,
+              2,
+              3
+            ]
+          }
+        }
+      ],
+      "ok": true,
+      "output": [
+        "inspect",
+        {
+          "id": "1",
+          "op": "metrics",
+          "value": {
+            "query-materialization-server": [
+              1
+            ],
+            "query-update-server": [
+              1,
+              2,
+              3
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "1",
+          "op": "metrics",
+          "value": {
+            "query-materialization-server": [],
+            "query-update-server": [
+              1
+            ]
+          }
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "1",
+          "op": "queries",
+          "value": [
+            {
+              "clientID": "c",
+              "queryID": "q",
+              "ast": {
+                "table": "issue",
+                "where": {
+                  "type": "simple",
+                  "op": "=",
+                  "left": {
+                    "type": "column",
+                    "name": "id"
+                  },
+                  "right": {
+                    "type": "literal",
+                    "value": "1"
+                  }
+                },
+                "orderBy": [
+                  [
+                    "id",
+                    "asc"
+                  ]
+                ],
+                "limit": 10
+              },
+              "name": null,
+              "args": null,
+              "got": true,
+              "deleted": false,
+              "ttl": 1000,
+              "inactivatedAt": null,
+              "rowCount": 3,
+              "metrics": null
+            },
+            {
+              "clientID": "c",
+              "queryID": "q2",
+              "ast": null,
+              "name": "issues",
+              "args": [
+                1,
+                {
+                  "a": "b"
+                }
+              ],
+              "got": false,
+              "deleted": true,
+              "ttl": 0,
+              "inactivatedAt": 5,
+              "rowCount": 0,
+              "metrics": {
+                "query-update-server": [
+                  1.5
+                ]
+              },
+              "zExtra": 1
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "inspect",
+        {
+          "id": "1",
+          "op": "queries",
+          "value": [
+            {
+              "clientID": "c",
+              "queryID": "q",
+              "ast": {
+                "table": "issue",
+                "where": {
+                  "type": "simple",
+                  "op": "=",
+                  "left": {
+                    "type": "column",
+                    "name": "id"
+                  },
+                  "right": {
+                    "type": "literal",
+                    "value": "1"
+                  }
+                },
+                "orderBy": [
+                  [
+                    "id",
+                    "asc"
+                  ]
+                ],
+                "limit": 10
+              },
+              "name": null,
+              "args": null,
+              "got": true,
+              "deleted": false,
+              "ttl": 1000,
+              "inactivatedAt": null,
+              "rowCount": 3,
+              "metrics": null
+            },
+            {
+              "clientID": "c",
+              "queryID": "q2",
+              "ast": null,
+              "name": "issues",
+              "args": [
+                1,
+                {
+                  "a": "b"
+                }
+              ],
+              "got": false,
+              "deleted": true,
+              "ttl": 0,
+              "inactivatedAt": 5,
+              "rowCount": 0,
+              "metrics": {
+                "query-update-server": [
+                  1.5
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "1",
+          "op": "queries",
+          "value": [
+            {
+              "clientID": "c",
+              "queryID": "q",
+              "ast": {
+                "table": 1
+              },
+              "name": null,
+              "args": null,
+              "got": true,
+              "deleted": false,
+              "ttl": 1000,
+              "inactivatedAt": null,
+              "rowCount": 3
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "1",
+          "op": "analyze-query",
+          "value": {
+            "warnings": [],
+            "syncedRowCount": 0,
+            "start": 0,
+            "end": 1
+          }
+        }
+      ],
+      "ok": true,
+      "output": [
+        "inspect",
+        {
+          "id": "1",
+          "op": "analyze-query",
+          "value": {
+            "warnings": [],
+            "syncedRowCount": 0,
+            "start": 0,
+            "end": 1
+          }
+        }
+      ]
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "1",
+          "op": "analyze-query",
+          "value": {
+            "warnings": [
+              "w"
+            ],
+            "syncedRowCount": 0,
+            "start": 0,
+            "end": 1,
+            "joinPlans": [
+              {
+                "type": "plan-failed",
+                "attemptNumber": 1
+              }
+            ]
+          }
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "1",
+          "op": "unknown",
+          "value": 1
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "op": "version",
+          "value": "1"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "transformError",
+        []
+      ],
+      "ok": true,
+      "output": [
+        "transformError",
+        []
+      ]
+    },
+    {
+      "message": [
+        "transformError",
+        [
+          {
+            "error": "app",
+            "id": "q",
+            "name": "n"
+          },
+          {
+            "error": "parse",
+            "id": "q",
+            "name": "n",
+            "message": "m",
+            "details": {}
+          }
+        ]
+      ],
+      "ok": true,
+      "output": [
+        "transformError",
+        [
+          {
+            "error": "app",
+            "id": "q",
+            "name": "n"
+          },
+          {
+            "error": "parse",
+            "id": "q",
+            "name": "n",
+            "message": "m",
+            "details": {}
+          }
+        ]
+      ]
+    },
+    {
+      "message": [
+        "transformError",
+        [
+          {
+            "error": "parse",
+            "id": "q",
+            "name": "n"
+          }
+        ]
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "transformError",
+        [
+          {
+            "error": "other",
+            "id": "q",
+            "name": "n",
+            "message": "m"
+          }
+        ]
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "transformError",
+        {}
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "",
+          "lastMutationIDChanges": {
+            "\u0000": 432
+          },
+          "rowsPatch": [
+            {
+              "op": "update",
+              "tableName": "user",
+              "id": {
+                "id": false,
+                "n": "a"
+              },
+              "constrain": [
+                "😀",
+                "title",
+                ""
+              ],
+              "é": {}
+            },
+            {
+              "op": "del",
+              "tableName": "été",
+              "id": {
+                "id": false
+              }
+            }
+          ],
+          "mutationsPatch": []
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokePart",
+        {
+          "lastMutationIDChanges": {
+            "\u0000": 432
+          },
+          "pokeID": "",
+          "rowsPatch": [
+            {
+              "op": "update",
+              "tableName": "user",
+              "id": {
+                "id": false,
+                "n": "a"
+              },
+              "constrain": [
+                "😀",
+                "title",
+                ""
+              ]
+            },
+            {
+              "op": "del",
+              "tableName": "été",
+              "id": {
+                "id": false
+              }
+            }
+          ],
+          "mutationsPatch": []
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "A",
+          "lastMutationIDChanges": {
+            "A中中ß中": 398
+          },
+          "gotQueriesPatch": [
+            {
+              "op": "del",
+              "hash": ""
+            },
+            {
+              "op": "del",
+              "hash": "b",
+              "zExtra": 0.5
+            }
+          ],
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "user",
+              "value": {
+                "id": 57273,
+                "title": false,
+                "n": "",
+                "😀": 2,
+                "": false
+              }
+            },
+            {
+              "op": "update",
+              "tableName": "comment",
+              "id": {
+                "id": "a"
+              },
+              "constrain": [
+                "title"
+              ],
+              "": "İ"
+            },
+            {
+              "op": "put",
+              "tableName": "comment",
+              "value": {
+                "n": {
+                  "": null
+                },
+                "😀": [],
+                "": "\na b%é "
+              }
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokePart",
+        {
+          "lastMutationIDChanges": {
+            "A中中ß中": 398
+          },
+          "pokeID": "A",
+          "gotQueriesPatch": [
+            {
+              "op": "del",
+              "hash": ""
+            },
+            {
+              "op": "del",
+              "hash": "b"
+            }
+          ],
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "user",
+              "value": {
+                "id": 57273,
+                "title": false,
+                "n": "",
+                "😀": 2,
+                "": false
+              }
+            },
+            {
+              "op": "update",
+              "tableName": "comment",
+              "id": {
+                "id": "a"
+              },
+              "constrain": [
+                "title"
+              ]
+            },
+            {
+              "op": "put",
+              "tableName": "comment",
+              "value": {
+                "n": {
+                  "": null
+                },
+                "😀": [],
+                "": "\na b%é "
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "transformError",
+        [
+          {
+            "error": "app",
+            "id": "􏿿",
+            "name": "%\"B_",
+            "message": "\"é中ß😀",
+            "details": []
+          },
+          {
+            "error": "app",
+            "id": " ",
+            "name": "ßb中A",
+            "message": " _é\n\"\"",
+            "details": true
+          },
+          {
+            "error": "parse",
+            "id": "𝒜éb\"\nb",
+            "name": "é😀_İa𝒜",
+            "message": "İ"
+          }
+        ]
+      ],
+      "ok": true,
+      "output": [
+        "transformError",
+        [
+          {
+            "error": "app",
+            "id": "􏿿",
+            "name": "%\"B_",
+            "message": "\"é中ß😀",
+            "details": []
+          },
+          {
+            "error": "app",
+            "id": " ",
+            "name": "ßb中A",
+            "message": " _é\n\"\"",
+            "details": true
+          },
+          {
+            "error": "parse",
+            "id": "𝒜éb\"\nb",
+            "name": "é😀_İa𝒜",
+            "message": "İ"
+          }
+        ]
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "InvalidPush",
+          "message": "bİ%😀"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "InvalidPush",
+          "message": "bİ%😀"
+        }
+      ]
+    },
+    {
+      "message": [
+        "pong",
+        {}
+      ],
+      "ok": true,
+      "output": [
+        "pong",
+        {}
+      ]
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "é中_béé\"",
+          "rowsPatch": [
+            {
+              "op": "update",
+              "tableName": "issue",
+              "id": {
+                "id": "a",
+                "n": 1
+              }
+            }
+          ],
+          "mutationsPatch": [],
+          "": [
+            null,
+            "\n",
+            0
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokePart",
+        {
+          "rowsPatch": [
+            {
+              "op": "update",
+              "tableName": "issue",
+              "id": {
+                "id": "a",
+                "n": 1
+              }
+            }
+          ],
+          "mutationsPatch": [],
+          "pokeID": "é中_béé\""
+        }
+      ]
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "mutations": []
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pushResponse",
+        {
+          "mutations": []
+        }
+      ]
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "error": "unsupportedPushVersion"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pushResponse",
+        {
+          "error": "unsupportedPushVersion"
+        }
+      ]
+    },
+    {
+      "message": [
+        "deleteClients",
+        {
+          "clientIDs": []
+        }
+      ],
+      "ok": true,
+      "output": [
+        "deleteClients",
+        {
+          "clientIDs": []
+        }
+      ]
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "cookie": "z",
+          "requestID": "𝒜 中😀ABİ",
+          "lastMutationIDChanges": {},
+          "😀": true
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pull",
+        {
+          "cookie": "z",
+          "requestID": "𝒜 中😀ABİ",
+          "lastMutationIDChanges": {}
+        }
+      ]
+    },
+    {
+      "message": [
+        "connected",
+        {
+          "wsid": "İ"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "connected",
+        {
+          "wsid": "İ"
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "é",
+          "desiredQueriesPatches": {
+            "9": [
+              {
+                "op": "clear"
+              },
+              {
+                "op": "del",
+                "hash": "%"
+              }
+            ]
+          },
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "comment",
+              "value": {
+                "n": "𝒜😀%aß",
+                "": true
+              }
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokePart",
+        {
+          "desiredQueriesPatches": {
+            "9": [
+              {
+                "op": "clear"
+              },
+              {
+                "op": "del",
+                "hash": "%"
+              }
+            ]
+          },
+          "pokeID": "é",
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "comment",
+              "value": {
+                "n": "𝒜😀%aß",
+                "": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "cookie": "a",
+          "requestID": "",
+          "lastMutationIDChanges": {}
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pull",
+        {
+          "cookie": "a",
+          "requestID": "",
+          "lastMutationIDChanges": {}
+        }
+      ]
+    },
+    {
+      "message": [
+        "deleteClients",
+        {}
+      ],
+      "ok": true,
+      "output": [
+        "deleteClients",
+        {}
+      ]
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": ""
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokePart",
+        {
+          "pokeID": ""
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "\\\"ß中é",
+          "lastMutationIDChanges": {
+            "􏿿": 452,
+            "￿": 565,
+            "😀%ßßA\n": 976
+          },
+          "desiredQueriesPatches": {
+            "AB%_ßaß": []
+          },
+          "gotQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "Bİ",
+              "ttl": -9007199254740992
+            },
+            {
+              "op": "put",
+              "hash": "😀_%\\a\\a",
+              "zExtra": {
+                "9": "\\AİBé",
+                "中𝒜_aß😀aé": false,
+                "b": "A\"A\\Bßß"
+              }
+            }
+          ],
+          "rowsPatch": []
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokePart",
+        {
+          "lastMutationIDChanges": {
+            "􏿿": 452,
+            "￿": 565,
+            "😀%ßßA\n": 976
+          },
+          "desiredQueriesPatches": {
+            "AB%_ßaß": []
+          },
+          "pokeID": "\\\"ß中é",
+          "gotQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "Bİ",
+              "ttl": -9007199254740992
+            },
+            {
+              "op": "put",
+              "hash": "😀_%\\a\\a"
+            }
+          ],
+          "rowsPatch": []
+        }
+      ]
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "😀",
+          "op": "error",
+          "value": "𝒜_中"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "inspect",
+        {
+          "id": "😀",
+          "op": "error",
+          "value": "𝒜_中"
+        }
+      ]
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "mutations": [
+            {
+              "id": {
+                "id": 859,
+                "clientID": "Bé%\\"
+              },
+              "result": {
+                "error": "alreadyProcessed"
+              }
+            }
+          ],
+          "newField": {}
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pushResponse",
+        {
+          "mutations": [
+            {
+              "id": {
+                "id": 859,
+                "clientID": "Bé%\\"
+              },
+              "result": {
+                "error": "alreadyProcessed"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "pong",
+        {}
+      ],
+      "ok": true,
+      "output": [
+        "pong",
+        {}
+      ]
+    },
+    {
+      "message": [
+        "connected",
+        {
+          "wsid": "\\\\é"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "connected",
+        {
+          "wsid": "\\\\é"
+        }
+      ]
+    },
+    {
+      "message": [
+        "deleteClients",
+        {
+          "clientGroupIDs": [
+            "İb"
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "deleteClients",
+        {
+          "clientGroupIDs": [
+            "İb"
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "connected",
+        {
+          "wsid": "B\n\n\\\\"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "connected",
+        {
+          "wsid": "B\n\n\\\\"
+        }
+      ]
+    },
+    {
+      "message": [
+        "deleteClients",
+        {}
+      ],
+      "ok": true,
+      "output": [
+        "deleteClients",
+        {}
+      ]
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "TransformFailed",
+          "message": "中",
+          "queryIDs": [],
+          "details": {},
+          "origin": "server",
+          "reason": "parse",
+          "😀": false
+        }
+      ],
+      "ok": true,
+      "output": [
+        "error",
+        {
+          "kind": "TransformFailed",
+          "queryIDs": [],
+          "message": "中",
+          "details": {},
+          "origin": "server",
+          "reason": "parse"
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "z",
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "issue",
+              "value": {
+                "title": [],
+                "n": 2,
+                "😀": {
+                  "9": null,
+                  "_ß\n\\B中b": false
+                }
+              }
+            }
+          ],
+          "mutationsPatch": []
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokePart",
+        {
+          "pokeID": "z",
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "issue",
+              "value": {
+                "title": [],
+                "n": 2,
+                "😀": {
+                  "9": null,
+                  "_ß\n\\B中b": false
+                }
+              }
+            }
+          ],
+          "mutationsPatch": []
+        }
+      ]
+    },
+    {
+      "message": [
+        "connected",
+        {
+          "wsid": ""
+        }
+      ],
+      "ok": true,
+      "output": [
+        "connected",
+        {
+          "wsid": ""
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokeEnd",
+        {
+          "pokeID": "ßaİ",
+          "cookie": "B\nß中A\n"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokeEnd",
+        {
+          "pokeID": "ßaİ",
+          "cookie": "B\nß中A\n"
+        }
+      ]
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "cookie": "",
+          "requestID": "￿",
+          "lastMutationIDChanges": {
+            "中%😀中é\"é𝒜": 219
+          },
+          "é": false
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pull",
+        {
+          "cookie": "",
+          "requestID": "￿",
+          "lastMutationIDChanges": {
+            "中%😀中é\"é𝒜": 219
+          }
+        }
+      ]
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "error": "zeroPusher",
+          "details": "𝒜A",
+          "mutationIDs": [
+            {
+              "id": 100,
+              "clientID": ""
+            },
+            {
+              "id": 320,
+              "clientID": "\""
+            }
+          ],
+          "newField": [
+            false,
+            false,
+            "A\"\"中b\n"
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pushResponse",
+        {
+          "error": "zeroPusher",
+          "details": "𝒜A",
+          "mutationIDs": [
+            {
+              "id": 100,
+              "clientID": ""
+            },
+            {
+              "id": 320,
+              "clientID": "\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokeStart",
+        {
+          "pokeID": "b",
+          "baseCookie": "𝒜"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokeStart",
+        {
+          "pokeID": "b",
+          "baseCookie": "𝒜"
+        }
+      ]
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "error": "unsupportedSchemaVersion",
+          "mutationIDs": [],
+          "zExtra": false
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pushResponse",
+        {
+          "error": "unsupportedSchemaVersion",
+          "mutationIDs": []
+        }
+      ]
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "error": "http",
+          "status": 500,
+          "details": "�"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pushResponse",
+        {
+          "error": "http",
+          "status": 500,
+          "details": "�"
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "_% é\naA",
+          "lastMutationIDChanges": {},
+          "desiredQueriesPatches": {
+            "A𝒜😀ß\"_ß": [
+              {
+                "op": "put",
+                "hash": "中 a ",
+                "ttl": 34
+              },
+              {
+                "op": "del",
+                "hash": "a"
+              },
+              {
+                "op": "put",
+                "hash": "\"",
+                "ttl": 72531
+              }
+            ]
+          },
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "issue",
+              "value": {
+                "title": null,
+                "n": null,
+                "😀": {
+                  "ß": "\u001f",
+                  "中文": null,
+                  "中\na": 91315
+                },
+                "": "ß"
+              }
+            },
+            {
+              "op": "put",
+              "tableName": "user",
+              "value": {
+                "id": {
+                  "%\"a ": true,
+                  "ab": true
+                },
+                "": {
+                  "😀a\nb%": -2.25
+                }
+              }
+            },
+            {
+              "op": "put",
+              "tableName": "issue",
+              "value": {
+                "id": {
+                  "\"": null,
+                  "": "%é😀éİ",
+                  " ": "a"
+                },
+                "title": {
+                  "ébİ_İ中A": "\\ß"
+                },
+                "": 0.5
+              }
+            },
+            {
+              "op": "update",
+              "tableName": "été",
+              "id": {
+                "id": false,
+                "n": 0
+              },
+              "constrain": [],
+              "é": false
+            },
+            {
+              "op": "del",
+              "tableName": "user",
+              "id": {
+                "id": false,
+                "n": 0
+              }
+            }
+          ],
+          "zExtra": true
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokePart",
+        {
+          "lastMutationIDChanges": {},
+          "desiredQueriesPatches": {
+            "A𝒜😀ß\"_ß": [
+              {
+                "op": "put",
+                "hash": "中 a ",
+                "ttl": 34
+              },
+              {
+                "op": "del",
+                "hash": "a"
+              },
+              {
+                "op": "put",
+                "hash": "\"",
+                "ttl": 72531
+              }
+            ]
+          },
+          "pokeID": "_% é\naA",
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "issue",
+              "value": {
+                "title": null,
+                "n": null,
+                "😀": {
+                  "ß": "\u001f",
+                  "中文": null,
+                  "中\na": 91315
+                },
+                "": "ß"
+              }
+            },
+            {
+              "op": "put",
+              "tableName": "user",
+              "value": {
+                "id": {
+                  "%\"a ": true,
+                  "ab": true
+                },
+                "": {
+                  "😀a\nb%": -2.25
+                }
+              }
+            },
+            {
+              "op": "put",
+              "tableName": "issue",
+              "value": {
+                "id": {
+                  "\"": null,
+                  "": "%é😀éİ",
+                  " ": "a"
+                },
+                "title": {
+                  "ébİ_İ中A": "\\ß"
+                },
+                "": 0.5
+              }
+            },
+            {
+              "op": "update",
+              "tableName": "été",
+              "id": {
+                "id": false,
+                "n": 0
+              },
+              "constrain": []
+            },
+            {
+              "op": "del",
+              "tableName": "user",
+              "id": {
+                "id": false,
+                "n": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "error": "unsupportedPushVersion"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pushResponse",
+        {
+          "error": "unsupportedPushVersion"
+        }
+      ]
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "\n𝒜\n%b中a",
+          "op": "error",
+          "value": "中𝒜中😀a"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "inspect",
+        {
+          "id": "\n𝒜\n%b中a",
+          "op": "error",
+          "value": "中𝒜中😀a"
+        }
+      ]
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "Ω",
+          "op": "queries",
+          "value": [
+            {
+              "clientID": "",
+              "queryID": "B",
+              "ast": {
+                "table": "issue"
+              },
+              "name": "é",
+              "args": null,
+              "got": false,
+              "deleted": true,
+              "ttl": 0,
+              "inactivatedAt": 9007199254740992,
+              "rowCount": 22
+            },
+            {
+              "clientID": "ß",
+              "queryID": "ı",
+              "ast": {
+                "table": "issue"
+              },
+              "name": "中\"\\\"A \\",
+              "args": [
+                68520,
+                [
+                  null
+                ]
+              ],
+              "got": true,
+              "deleted": true,
+              "ttl": 0.5,
+              "inactivatedAt": -1,
+              "rowCount": 5
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "inspect",
+        {
+          "id": "Ω",
+          "op": "queries",
+          "value": [
+            {
+              "clientID": "",
+              "queryID": "B",
+              "ast": {
+                "table": "issue"
+              },
+              "name": "é",
+              "args": null,
+              "got": false,
+              "deleted": true,
+              "ttl": 0,
+              "inactivatedAt": 9007199254740992,
+              "rowCount": 22
+            },
+            {
+              "clientID": "ß",
+              "queryID": "ı",
+              "ast": {
+                "table": "issue"
+              },
+              "name": "中\"\\\"A \\",
+              "args": [
+                68520,
+                [
+                  null
+                ]
+              ],
+              "got": true,
+              "deleted": true,
+              "ttl": 0.5,
+              "inactivatedAt": -1,
+              "rowCount": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "error": "http",
+          "status": 500,
+          "details": "\u001f",
+          "mutationIDs": [
+            {
+              "id": 13,
+              "clientID": "\nß\"\\"
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pushResponse",
+        {
+          "error": "http",
+          "status": 500,
+          "details": "\u001f",
+          "mutationIDs": [
+            {
+              "id": 13,
+              "clientID": "\nß\"\\"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "deleteClients",
+        {}
+      ],
+      "ok": true,
+      "output": [
+        "deleteClients",
+        {}
+      ]
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "mutations": [
+            {
+              "id": {
+                "id": 762,
+                "clientID": "ßA\n%中𝒜\né"
+              },
+              "result": {
+                "data": "A"
+              }
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pushResponse",
+        {
+          "mutations": [
+            {
+              "id": {
+                "id": 762,
+                "clientID": "ßA\n%中𝒜\né"
+              },
+              "result": {
+                "data": "A"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "𝒜ab\\中𝒜😀\\",
+          "mutationsPatch": [
+            {
+              "op": "del",
+              "id": {
+                "id": 842,
+                "clientID": "\\"
+              }
+            },
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 399,
+                  "clientID": "0"
+                },
+                "result": {
+                  "data": false
+                },
+                "😀": 0
+              },
+              "😀": {
+                "A": 5e-324
+              }
+            },
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 732,
+                  "clientID": "bb __",
+                  "newField": ""
+                },
+                "result": {
+                  "data": "é%"
+                },
+                "zExtra": true
+              }
+            }
+          ],
+          "😀": 1.7976931348623157e+308
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokePart",
+        {
+          "pokeID": "𝒜ab\\中𝒜😀\\",
+          "mutationsPatch": [
+            {
+              "op": "del",
+              "id": {
+                "id": 842,
+                "clientID": "\\"
+              }
+            },
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 399,
+                  "clientID": "0"
+                },
+                "result": {
+                  "data": false
+                }
+              }
+            },
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 732,
+                  "clientID": "bb __"
+                },
+                "result": {
+                  "data": "é%"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "error": "zeroPusher",
+          "details": "ß",
+          "mutationIDs": [
+            {
+              "id": 111,
+              "clientID": "😀"
+            },
+            {
+              "id": 73,
+              "clientID": "ßBA\"B\""
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pushResponse",
+        {
+          "error": "zeroPusher",
+          "details": "ß",
+          "mutationIDs": [
+            {
+              "id": 111,
+              "clientID": "😀"
+            },
+            {
+              "id": 73,
+              "clientID": "ßBA\"B\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "_ \"\n中",
+          "lastMutationIDChanges": {},
+          "gotQueriesPatch": [
+            {
+              "op": "del",
+              "hash": "ßé\\ é "
+            },
+            {
+              "op": "del",
+              "hash": "é中a😀"
+            }
+          ],
+          "rowsPatch": [
+            {
+              "op": "clear"
+            },
+            {
+              "op": "put",
+              "tableName": "comment",
+              "value": {
+                "id": {},
+                "title": [
+                  63801,
+                  false
+                ],
+                "n": "\"",
+                "😀": {
+                  "\nb\\éß\nß": null,
+                  "😀a\nA😀%": 2,
+                  "\n": "\""
+                }
+              }
+            },
+            {
+              "op": "del",
+              "tableName": "issue",
+              "id": {
+                "id": "a"
+              }
+            }
+          ],
+          "mutationsPatch": [
+            {
+              "op": "del",
+              "id": {
+                "id": 726,
+                "clientID": " İ\"İ𝒜a\\"
+              },
+              "é": {
+                "􏿿": null,
+                "\"": 0
+              }
+            },
+            {
+              "op": "del",
+              "id": {
+                "id": 778,
+                "clientID": "ab中"
+              }
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokePart",
+        {
+          "lastMutationIDChanges": {},
+          "gotQueriesPatch": [
+            {
+              "op": "del",
+              "hash": "ßé\\ é "
+            },
+            {
+              "op": "del",
+              "hash": "é中a😀"
+            }
+          ],
+          "pokeID": "_ \"\n中",
+          "rowsPatch": [
+            {
+              "op": "clear"
+            },
+            {
+              "op": "put",
+              "tableName": "comment",
+              "value": {
+                "id": {},
+                "title": [
+                  63801,
+                  false
+                ],
+                "n": "\"",
+                "😀": {
+                  "\nb\\éß\nß": null,
+                  "😀a\nA😀%": 2,
+                  "\n": "\""
+                }
+              }
+            },
+            {
+              "op": "del",
+              "tableName": "issue",
+              "id": {
+                "id": "a"
+              }
+            }
+          ],
+          "mutationsPatch": [
+            {
+              "op": "del",
+              "id": {
+                "id": 726,
+                "clientID": " İ\"İ𝒜a\\"
+              }
+            },
+            {
+              "op": "del",
+              "id": {
+                "id": 778,
+                "clientID": "ab中"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "pong",
+        {}
+      ],
+      "ok": true,
+      "output": [
+        "pong",
+        {}
+      ]
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "error": "zeroPusher",
+          "details": "\nb\"\"\\"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pushResponse",
+        {
+          "error": "zeroPusher",
+          "details": "\nb\"\"\\"
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokeEnd",
+        {
+          "pokeID": "é中",
+          "cookie": "İ_",
+          "cancel": false
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokeEnd",
+        {
+          "pokeID": "é中",
+          "cookie": "İ_",
+          "cancel": false
+        }
+      ]
+    },
+    {
+      "message": [
+        "transformError",
+        []
+      ],
+      "ok": true,
+      "output": [
+        "transformError",
+        []
+      ]
+    },
+    {
+      "message": [
+        "deleteClients",
+        {
+          "clientIDs": [
+            " A",
+            "😀b"
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "deleteClients",
+        {
+          "clientIDs": [
+            " A",
+            "😀b"
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "connected",
+        {
+          "wsid": "",
+          "timestamp": -9007199254740992
+        }
+      ],
+      "ok": true,
+      "output": [
+        "connected",
+        {
+          "wsid": "",
+          "timestamp": -9007199254740992
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "😀",
+          "lastMutationIDChanges": {
+            "Ω": 231,
+            "中😀Aab": 764
+          },
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "été",
+              "value": {
+                "id": {
+                  "中\\\n": "éB\\𝒜_A",
+                  " 𝒜_\n": true,
+                  "ßAß": -1
+                },
+                "": {
+                  "\\İ中é中\\\\\n": 1e+21,
+                  "Ω": null
+                }
+              }
+            },
+            {
+              "op": "put",
+              "tableName": "comment",
+              "value": {
+                "": "￿"
+              }
+            },
+            {
+              "op": "put",
+              "tableName": "été",
+              "value": {
+                "title": null,
+                "n": -9007199254740992,
+                "😀": true
+              }
+            },
+            {
+              "op": "clear"
+            },
+            {
+              "op": "del",
+              "tableName": "user",
+              "id": {
+                "id": ""
+              }
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokePart",
+        {
+          "lastMutationIDChanges": {
+            "Ω": 231,
+            "中😀Aab": 764
+          },
+          "pokeID": "😀",
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "été",
+              "value": {
+                "id": {
+                  "中\\\n": "éB\\𝒜_A",
+                  " 𝒜_\n": true,
+                  "ßAß": -1
+                },
+                "": {
+                  "\\İ中é中\\\\\n": 1e+21,
+                  "Ω": null
+                }
+              }
+            },
+            {
+              "op": "put",
+              "tableName": "comment",
+              "value": {
+                "": "￿"
+              }
+            },
+            {
+              "op": "put",
+              "tableName": "été",
+              "value": {
+                "title": null,
+                "n": -9007199254740992,
+                "😀": true
+              }
+            },
+            {
+              "op": "clear"
+            },
+            {
+              "op": "del",
+              "tableName": "user",
+              "id": {
+                "id": ""
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokeEnd",
+        {
+          "pokeID": "a中ß",
+          "cookie": " 𝒜_ß"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokeEnd",
+        {
+          "pokeID": "a中ß",
+          "cookie": " 𝒜_ß"
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "é",
+          "desiredQueriesPatches": {
+            "9": [
+              {
+                "op": "clear"
+              },
+              {
+                "hash": "%"
+              }
+            ]
+          },
+          "rowsPatch": [
+            {
+              "op": [
+                1
+              ],
+              "tableName": "comment",
+              "value": {
+                "n": "𝒜😀%aß",
+                "": true
+              }
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        {
+          "zExtra": 1
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        0
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokeEnd",
+        true
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pushResponse",
+        {}
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "transformError",
+        [
+          {
+            "error": "app",
+            "name": "%\"B_",
+            "message": "\"é中ß😀",
+            "details": []
+          },
+          {
+            "error": "app",
+            "id": " ",
+            "name": "ßb中A",
+            "message": " _é\n\"\"",
+            "details": true
+          },
+          {
+            "error": "parse",
+            "id": "𝒜éb\"\nb",
+            "name": "é😀_İa𝒜",
+            "message": "İ"
+          }
+        ]
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokeEnd",
+        {
+          "pokeID": "custom",
+          "cookie": " 𝒜_ß"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokeEnd",
+        {
+          "pokeID": "custom",
+          "cookie": " 𝒜_ß"
+        }
+      ]
+    },
+    {
+      "message": {
+        "zExtra": 1
+      },
+      "ok": false
+    },
+    {
+      "message": [
+        {
+          "clientIDs": []
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        1
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "𝒜ab\\中𝒜😀\\",
+          "mutationsPatch": [
+            {
+              "op": "del",
+              "id": {
+                "id": 842,
+                "clientID": "\\"
+              }
+            },
+            {
+              "op": "put",
+              "mutation": {
+                "id": {
+                  "id": 399,
+                  "clientID": "0"
+                },
+                "result": {
+                  "data": false
+                },
+                "😀": 0
+              },
+              "😀": {
+                "A": 5e-324
+              }
+            },
+            "simple"
+          ],
+          "😀": 1.7976931348623157e+308
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "é",
+          "desiredQueriesPatches": {
+            "9": "and"
+          },
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "comment",
+              "value": {
+                "n": "𝒜😀%aß",
+                "": true
+              }
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": "bogus",
+      "ok": false
+    },
+    {
+      "message": -1.5,
+      "ok": false
+    },
+    {
+      "message": [
+        "deleteClients"
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "error": "zeroPusher",
+          "mutationIDs": [
+            {
+              "id": 100,
+              "clientID": ""
+            },
+            {
+              "clientID": "\""
+            }
+          ],
+          "newField": [
+            false,
+            false,
+            "A\"\"中b\n"
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pong",
+        {
+          "zExtra": "pull"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pong",
+        {}
+      ]
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "cookie": "",
+          "requestID": "",
+          "lastMutationIDChanges": {}
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pull",
+        {
+          "cookie": "",
+          "requestID": "",
+          "lastMutationIDChanges": {}
+        }
+      ]
+    },
+    {
+      "message": [
+        "connected",
+        {
+          "wsid": "\\\\é",
+          "kind": ""
+        }
+      ],
+      "ok": true,
+      "output": [
+        "connected",
+        {
+          "wsid": "\\\\é"
+        }
+      ]
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "error": ""
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": "bogus",
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "A",
+          "lastMutationIDChanges": {
+            "A中中ß中": 398
+          },
+          "gotQueriesPatch": [
+            {
+              "op": "del",
+              "hash": ""
+            },
+            {
+              "op": "del",
+              "hash": "b",
+              "zExtra": 0.5
+            },
+            {
+              "op": "del",
+              "hash": ""
+            }
+          ],
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "user",
+              "value": {
+                "id": 57273,
+                "title": false,
+                "n": "",
+                "😀": 2,
+                "": false
+              }
+            },
+            {
+              "op": "update",
+              "tableName": "comment",
+              "id": {
+                "id": "a"
+              },
+              "constrain": [
+                "title"
+              ],
+              "": "İ"
+            },
+            {
+              "op": "put",
+              "tableName": "comment",
+              "value": {
+                "n": {
+                  "": null
+                },
+                "😀": [],
+                "": "\na b%é "
+              }
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokePart",
+        {
+          "lastMutationIDChanges": {
+            "A中中ß中": 398
+          },
+          "pokeID": "A",
+          "gotQueriesPatch": [
+            {
+              "op": "del",
+              "hash": ""
+            },
+            {
+              "op": "del",
+              "hash": "b"
+            },
+            {
+              "op": "del",
+              "hash": ""
+            }
+          ],
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "user",
+              "value": {
+                "id": 57273,
+                "title": false,
+                "n": "",
+                "😀": 2,
+                "": false
+              }
+            },
+            {
+              "op": "update",
+              "tableName": "comment",
+              "id": {
+                "id": "a"
+              },
+              "constrain": [
+                "title"
+              ]
+            },
+            {
+              "op": "put",
+              "tableName": "comment",
+              "value": {
+                "n": {
+                  "": null
+                },
+                "😀": [],
+                "": "\na b%é "
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        {
+          "clientIDs": [
+            " A",
+            "😀b"
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pushResponse"
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "A",
+          "lastMutationIDChanges": {
+            "A中中ß中": 398
+          },
+          "gotQueriesPatch": [
+            {
+              "op": "del",
+              "hash": ""
+            },
+            {
+              "op": "del",
+              "hash": "b",
+              "zExtra": 0.5
+            }
+          ],
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "user",
+              "value": {
+                "id": 57273,
+                "title": false,
+                "n": "",
+                "😀": 2,
+                "": false
+              }
+            },
+            {
+              "op": "update",
+              "tableName": "comment",
+              "id": {
+                "id": "a"
+              },
+              "constrain": {},
+              "": "İ"
+            },
+            {
+              "op": "put",
+              "tableName": "comment",
+              "value": {
+                "n": {
+                  "": null
+                },
+                "😀": [],
+                "": "\na b%é "
+              }
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "A",
+          "lastMutationIDChanges": {
+            "A中中ß中": 398
+          },
+          "gotQueriesPatch": [
+            {
+              "op": "del",
+              "hash": ""
+            },
+            {
+              "op": "del",
+              "hash": "b",
+              "zExtra": 0.5
+            }
+          ],
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "user",
+              "value": {
+                "id": 57273,
+                "title": false,
+                "n": "",
+                "😀": 2,
+                "": false
+              }
+            },
+            {
+              "op": "update",
+              "tableName": "comment",
+              "id": {
+                "id": "a"
+              },
+              "constrain": "timeout",
+              "": "İ"
+            },
+            {
+              "op": "put",
+              "tableName": "comment",
+              "value": {
+                "n": {
+                  "": null
+                },
+                "😀": [],
+                "": "\na b%é "
+              }
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "",
+          "lastMutationIDChanges": {
+            "\u0000": 432
+          },
+          "rowsPatch": [
+            {
+              "op": "update",
+              "tableName": "user",
+              "id": {
+                "id": false,
+                "n": "a"
+              },
+              "constrain": [
+                "😀",
+                "title",
+                ""
+              ],
+              "é": {}
+            },
+            {
+              "op": "del",
+              "id": {
+                "id": false
+              }
+            }
+          ],
+          "mutationsPatch": []
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "mutations": [
+            {
+              "id": {
+                "id": 859,
+                "clientID": "Bé%\\"
+              },
+              "result": {
+                "error": "alreadyProcessed"
+              }
+            }
+          ],
+          "newField": {},
+          "type": "app",
+          "kind": "server"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pushResponse",
+        {
+          "mutations": [
+            {
+              "id": {
+                "id": 859,
+                "clientID": "Bé%\\"
+              },
+              "result": {
+                "error": "alreadyProcessed"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "mutations": [
+            {
+              "id": "_zero_crud",
+              "result": "bogus"
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "deleteClients",
+        {
+          "clientIDs": [
+            " A",
+            []
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pong",
+        {},
+        -1.5
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "error": "http",
+          "status": [],
+          "details": "�"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "cookie": "",
+          "requestID": "￿",
+          "lastMutationIDChanges": {
+            "中%😀中é\"é𝒜": "219"
+          },
+          "é": false
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "é",
+          "desiredQueriesPatches": {
+            "9": [
+              {
+                "op": "clear"
+              },
+              {
+                "op": "del",
+                "hash": "%"
+              }
+            ]
+          },
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "",
+              "value": {
+                "n": "𝒜😀%aß",
+                "": true
+              }
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokePart",
+        {
+          "desiredQueriesPatches": {
+            "9": [
+              {
+                "op": "clear"
+              },
+              {
+                "op": "del",
+                "hash": "%"
+              }
+            ]
+          },
+          "pokeID": "é",
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "",
+              "value": {
+                "n": "𝒜😀%aß",
+                "": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "error": "unsupportedSchemaVersion",
+          "mutationIDs": [],
+          "zExtra": -1.5
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pushResponse",
+        {
+          "error": "unsupportedSchemaVersion",
+          "mutationIDs": []
+        }
+      ]
+    },
+    {
+      "message": [
+        "deleteClients",
+        {
+          "clientIDs": [
+            "bogus",
+            "😀b"
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "deleteClients",
+        {
+          "clientIDs": [
+            "bogus",
+            "😀b"
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "custom",
+        {
+          "wsid": 0
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": "",
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "é中_béé\"",
+          "rowsPatch": [
+            {
+              "op": "update",
+              "tableName": "issue",
+              "id": {
+                "id": "a",
+                "n": 1
+              }
+            }
+          ],
+          "mutationsPatch": "parse",
+          "": [
+            null,
+            "",
+            0
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "_% é\naA",
+          "lastMutationIDChanges": {},
+          "desiredQueriesPatches": {
+            "A𝒜😀ß\"_ß": [
+              {
+                "op": "put",
+                "hash": "中 a ",
+                "ttl": 34
+              },
+              {
+                "op": "del",
+                "hash": "a"
+              },
+              {
+                "hash": "\"",
+                "ttl": 72531
+              }
+            ]
+          },
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "issue",
+              "value": {
+                "title": {
+                  "zExtra": 1
+                },
+                "n": null,
+                "😀": {
+                  "ß": "\u001f",
+                  "中文": null,
+                  "中\na": 91315
+                },
+                "": "ß"
+              }
+            },
+            {
+              "op": "put",
+              "tableName": "user",
+              "value": {
+                "id": {
+                  "%\"a ": true,
+                  "ab": true
+                },
+                "": {
+                  "😀a\nb%": -2.25
+                }
+              }
+            },
+            {
+              "op": "put",
+              "tableName": "issue",
+              "value": {
+                "id": {
+                  "\"": null,
+                  "": "%é😀éİ",
+                  " ": "a"
+                },
+                "title": {
+                  "ébİ_İ中A": "\\ß"
+                },
+                "": 0.5
+              }
+            },
+            {
+              "op": "update",
+              "tableName": "été",
+              "id": {
+                "id": false,
+                "n": 0
+              },
+              "constrain": [],
+              "é": false
+            },
+            {
+              "op": "del",
+              "tableName": "user",
+              "id": {
+                "id": false,
+                "n": 0
+              }
+            }
+          ],
+          "zExtra": true
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "mutations": []
+        },
+        null
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "error",
+        {
+          "message": "bİ%😀",
+          "mutations": "queries"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": "_zero_crud",
+      "ok": false
+    },
+    {
+      "message": [
+        "pong",
+        "update"
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        {
+          "zExtra": 1
+        },
+        {
+          "cookie": "a",
+          "requestID": "",
+          "lastMutationIDChanges": {}
+        },
+        "pull"
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "_% é\naA",
+          "lastMutationIDChanges": {},
+          "desiredQueriesPatches": {
+            "A𝒜😀ß\"_ß": [
+              {
+                "op": "put",
+                "hash": "中 a ",
+                "ttl": 34
+              },
+              {
+                "op": "del",
+                "hash": "a"
+              },
+              {
+                "op": "put",
+                "hash": "\"",
+                "ttl": 72531
+              }
+            ]
+          },
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "issue",
+              "value": {
+                "title": null,
+                "n": null,
+                "😀": {
+                  "ß": "\u001f",
+                  "中文": null,
+                  "中\na": 91315
+                },
+                "": "ß"
+              }
+            },
+            {
+              "op": "put",
+              "tableName": "user",
+              "value": {
+                "id": {
+                  "%\"a ": true,
+                  "ab": true
+                },
+                "": {
+                  "😀a\nb%": -2.25
+                }
+              }
+            },
+            {
+              "op": "put",
+              "tableName": "issue",
+              "value": {
+                "id": {
+                  "\"": null,
+                  "": "%é😀éİ",
+                  " ": "a"
+                },
+                "title": {
+                  "ébİ_İ中A": "\\ß"
+                },
+                "": 0.5
+              }
+            },
+            {
+              "op": "update",
+              "tableName": "été",
+              "id": {
+                "id": false,
+                "n": 0
+              },
+              "constrain": [],
+              "é": false
+            },
+            {
+              "op": "del",
+              "tableName": "user",
+              "id": {
+                "id": false,
+                "n": {
+                  "zExtra": 1
+                }
+              }
+            }
+          ],
+          "zExtra": []
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "\\\"ß中é",
+          "lastMutationIDChanges": {
+            "􏿿": 452,
+            "￿": 565,
+            "😀%ßßA\n": 976
+          },
+          "desiredQueriesPatches": {
+            "AB%_ßaß": []
+          },
+          "gotQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "Bİ",
+              "ttl": -9007199254740992
+            },
+            {
+              "op": "put",
+              "hash": "😀_%\\a\\a",
+              "zExtra": {
+                "中𝒜_aß😀aé": false,
+                "b": "A\"A\\Bßß"
+              }
+            }
+          ],
+          "rowsPatch": []
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokePart",
+        {
+          "lastMutationIDChanges": {
+            "􏿿": 452,
+            "￿": 565,
+            "😀%ßßA\n": 976
+          },
+          "desiredQueriesPatches": {
+            "AB%_ßaß": []
+          },
+          "pokeID": "\\\"ß中é",
+          "gotQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "Bİ",
+              "ttl": -9007199254740992
+            },
+            {
+              "op": "put",
+              "hash": "😀_%\\a\\a"
+            }
+          ],
+          "rowsPatch": []
+        }
+      ]
+    },
+    {
+      "message": 0,
+      "ok": false
+    },
+    {
+      "message": "timeout",
+      "ok": false
+    },
+    {
+      "message": "custom",
+      "ok": false
+    },
+    {
+      "message": [
+        "connected",
+        "del"
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "deleteClients",
+        ""
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "connected",
+        0
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "_% é\naA",
+          "lastMutationIDChanges": {},
+          "desiredQueriesPatches": {
+            "A𝒜😀ß\"_ß": [
+              {
+                "op": "put",
+                "hash": "中 a ",
+                "ttl": 34
+              },
+              {
+                "op": "del",
+                "hash": "a"
+              },
+              {
+                "op": "put",
+                "hash": "\"",
+                "ttl": 72531
+              }
+            ]
+          },
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "issue",
+              "value": {
+                "title": null,
+                "n": null,
+                "😀": {
+                  "ß": "\u001f",
+                  "中文": null,
+                  "中\na": 91315
+                },
+                "": "ß"
+              }
+            },
+            {
+              "op": "put",
+              "tableName": "user",
+              "value": {
+                "id": {
+                  "%\"a ": true,
+                  "ab": true
+                },
+                "": {
+                  "😀a\nb%": -2.25
+                }
+              }
+            },
+            {
+              "op": "put",
+              "tableName": -1.5,
+              "value": {
+                "id": {
+                  "\"": null,
+                  "": "%é😀éİ",
+                  " ": "a"
+                },
+                "title": {
+                  "ébİ_İ中A": "\\ß"
+                },
+                "": 0.5
+              }
+            },
+            {
+              "op": "update",
+              "tableName": "été",
+              "id": {
+                "id": false,
+                "n": 0
+              },
+              "constrain": [],
+              "é": false
+            },
+            {
+              "op": "del",
+              "tableName": "user",
+              "id": {
+                "id": false,
+                "n": 0
+              }
+            }
+          ],
+          "zExtra": true
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": {},
+      "ok": false
+    },
+    {
+      "message": {
+        "zExtra": 1
+      },
+      "ok": false
+    },
+    {
+      "message": true,
+      "ok": false
+    },
+    {
+      "message": [
+        "transformError",
+        [
+          {
+            "error": "app",
+            "id": "􏿿",
+            "name": [],
+            "message": "\"é中ß😀",
+            "details": []
+          },
+          {
+            "error": "app",
+            "id": " ",
+            "name": "ßb中A",
+            "message": " _é\n\"\"",
+            "details": true
+          },
+          {
+            "error": "parse",
+            "id": "𝒜éb\"\nb",
+            "name": "é😀_İa𝒜",
+            "message": "İ"
+          }
+        ]
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        {
+          "id": "😀",
+          "op": "error",
+          "value": "𝒜_中"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        -1.5
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "Ω",
+          "op": "queries",
+          "value": [
+            {
+              "clientID": "",
+              "queryID": "B",
+              "ast": {
+                "table": "issue"
+              },
+              "name": "é",
+              "args": null,
+              "got": false,
+              "deleted": true,
+              "ttl": 0,
+              "inactivatedAt": 9007199254740992
+            },
+            {
+              "clientID": "ß",
+              "queryID": "ı",
+              "ast": {
+                "table": "issue"
+              },
+              "name": "中\"\\\"A \\",
+              "args": [
+                68520,
+                [
+                  null
+                ]
+              ],
+              "got": true,
+              "deleted": true,
+              "ttl": 0.5,
+              "inactivatedAt": -1,
+              "rowCount": 5
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "zeroCache",
+        {
+          "mutations": []
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "mutations": [
+            null
+          ],
+          "error": "PushFailed"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "cookie": 0,
+          "requestID": "𝒜 中😀ABİ",
+          "lastMutationIDChanges": {},
+          "😀": true
+        },
+        ""
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pushResponse",
+        {}
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "connected",
+        {}
+      ],
+      "ok": false
+    },
+    {
+      "message": "and",
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        -1.5
+      ],
+      "ok": false
+    },
+    {
+      "message": [],
+      "ok": false
+    },
+    {
+      "message": "",
+      "ok": false
+    },
+    {
+      "message": "crud",
+      "ok": false
+    },
+    {
+      "message": [
+        "pokeEnd",
+        {
+          "pokeID": "é中",
+          "cookie": true,
+          "cancel": false
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "é中_béé\"",
+          "rowsPatch": [
+            {
+              "op": "update",
+              "tableName": "issue",
+              "id": {
+                "id": "a",
+                "n": 1
+              }
+            }
+          ],
+          "mutationsPatch": [],
+          "": [
+            "",
+            "\n",
+            0
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokePart",
+        {
+          "rowsPatch": [
+            {
+              "op": "update",
+              "tableName": "issue",
+              "id": {
+                "id": "a",
+                "n": 1
+              }
+            }
+          ],
+          "mutationsPatch": [],
+          "pokeID": "é中_béé\""
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "Internal",
+          "desiredQueriesPatches": {
+            "9": [
+              {
+                "op": "clear"
+              },
+              {
+                "op": "del",
+                "hash": "%"
+              }
+            ]
+          },
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "comment",
+              "value": {
+                "n": "𝒜😀%aß",
+                "": true
+              }
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokePart",
+        {
+          "desiredQueriesPatches": {
+            "9": [
+              {
+                "op": "clear"
+              },
+              {
+                "op": "del",
+                "hash": "%"
+              }
+            ]
+          },
+          "pokeID": "Internal",
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "comment",
+              "value": {
+                "n": "𝒜😀%aß",
+                "": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "error": "http",
+          "status": 500,
+          "details": {
+            "zExtra": 1
+          }
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "Ω",
+          "op": "queries",
+          "value": [
+            {
+              "clientID": "",
+              "queryID": "B",
+              "ast": {
+                "table": "issue"
+              },
+              "name": -1.5,
+              "args": null,
+              "got": false,
+              "deleted": true,
+              "ttl": 0,
+              "inactivatedAt": 9007199254740992,
+              "rowCount": 22
+            },
+            {
+              "clientID": "ß",
+              "queryID": "ı",
+              "ast": {
+                "table": "issue"
+              },
+              "name": "中\"\\\"A \\",
+              "args": [
+                68520,
+                [
+                  null
+                ]
+              ],
+              "got": {
+                "zExtra": 1
+              },
+              "deleted": true,
+              "ttl": 0.5,
+              "inactivatedAt": -1,
+              "rowCount": 5
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "error": "http",
+          "status": 500,
+          "details": "\u001f",
+          "mutationIDs": []
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pushResponse",
+        {
+          "error": "http",
+          "status": 500,
+          "details": "\u001f",
+          "mutationIDs": []
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "z",
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "issue",
+              "value": {
+                "title": [],
+                "n": 2,
+                "😀": {
+                  "9": null,
+                  "_ß\n\\B中b": false
+                }
+              }
+            }
+          ],
+          "mutationsPatch": []
+        },
+        null
+      ],
+      "ok": false
+    },
+    {
+      "message": true,
+      "ok": false
+    },
+    {
+      "message": null,
+      "ok": false
+    },
+    {
+      "message": [
+        {
+          "pokeID": ""
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "A",
+          "lastMutationIDChanges": {
+            "A中中ß中": -1.5
+          },
+          "gotQueriesPatch": [
+            {
+              "op": "del",
+              "hash": "b",
+              "zExtra": 0.5
+            }
+          ],
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "user",
+              "value": {
+                "id": 57273,
+                "title": false,
+                "n": "",
+                "😀": 2,
+                "": false
+              }
+            },
+            {
+              "op": "update",
+              "tableName": "comment",
+              "id": {
+                "id": "a"
+              },
+              "constrain": [
+                "title"
+              ],
+              "": "İ"
+            },
+            {
+              "op": "put",
+              "tableName": "comment",
+              "value": {
+                "n": {
+                  "": null
+                },
+                "😀": [],
+                "": "\na b%é "
+              }
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokePart",
+        {
+          "lastMutationIDChanges": {
+            "A中中ß中": -1.5
+          },
+          "pokeID": "A",
+          "gotQueriesPatch": [
+            {
+              "op": "del",
+              "hash": "b"
+            }
+          ],
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "user",
+              "value": {
+                "id": 57273,
+                "title": false,
+                "n": "",
+                "😀": 2,
+                "": false
+              }
+            },
+            {
+              "op": "update",
+              "tableName": "comment",
+              "id": {
+                "id": "a"
+              },
+              "constrain": [
+                "title"
+              ]
+            },
+            {
+              "op": "put",
+              "tableName": "comment",
+              "value": {
+                "n": {
+                  "": null
+                },
+                "😀": [],
+                "": "\na b%é "
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "crud",
+        {
+          "zExtra": "_zero_crud"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "mutations": [
+            {
+              "id": {
+                "id": 859,
+                "clientID": "Bé%\\"
+              },
+              "result": {
+                "error": "alreadyProcessed"
+              }
+            }
+          ],
+          "newField": {
+            "error": {
+              "zExtra": 1
+            }
+          }
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pushResponse",
+        {
+          "mutations": [
+            {
+              "id": {
+                "id": 859,
+                "clientID": "Bé%\\"
+              },
+              "result": {
+                "error": "alreadyProcessed"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        1
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "column",
+        {
+          "clientIDs": []
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": "zeroCache",
+      "ok": false
+    },
+    {
+      "message": "column",
+      "ok": false
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "_ \"\n中",
+          "lastMutationIDChanges": {},
+          "gotQueriesPatch": [
+            {
+              "op": "del",
+              "hash": "ßé\\ é "
+            },
+            {
+              "op": "del",
+              "hash": "é中a😀"
+            }
+          ],
+          "rowsPatch": [
+            {
+              "op": "clear"
+            },
+            {
+              "op": "put",
+              "tableName": "comment",
+              "value": {
+                "id": {},
+                "title": [
+                  63801,
+                  false
+                ],
+                "n": "\"",
+                "😀": {
+                  "\nb\\éß\nß": null,
+                  "😀a\nA😀%": 2,
+                  "\n": "\""
+                }
+              }
+            },
+            {
+              "op": "del",
+              "tableName": "issue",
+              "id": {
+                "id": "a"
+              }
+            }
+          ],
+          "mutationsPatch": "timeout"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": "0",
+      "ok": false
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "error": "zeroPusher",
+          "details": "ß",
+          "mutationIDs": [
+            {
+              "id": 111,
+              "clientID": "😀"
+            },
+            {
+              "id": 73,
+              "clientID": "ßBA\"B\""
+            }
+          ]
+        },
+        "pushResponse"
+      ],
+      "ok": false
+    },
+    {
+      "message": "0",
+      "ok": false
+    },
+    {
+      "message": [
+        "put",
+        {
+          "clientGroupIDs": [
+            "İb"
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pushResponse",
+        {
+          "error": "unsupportedSchemaVersion",
+          "mutationIDs": [],
+          "zExtra": false,
+          "mutations": "custom"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pushResponse",
+        {
+          "error": "unsupportedSchemaVersion",
+          "mutationIDs": []
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "pokeID": "A",
+          "lastMutationIDChanges": {
+            "A中中ß中": 398
+          },
+          "gotQueriesPatch": [
+            {
+              "op": "del",
+              "hash": ""
+            },
+            {
+              "op": "del",
+              "hash": "b",
+              "zExtra": 0.5
+            }
+          ],
+          "rowsPatch": [
+            {
+              "op": "put",
+              "tableName": "user",
+              "value": {
+                "id": 57273,
+                "title": false,
+                "n": "",
+                "😀": 2,
+                "": false
+              }
+            },
+            {
+              "tableName": "comment",
+              "id": {
+                "id": "a"
+              },
+              "constrain": [
+                "title"
+              ],
+              "": "İ"
+            },
+            {
+              "op": "put",
+              "tableName": "comment",
+              "value": {
+                "n": {
+                  "": null
+                },
+                "😀": [],
+                "": "\na b%é "
+              }
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "error",
+        {
+          "kind": "InvalidPush"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "bogus",
+        {}
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pokeEnd"
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "Rebalance",
+        {
+          "error": "http",
+          "status": 500,
+          "details": "�"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "crud"
+      ],
+      "ok": false
+    }
+  ]
+}

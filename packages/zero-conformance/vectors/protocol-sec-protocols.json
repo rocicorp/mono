@@ -1,0 +1,2906 @@
+{
+  "formatVersion": 1,
+  "kind": "protocol-sec-protocols",
+  "description": "The Sec-WebSocket-Protocol value (`encodeSecProtocols` and `decodeSecProtocols`). `decoded` is what `decodeSecProtocols(encoded)` returns, if it does not throw. Cases with `initConnectionMessage` or `authToken` were encoded from them.",
+  "cases": [
+    {
+      "encoded": "e30%3D",
+      "ok": true,
+      "decoded": {}
+    },
+    {
+      "encoded": "eyJhdXRoVG9rZW4iOiIifQ%3D%3D",
+      "ok": true,
+      "decoded": {
+        "authToken": ""
+      },
+      "authToken": ""
+    },
+    {
+      "encoded": "eyJhdXRoVG9rZW4iOiJleUpoYkdjaU9pSklVekkxTmlKOS5leUp6ZFdJaU9pSXhJbjAuc2lnIn0%3D",
+      "ok": true,
+      "decoded": {
+        "authToken": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig"
+      },
+      "authToken": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig"
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W119XX0%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": []
+          }
+        ]
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": []
+        }
+      ]
+    },
+    {
+      "encoded": "e30",
+      "ok": true,
+      "decoded": {}
+    },
+    {
+      "encoded": "e30%3d",
+      "ok": true,
+      "decoded": {}
+    },
+    {
+      "encoded": "e3%200%3D",
+      "ok": true,
+      "decoded": {}
+    },
+    {
+      "encoded": " e30= ",
+      "ok": true,
+      "decoded": {}
+    },
+    {
+      "encoded": "77u/e30=",
+      "ok": true,
+      "decoded": {}
+    },
+    {
+      "encoded": "e30==",
+      "ok": false
+    },
+    {
+      "encoded": "e3=0",
+      "ok": false
+    },
+    {
+      "encoded": "e30%",
+      "ok": false
+    },
+    {
+      "encoded": "e30%3",
+      "ok": false
+    },
+    {
+      "encoded": "%E0%A4%A",
+      "ok": false
+    },
+    {
+      "encoded": "%C3%A9",
+      "ok": false
+    },
+    {
+      "encoded": "!!!!",
+      "ok": false
+    },
+    {
+      "encoded": "a",
+      "ok": false
+    },
+    {
+      "encoded": "",
+      "ok": false
+    },
+    {
+      "encoded": "77u%2FeyJhdXRoVG9rZW4iOiJhIn0%3D",
+      "ok": true,
+      "decoded": {
+        "authToken": "a"
+      }
+    },
+    {
+      "encoded": "eyJhdXRoVG9rZW4iOiL%2F5LgifQ%3D%3D",
+      "ok": true,
+      "decoded": {
+        "authToken": "��"
+      }
+    },
+    {
+      "encoded": "NQ%3D%3D",
+      "ok": true,
+      "decoded": 5
+    },
+    {
+      "encoded": "bm90IGpzb24%3D",
+      "ok": false
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJwdXQiLCJoYXNoIjoiYmHEsEEiLCJ0dGwiOjcsImFzdCI6eyJ0YWJsZSI6Imlzc3VlIiwiYWxpYXMiOiJpIiwic2NoZW1hIjoicHVibGljIiwicmVsYXRlZCI6W3siY29ycmVsYXRpb24iOnsicGFyZW50RmllbGQiOlsiaWQiXSwiY2hpbGRGaWVsZCI6WyJpc3N1ZUlEIl19LCJzdWJxdWVyeSI6eyJ0YWJsZSI6ImNvbW1lbnQiLCJhbGlhcyI6ImNvbW1lbnRzIiwib3JkZXJCeSI6W1siaWQiLCJkZXNjIl1dfSwic3lzdGVtIjoicGVybWlzc2lvbnMiLCJoaWRkZW4iOnRydWV9XSwic3RhcnQiOnsicm93Ijp7ImlkIjoiYSIsIm4iOm51bGx9LCJleGNsdXNpdmUiOnRydWV9fX1dLCJ1c2VyUXVlcnlVUkwiOiJBIiwiYWN0aXZlQ2xpZW50cyI6WyLDn1xcYUJCIl19XX0%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "put",
+                "hash": "baİA",
+                "ttl": 7,
+                "ast": {
+                  "table": "issue",
+                  "alias": "i",
+                  "schema": "public",
+                  "related": [
+                    {
+                      "correlation": {
+                        "parentField": [
+                          "id"
+                        ],
+                        "childField": [
+                          "issueID"
+                        ]
+                      },
+                      "subquery": {
+                        "table": "comment",
+                        "alias": "comments",
+                        "orderBy": [
+                          [
+                            "id",
+                            "desc"
+                          ]
+                        ]
+                      },
+                      "system": "permissions",
+                      "hidden": true
+                    }
+                  ],
+                  "start": {
+                    "row": {
+                      "id": "a",
+                      "n": null
+                    },
+                    "exclusive": true
+                  }
+                }
+              }
+            ],
+            "userQueryURL": "A",
+            "activeClients": [
+              "ß\\aBB"
+            ]
+          }
+        ]
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "baİA",
+              "ttl": 7,
+              "ast": {
+                "table": "issue",
+                "alias": "i",
+                "schema": "public",
+                "related": [
+                  {
+                    "correlation": {
+                      "parentField": [
+                        "id"
+                      ],
+                      "childField": [
+                        "issueID"
+                      ]
+                    },
+                    "subquery": {
+                      "table": "comment",
+                      "alias": "comments",
+                      "orderBy": [
+                        [
+                          "id",
+                          "desc"
+                        ]
+                      ]
+                    },
+                    "system": "permissions",
+                    "hidden": true
+                  }
+                ],
+                "start": {
+                  "row": {
+                    "id": "a",
+                    "n": null
+                  },
+                  "exclusive": true
+                }
+              }
+            }
+          ],
+          "userQueryURL": "A",
+          "activeClients": [
+            "ß\\aBB"
+          ]
+        }
+      ]
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJjbGVhciJ9LHsib3AiOiJwdXQiLCJoYXNoIjoi8J%2BYgEFfYkHEsGFhIiwiYXN0Ijp7InRhYmxlIjoiaXNzdWUiLCJhbGlhcyI6ImkiLCJzY2hlbWEiOiJwdWJsaWMiLCJyZWxhdGVkIjpbeyJjb3JyZWxhdGlvbiI6eyJwYXJlbnRGaWVsZCI6WyJpZCJdLCJjaGlsZEZpZWxkIjpbImlzc3VlSUQiXX0sInN1YnF1ZXJ5Ijp7InRhYmxlIjoiY29tbWVudCIsImFsaWFzIjoiY29tbWVudHMiLCJvcmRlckJ5IjpbWyJpZCIsImRlc2MiXV19LCJzeXN0ZW0iOiJwZXJtaXNzaW9ucyIsImhpZGRlbiI6dHJ1ZX1dLCJzdGFydCI6eyJyb3ciOnsiaWQiOiJhIiwibiI6bnVsbH0sImV4Y2x1c2l2ZSI6dHJ1ZX19LCJuYW1lIjoiw6kiLCJhcmdzIjpbIsOfIGFiw58iXX1dLCJjbGllbnRTY2hlbWEiOnsidGFibGVzIjp7IvCdkpwiOnsiY29sdW1ucyI6e30sInByaW1hcnlLZXkiOltdfSwiYWIiOnsiY29sdW1ucyI6e30sInByaW1hcnlLZXkiOltdfX19LCJkZWxldGVkIjp7fSwidXNlclF1ZXJ5SGVhZGVycyI6e319XSwiYXV0aFRva2VuIjoiXG7DqWLEsGLwn5iAIn0%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "clear"
+              },
+              {
+                "op": "put",
+                "hash": "😀A_bAİaa",
+                "ast": {
+                  "table": "issue",
+                  "alias": "i",
+                  "schema": "public",
+                  "related": [
+                    {
+                      "correlation": {
+                        "parentField": [
+                          "id"
+                        ],
+                        "childField": [
+                          "issueID"
+                        ]
+                      },
+                      "subquery": {
+                        "table": "comment",
+                        "alias": "comments",
+                        "orderBy": [
+                          [
+                            "id",
+                            "desc"
+                          ]
+                        ]
+                      },
+                      "system": "permissions",
+                      "hidden": true
+                    }
+                  ],
+                  "start": {
+                    "row": {
+                      "id": "a",
+                      "n": null
+                    },
+                    "exclusive": true
+                  }
+                },
+                "name": "é",
+                "args": [
+                  "ß abß"
+                ]
+              }
+            ],
+            "clientSchema": {
+              "tables": {
+                "𝒜": {
+                  "columns": {},
+                  "primaryKey": []
+                },
+                "ab": {
+                  "columns": {},
+                  "primaryKey": []
+                }
+              }
+            },
+            "deleted": {},
+            "userQueryHeaders": {}
+          }
+        ],
+        "authToken": "\nébİb😀"
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "clear"
+            },
+            {
+              "op": "put",
+              "hash": "😀A_bAİaa",
+              "ast": {
+                "table": "issue",
+                "alias": "i",
+                "schema": "public",
+                "related": [
+                  {
+                    "correlation": {
+                      "parentField": [
+                        "id"
+                      ],
+                      "childField": [
+                        "issueID"
+                      ]
+                    },
+                    "subquery": {
+                      "table": "comment",
+                      "alias": "comments",
+                      "orderBy": [
+                        [
+                          "id",
+                          "desc"
+                        ]
+                      ]
+                    },
+                    "system": "permissions",
+                    "hidden": true
+                  }
+                ],
+                "start": {
+                  "row": {
+                    "id": "a",
+                    "n": null
+                  },
+                  "exclusive": true
+                }
+              },
+              "name": "é",
+              "args": [
+                "ß abß"
+              ]
+            }
+          ],
+          "clientSchema": {
+            "tables": {
+              "𝒜": {
+                "columns": {},
+                "primaryKey": []
+              },
+              "ab": {
+                "columns": {},
+                "primaryKey": []
+              }
+            }
+          },
+          "deleted": {},
+          "userQueryHeaders": {}
+        }
+      ],
+      "authToken": "\nébİb😀"
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJkZWwiLCJoYXNoIjoiZcyBIn0seyJvcCI6InB1dCIsImhhc2giOiJcdTAwMDAiLCJhc3QiOnsidGFibGUiOiJpc3N1ZSJ9LCJhcmdzIjpbNjcyODddfSx7Im9wIjoiZGVsIiwiaGFzaCI6Is%2BJIn1dfV19",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "del",
+                "hash": "é"
+              },
+              {
+                "op": "put",
+                "hash": "\u0000",
+                "ast": {
+                  "table": "issue"
+                },
+                "args": [
+                  67287
+                ]
+              },
+              {
+                "op": "del",
+                "hash": "ω"
+              }
+            ]
+          }
+        ]
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "del",
+              "hash": "é"
+            },
+            {
+              "op": "put",
+              "hash": "\u0000",
+              "ast": {
+                "table": "issue"
+              },
+              "args": [
+                67287
+              ]
+            },
+            {
+              "op": "del",
+              "hash": "ω"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJjbGVhciJ9LHsib3AiOiJjbGVhciJ9LHsib3AiOiJwdXQiLCJoYXNoIjoiXFzwnZKcxLBcXPCdkpxCIiwidHRsIjozODQ2OSwibmFtZSI6IlwiIEFcXCJ9XSwidXNlclF1ZXJ5SGVhZGVycyI6e30sImFjdGl2ZUNsaWVudHMiOlsiIl19XSwiYXV0aFRva2VuIjoiYfCfmIAifQ%3D%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "clear"
+              },
+              {
+                "op": "clear"
+              },
+              {
+                "op": "put",
+                "hash": "\\𝒜İ\\𝒜B",
+                "ttl": 38469,
+                "name": "\" A\\"
+              }
+            ],
+            "userQueryHeaders": {},
+            "activeClients": [
+              ""
+            ]
+          }
+        ],
+        "authToken": "a😀"
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "clear"
+            },
+            {
+              "op": "clear"
+            },
+            {
+              "op": "put",
+              "hash": "\\𝒜İ\\𝒜B",
+              "ttl": 38469,
+              "name": "\" A\\"
+            }
+          ],
+          "userQueryHeaders": {},
+          "activeClients": [
+            ""
+          ]
+        }
+      ],
+      "authToken": "a😀"
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJjbGVhciJ9XSwiY2xpZW50U2NoZW1hIjp7InRhYmxlcyI6eyIiOnsiY29sdW1ucyI6eyJhIjp7InR5cGUiOiJib29sZWFuIn0sIklzc3VlIjp7InR5cGUiOiJqc29uIn0sImIiOnsidHlwZSI6Impzb24ifX0sInByaW1hcnlLZXkiOlsiSXNzdWUiXX0sIu6AgCI6eyJjb2x1bW5zIjp7Il8iOnsidHlwZSI6Im51bWJlciJ9LCJjb21tZW50Ijp7InR5cGUiOiJzdHJpbmcifX0sInByaW1hcnlLZXkiOltdfSwiXyI6eyJjb2x1bW5zIjp7IvCfmIAiOnsidHlwZSI6InN0cmluZyJ9LCLugIAiOnsidHlwZSI6Im51bWJlciJ9fSwicHJpbWFyeUtleSI6WyLwn5iAIiwi7oCAIl19fX0sInVzZXJQdXNoSGVhZGVycyI6eyJh8J%2BYgCI6IuS4rSIsImJfQsOpw5%2FugIDugIAiOiLwn5iAYSJ9LCJ1c2VyUXVlcnlVUkwiOiIgIPCdkpzwn5iAxLBCw6nugIAiLCJhY3RpdmVDbGllbnRzIjpbIsOpQiIsIu6AgPCfmIDugIDkuK3kuK3kuK1cbiJdLCJ0cmFjZXBhcmVudCI6Ilwiw58lw59B7oCAIn1dfQ%3D%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "clear"
+              }
+            ],
+            "clientSchema": {
+              "tables": {
+                "": {
+                  "columns": {
+                    "a": {
+                      "type": "boolean"
+                    },
+                    "Issue": {
+                      "type": "json"
+                    },
+                    "b": {
+                      "type": "json"
+                    }
+                  },
+                  "primaryKey": [
+                    "Issue"
+                  ]
+                },
+                "": {
+                  "columns": {
+                    "_": {
+                      "type": "number"
+                    },
+                    "comment": {
+                      "type": "string"
+                    }
+                  },
+                  "primaryKey": []
+                },
+                "_": {
+                  "columns": {
+                    "😀": {
+                      "type": "string"
+                    },
+                    "": {
+                      "type": "number"
+                    }
+                  },
+                  "primaryKey": [
+                    "😀",
+                    ""
+                  ]
+                }
+              }
+            },
+            "userPushHeaders": {
+              "a😀": "中",
+              "b_Béß": "😀a"
+            },
+            "userQueryURL": "  𝒜😀İBé",
+            "activeClients": [
+              "éB",
+              "😀中中中\n"
+            ],
+            "traceparent": "\"ß%ßA"
+          }
+        ]
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "clear"
+            }
+          ],
+          "clientSchema": {
+            "tables": {
+              "": {
+                "columns": {
+                  "a": {
+                    "type": "boolean"
+                  },
+                  "Issue": {
+                    "type": "json"
+                  },
+                  "b": {
+                    "type": "json"
+                  }
+                },
+                "primaryKey": [
+                  "Issue"
+                ]
+              },
+              "": {
+                "columns": {
+                  "_": {
+                    "type": "number"
+                  },
+                  "comment": {
+                    "type": "string"
+                  }
+                },
+                "primaryKey": []
+              },
+              "_": {
+                "columns": {
+                  "😀": {
+                    "type": "string"
+                  },
+                  "": {
+                    "type": "number"
+                  }
+                },
+                "primaryKey": [
+                  "😀",
+                  ""
+                ]
+              }
+            }
+          },
+          "userPushHeaders": {
+            "a😀": "中",
+            "b_Béß": "😀a"
+          },
+          "userQueryURL": "  𝒜😀İBé",
+          "activeClients": [
+            "éB",
+            "😀中中中\n"
+          ],
+          "traceparent": "\"ß%ßA"
+        }
+      ]
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W10sImNsaWVudFNjaGVtYSI6eyJ0YWJsZXMiOnsiXyI6eyJjb2x1bW5zIjp7ImFiIjp7InR5cGUiOiJqc29uIn0sIu6AgCI6eyJ0eXBlIjoiYm9vbGVhbiJ9fSwicHJpbWFyeUtleSI6WyLugIAiXX0sIvCfmIAiOnsiY29sdW1ucyI6eyLwnZKcIjp7InR5cGUiOiJzdHJpbmcifSwi7oCAIjp7InR5cGUiOiJib29sZWFuIn0sImNvbW1lbnQiOnsidHlwZSI6Im51bGwifX0sInByaW1hcnlLZXkiOlsi8J2SnCIsImNvbW1lbnQiXX19fSwidXNlclB1c2hIZWFkZXJzIjp7IiI6IiDDn%2FCfmIDDnyIsIvCfmIDwn5iAQu6AgO6AgCI6IiBB8J2SnGLwnZKcw6lBIn0sInVzZXJRdWVyeVVSTCI6IjkiLCJ0cmFjZXBhcmVudCI6IiBcbsSww5%2FDn2HEsGIifV0sImF1dGhUb2tlbiI6IvCdkpwifQ%3D%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [],
+            "clientSchema": {
+              "tables": {
+                "_": {
+                  "columns": {
+                    "ab": {
+                      "type": "json"
+                    },
+                    "": {
+                      "type": "boolean"
+                    }
+                  },
+                  "primaryKey": [
+                    ""
+                  ]
+                },
+                "😀": {
+                  "columns": {
+                    "𝒜": {
+                      "type": "string"
+                    },
+                    "": {
+                      "type": "boolean"
+                    },
+                    "comment": {
+                      "type": "null"
+                    }
+                  },
+                  "primaryKey": [
+                    "𝒜",
+                    "comment"
+                  ]
+                }
+              }
+            },
+            "userPushHeaders": {
+              "": " ß😀ß",
+              "😀😀B": " A𝒜b𝒜éA"
+            },
+            "userQueryURL": "9",
+            "traceparent": " \nİßßaİb"
+          }
+        ],
+        "authToken": "𝒜"
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [],
+          "clientSchema": {
+            "tables": {
+              "_": {
+                "columns": {
+                  "ab": {
+                    "type": "json"
+                  },
+                  "": {
+                    "type": "boolean"
+                  }
+                },
+                "primaryKey": [
+                  ""
+                ]
+              },
+              "😀": {
+                "columns": {
+                  "𝒜": {
+                    "type": "string"
+                  },
+                  "": {
+                    "type": "boolean"
+                  },
+                  "comment": {
+                    "type": "null"
+                  }
+                },
+                "primaryKey": [
+                  "𝒜",
+                  "comment"
+                ]
+              }
+            }
+          },
+          "userPushHeaders": {
+            "": " ß😀ß",
+            "😀😀B": " A𝒜b𝒜éA"
+          },
+          "userQueryURL": "9",
+          "traceparent": " \nİßßaİb"
+        }
+      ],
+      "authToken": "𝒜"
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJkZWwiLCJoYXNoIjoiIn0seyJvcCI6InB1dCIsImhhc2giOiJfXG5cIiIsInR0bCI6MjE0NzQ4MzY0OCwiYXN0Ijp7InRhYmxlIjoiaXNzdWUiLCJ3aGVyZSI6eyJ0eXBlIjoic2ltcGxlIiwib3AiOiI9IiwibGVmdCI6eyJ0eXBlIjoiY29sdW1uIiwibmFtZSI6ImlkIn0sInJpZ2h0Ijp7InR5cGUiOiJsaXRlcmFsIiwidmFsdWUiOiIxIn19LCJvcmRlckJ5IjpbWyJpZCIsImFzYyJdXSwibGltaXQiOjEwfX0seyJvcCI6ImRlbCIsImhhc2giOiIgIn1dLCJkZWxldGVkIjp7ImNsaWVudElEcyI6W10sImNsaWVudEdyb3VwSURzIjpbXX0sInVzZXJRdWVyeUhlYWRlcnMiOnsiIjoiw58ifX1dLCJhdXRoVG9rZW4iOiJfIGEifQ%3D%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "del",
+                "hash": ""
+              },
+              {
+                "op": "put",
+                "hash": "_\n\"",
+                "ttl": 2147483648,
+                "ast": {
+                  "table": "issue",
+                  "where": {
+                    "type": "simple",
+                    "op": "=",
+                    "left": {
+                      "type": "column",
+                      "name": "id"
+                    },
+                    "right": {
+                      "type": "literal",
+                      "value": "1"
+                    }
+                  },
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc"
+                    ]
+                  ],
+                  "limit": 10
+                }
+              },
+              {
+                "op": "del",
+                "hash": " "
+              }
+            ],
+            "deleted": {
+              "clientIDs": [],
+              "clientGroupIDs": []
+            },
+            "userQueryHeaders": {
+              "": "ß"
+            }
+          }
+        ],
+        "authToken": "_ a"
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "del",
+              "hash": ""
+            },
+            {
+              "op": "put",
+              "hash": "_\n\"",
+              "ttl": 2147483648,
+              "ast": {
+                "table": "issue",
+                "where": {
+                  "type": "simple",
+                  "op": "=",
+                  "left": {
+                    "type": "column",
+                    "name": "id"
+                  },
+                  "right": {
+                    "type": "literal",
+                    "value": "1"
+                  }
+                },
+                "orderBy": [
+                  [
+                    "id",
+                    "asc"
+                  ]
+                ],
+                "limit": 10
+              }
+            },
+            {
+              "op": "del",
+              "hash": " "
+            }
+          ],
+          "deleted": {
+            "clientIDs": [],
+            "clientGroupIDs": []
+          },
+          "userQueryHeaders": {
+            "": "ß"
+          }
+        }
+      ],
+      "authToken": "_ a"
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJwdXQiLCJoYXNoIjoiXFxcIlwiJSIsIm5hbWUiOiJhIiwiYXJncyI6W2ZhbHNlXX0seyJvcCI6InB1dCIsImhhc2giOiLugIDkuK3kuK1cbiIsImFzdCI6eyJ0YWJsZSI6Imlzc3VlIn19XSwidXNlclF1ZXJ5VVJMIjoi7oCAXG4ifV0sImF1dGhUb2tlbiI6Iu6AgEIifQ%3D%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "put",
+                "hash": "\\\"\"%",
+                "name": "a",
+                "args": [
+                  false
+                ]
+              },
+              {
+                "op": "put",
+                "hash": "中中\n",
+                "ast": {
+                  "table": "issue"
+                }
+              }
+            ],
+            "userQueryURL": "\n"
+          }
+        ],
+        "authToken": "B"
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "\\\"\"%",
+              "name": "a",
+              "args": [
+                false
+              ]
+            },
+            {
+              "op": "put",
+              "hash": "中中\n",
+              "ast": {
+                "table": "issue"
+              }
+            }
+          ],
+          "userQueryURL": "\n"
+        }
+      ],
+      "authToken": "B"
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJwdXQiLCJoYXNoIjoiIiwiYXN0Ijp7InRhYmxlIjoiaXNzdWUiLCJhbGlhcyI6ImkiLCJzY2hlbWEiOiJwdWJsaWMiLCJyZWxhdGVkIjpbeyJjb3JyZWxhdGlvbiI6eyJwYXJlbnRGaWVsZCI6WyJpZCJdLCJjaGlsZEZpZWxkIjpbImlzc3VlSUQiXX0sInN1YnF1ZXJ5Ijp7InRhYmxlIjoiY29tbWVudCIsImFsaWFzIjoiY29tbWVudHMiLCJvcmRlckJ5IjpbWyJpZCIsImRlc2MiXV19LCJzeXN0ZW0iOiJwZXJtaXNzaW9ucyIsImhpZGRlbiI6dHJ1ZX1dLCJzdGFydCI6eyJyb3ciOnsiaWQiOiJhIiwibiI6bnVsbH0sImV4Y2x1c2l2ZSI6dHJ1ZX19LCJhcmdzIjpbbnVsbF19LHsib3AiOiJjbGVhciJ9XSwidXNlclB1c2hVUkwiOiIgxLBcbiXDqcOpIiwidXNlclB1c2hIZWFkZXJzIjp7fSwidXNlclF1ZXJ5SGVhZGVycyI6e30sImFjdGl2ZUNsaWVudHMiOltdfV19",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "put",
+                "hash": "",
+                "ast": {
+                  "table": "issue",
+                  "alias": "i",
+                  "schema": "public",
+                  "related": [
+                    {
+                      "correlation": {
+                        "parentField": [
+                          "id"
+                        ],
+                        "childField": [
+                          "issueID"
+                        ]
+                      },
+                      "subquery": {
+                        "table": "comment",
+                        "alias": "comments",
+                        "orderBy": [
+                          [
+                            "id",
+                            "desc"
+                          ]
+                        ]
+                      },
+                      "system": "permissions",
+                      "hidden": true
+                    }
+                  ],
+                  "start": {
+                    "row": {
+                      "id": "a",
+                      "n": null
+                    },
+                    "exclusive": true
+                  }
+                },
+                "args": [
+                  null
+                ]
+              },
+              {
+                "op": "clear"
+              }
+            ],
+            "userPushURL": " İ\n%éé",
+            "userPushHeaders": {},
+            "userQueryHeaders": {},
+            "activeClients": []
+          }
+        ]
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "",
+              "ast": {
+                "table": "issue",
+                "alias": "i",
+                "schema": "public",
+                "related": [
+                  {
+                    "correlation": {
+                      "parentField": [
+                        "id"
+                      ],
+                      "childField": [
+                        "issueID"
+                      ]
+                    },
+                    "subquery": {
+                      "table": "comment",
+                      "alias": "comments",
+                      "orderBy": [
+                        [
+                          "id",
+                          "desc"
+                        ]
+                      ]
+                    },
+                    "system": "permissions",
+                    "hidden": true
+                  }
+                ],
+                "start": {
+                  "row": {
+                    "id": "a",
+                    "n": null
+                  },
+                  "exclusive": true
+                }
+              },
+              "args": [
+                null
+              ]
+            },
+            {
+              "op": "clear"
+            }
+          ],
+          "userPushURL": " İ\n%éé",
+          "userPushHeaders": {},
+          "userQueryHeaders": {},
+          "activeClients": []
+        }
+      ]
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJjbGVhciJ9LHsib3AiOiJkZWwiLCJoYXNoIjoiw6lcIsOpIEIifSx7Im9wIjoicHV0IiwiaGFzaCI6IsOp8J%2BYgEFfIiwidHRsIjoyMTQ3NDgzNjQ4fV0sImNsaWVudFNjaGVtYSI6eyJ0YWJsZXMiOnt9fSwidXNlclB1c2hIZWFkZXJzIjp7IvCdkpwiOiJlzIEifSwidXNlclF1ZXJ5VVJMIjoiIEHEsCXkuK1cIvCdkpxiIiwidXNlclF1ZXJ5SGVhZGVycyI6e30sImFjdGl2ZUNsaWVudHMiOltdfV0sImF1dGhUb2tlbiI6Il8ifQ%3D%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "clear"
+              },
+              {
+                "op": "del",
+                "hash": "é\"é B"
+              },
+              {
+                "op": "put",
+                "hash": "é😀A_",
+                "ttl": 2147483648
+              }
+            ],
+            "clientSchema": {
+              "tables": {}
+            },
+            "userPushHeaders": {
+              "𝒜": "é"
+            },
+            "userQueryURL": " Aİ%中\"𝒜b",
+            "userQueryHeaders": {},
+            "activeClients": []
+          }
+        ],
+        "authToken": "_"
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "clear"
+            },
+            {
+              "op": "del",
+              "hash": "é\"é B"
+            },
+            {
+              "op": "put",
+              "hash": "é😀A_",
+              "ttl": 2147483648
+            }
+          ],
+          "clientSchema": {
+            "tables": {}
+          },
+          "userPushHeaders": {
+            "𝒜": "é"
+          },
+          "userQueryURL": " Aİ%中\"𝒜b",
+          "userQueryHeaders": {},
+          "activeClients": []
+        }
+      ],
+      "authToken": "_"
+    },
+    {
+      "encoded": "e30%3D",
+      "ok": true,
+      "decoded": {}
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W119XSwiYXV0aFRva2VuIjoiMCJ9",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": []
+          }
+        ],
+        "authToken": "0"
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": []
+        }
+      ],
+      "authToken": "0"
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJwdXQiLCJoYXNoIjoiw59cXPCdkpzEsCIsInR0bCI6MS43OTc2OTMxMzQ4NjIzMTU3ZSszMDgsImFzdCI6eyJ0YWJsZSI6Imlzc3VlIiwid2hlcmUiOnsidHlwZSI6InNpbXBsZSIsIm9wIjoiPSIsImxlZnQiOnsidHlwZSI6ImNvbHVtbiIsIm5hbWUiOiJvd25lcklEIn0sInJpZ2h0Ijp7InR5cGUiOiJzdGF0aWMiLCJhbmNob3IiOiJhdXRoRGF0YSIsImZpZWxkIjpbInVzZXIiLCJzdWIiXX19fX1dLCJjbGllbnRTY2hlbWEiOnsidGFibGVzIjp7ImIiOnsiY29sdW1ucyI6eyJhIjp7InR5cGUiOiJqc29uIn19LCJwcmltYXJ5S2V5IjpbImEiXX19fX1dLCJhdXRoVG9rZW4iOiIifQ%3D%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "put",
+                "hash": "ß\\𝒜İ",
+                "ttl": 1.7976931348623157e+308,
+                "ast": {
+                  "table": "issue",
+                  "where": {
+                    "type": "simple",
+                    "op": "=",
+                    "left": {
+                      "type": "column",
+                      "name": "ownerID"
+                    },
+                    "right": {
+                      "type": "static",
+                      "anchor": "authData",
+                      "field": [
+                        "user",
+                        "sub"
+                      ]
+                    }
+                  }
+                }
+              }
+            ],
+            "clientSchema": {
+              "tables": {
+                "b": {
+                  "columns": {
+                    "a": {
+                      "type": "json"
+                    }
+                  },
+                  "primaryKey": [
+                    "a"
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        "authToken": ""
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "ß\\𝒜İ",
+              "ttl": 1.7976931348623157e+308,
+              "ast": {
+                "table": "issue",
+                "where": {
+                  "type": "simple",
+                  "op": "=",
+                  "left": {
+                    "type": "column",
+                    "name": "ownerID"
+                  },
+                  "right": {
+                    "type": "static",
+                    "anchor": "authData",
+                    "field": [
+                      "user",
+                      "sub"
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "clientSchema": {
+            "tables": {
+              "b": {
+                "columns": {
+                  "a": {
+                    "type": "json"
+                  }
+                },
+                "primaryKey": [
+                  "a"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "authToken": ""
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJkZWwiLCJoYXNoIjoizqkifSx7Im9wIjoiZGVsIiwiaGFzaCI6InoifSx7Im9wIjoicHV0IiwiaGFzaCI6IsOfXG4iLCJhc3QiOnsidGFibGUiOiJpc3N1ZSIsImFsaWFzIjoiaSIsInNjaGVtYSI6InB1YmxpYyIsInJlbGF0ZWQiOlt7ImNvcnJlbGF0aW9uIjp7InBhcmVudEZpZWxkIjpbImlkIl0sImNoaWxkRmllbGQiOlsiaXNzdWVJRCJdfSwic3VicXVlcnkiOnsidGFibGUiOiJjb21tZW50IiwiYWxpYXMiOiJjb21tZW50cyIsIm9yZGVyQnkiOltbImlkIiwiZGVzYyJdXX0sInN5c3RlbSI6InBlcm1pc3Npb25zIiwiaGlkZGVuIjp0cnVlfV0sInN0YXJ0Ijp7InJvdyI6eyJpZCI6ImEiLCJuIjpudWxsfSwiZXhjbHVzaXZlIjp0cnVlfX19XSwidXNlclF1ZXJ5SGVhZGVycyI6eyLDqSI6IuS4reaWhyIsIl9fX2FfXCIiOiJBXFwgXCJCIn19XSwiYXV0aFRva2VuIjoi8J2SnFxuYiBcbiBiIn0%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "del",
+                "hash": "Ω"
+              },
+              {
+                "op": "del",
+                "hash": "z"
+              },
+              {
+                "op": "put",
+                "hash": "ß\n",
+                "ast": {
+                  "table": "issue",
+                  "alias": "i",
+                  "schema": "public",
+                  "related": [
+                    {
+                      "correlation": {
+                        "parentField": [
+                          "id"
+                        ],
+                        "childField": [
+                          "issueID"
+                        ]
+                      },
+                      "subquery": {
+                        "table": "comment",
+                        "alias": "comments",
+                        "orderBy": [
+                          [
+                            "id",
+                            "desc"
+                          ]
+                        ]
+                      },
+                      "system": "permissions",
+                      "hidden": true
+                    }
+                  ],
+                  "start": {
+                    "row": {
+                      "id": "a",
+                      "n": null
+                    },
+                    "exclusive": true
+                  }
+                }
+              }
+            ],
+            "userQueryHeaders": {
+              "é": "中文",
+              "___a_\"": "A\\ \"B"
+            }
+          }
+        ],
+        "authToken": "𝒜\nb \n b"
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "del",
+              "hash": "Ω"
+            },
+            {
+              "op": "del",
+              "hash": "z"
+            },
+            {
+              "op": "put",
+              "hash": "ß\n",
+              "ast": {
+                "table": "issue",
+                "alias": "i",
+                "schema": "public",
+                "related": [
+                  {
+                    "correlation": {
+                      "parentField": [
+                        "id"
+                      ],
+                      "childField": [
+                        "issueID"
+                      ]
+                    },
+                    "subquery": {
+                      "table": "comment",
+                      "alias": "comments",
+                      "orderBy": [
+                        [
+                          "id",
+                          "desc"
+                        ]
+                      ]
+                    },
+                    "system": "permissions",
+                    "hidden": true
+                  }
+                ],
+                "start": {
+                  "row": {
+                    "id": "a",
+                    "n": null
+                  },
+                  "exclusive": true
+                }
+              }
+            }
+          ],
+          "userQueryHeaders": {
+            "é": "中文",
+            "___a_\"": "A\\ \"B"
+          }
+        }
+      ],
+      "authToken": "𝒜\nb \n b"
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJkZWwiLCJoYXNoIjoiIF9cXMOfJVxuXG7DqSJ9LHsib3AiOiJwdXQiLCJoYXNoIjoiIiwidHRsIjo2MDQ0MSwiYXN0Ijp7InRhYmxlIjoiaXNzdWUiLCJhbGlhcyI6ImkiLCJzY2hlbWEiOiJwdWJsaWMiLCJyZWxhdGVkIjpbeyJjb3JyZWxhdGlvbiI6eyJwYXJlbnRGaWVsZCI6WyJpZCJdLCJjaGlsZEZpZWxkIjpbImlzc3VlSUQiXX0sInN1YnF1ZXJ5Ijp7InRhYmxlIjoiY29tbWVudCIsImFsaWFzIjoiY29tbWVudHMiLCJvcmRlckJ5IjpbWyJpZCIsImRlc2MiXV19LCJzeXN0ZW0iOiJwZXJtaXNzaW9ucyIsImhpZGRlbiI6dHJ1ZX1dLCJzdGFydCI6eyJyb3ciOnsiaWQiOiJhIiwibiI6bnVsbH0sImV4Y2x1c2l2ZSI6dHJ1ZX19fSx7Im9wIjoiY2xlYXIifV19XSwiYXV0aFRva2VuIjoiYSJ9",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "del",
+                "hash": " _\\ß%\n\né"
+              },
+              {
+                "op": "put",
+                "hash": "",
+                "ttl": 60441,
+                "ast": {
+                  "table": "issue",
+                  "alias": "i",
+                  "schema": "public",
+                  "related": [
+                    {
+                      "correlation": {
+                        "parentField": [
+                          "id"
+                        ],
+                        "childField": [
+                          "issueID"
+                        ]
+                      },
+                      "subquery": {
+                        "table": "comment",
+                        "alias": "comments",
+                        "orderBy": [
+                          [
+                            "id",
+                            "desc"
+                          ]
+                        ]
+                      },
+                      "system": "permissions",
+                      "hidden": true
+                    }
+                  ],
+                  "start": {
+                    "row": {
+                      "id": "a",
+                      "n": null
+                    },
+                    "exclusive": true
+                  }
+                }
+              },
+              {
+                "op": "clear"
+              }
+            ]
+          }
+        ],
+        "authToken": "a"
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "del",
+              "hash": " _\\ß%\n\né"
+            },
+            {
+              "op": "put",
+              "hash": "",
+              "ttl": 60441,
+              "ast": {
+                "table": "issue",
+                "alias": "i",
+                "schema": "public",
+                "related": [
+                  {
+                    "correlation": {
+                      "parentField": [
+                        "id"
+                      ],
+                      "childField": [
+                        "issueID"
+                      ]
+                    },
+                    "subquery": {
+                      "table": "comment",
+                      "alias": "comments",
+                      "orderBy": [
+                        [
+                          "id",
+                          "desc"
+                        ]
+                      ]
+                    },
+                    "system": "permissions",
+                    "hidden": true
+                  }
+                ],
+                "start": {
+                  "row": {
+                    "id": "a",
+                    "n": null
+                  },
+                  "exclusive": true
+                }
+              }
+            },
+            {
+              "op": "clear"
+            }
+          ]
+        }
+      ],
+      "authToken": "a"
+    },
+    {
+      "encoded": "e30%3D",
+      "ok": true,
+      "decoded": {}
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJwdXQiLCJoYXNoIjoiYu6AgMOfIiwidHRsIjoxZS03LCJhc3QiOnsidGFibGUiOiJpc3N1ZSIsIndoZXJlIjp7InR5cGUiOiJzaW1wbGUiLCJvcCI6Ij0iLCJsZWZ0Ijp7InR5cGUiOiJjb2x1bW4iLCJuYW1lIjoib3duZXJJRCJ9LCJyaWdodCI6eyJ0eXBlIjoic3RhdGljIiwiYW5jaG9yIjoiYXV0aERhdGEiLCJmaWVsZCI6WyJ1c2VyIiwic3ViIl19fX0sImFyZ3MiOltudWxsXX0seyJvcCI6ImNsZWFyIn0seyJvcCI6InB1dCIsImhhc2giOiJcXGJf8J%2BYgCIsInR0bCI6MjE0NzQ4MzY0OCwiYXN0Ijp7InRhYmxlIjoiaXNzdWUiLCJhbGlhcyI6ImkiLCJzY2hlbWEiOiJwdWJsaWMiLCJyZWxhdGVkIjpbeyJjb3JyZWxhdGlvbiI6eyJwYXJlbnRGaWVsZCI6WyJpZCJdLCJjaGlsZEZpZWxkIjpbImlzc3VlSUQiXX0sInN1YnF1ZXJ5Ijp7InRhYmxlIjoiY29tbWVudCIsImFsaWFzIjoiY29tbWVudHMiLCJvcmRlckJ5IjpbWyJpZCIsImRlc2MiXV19LCJzeXN0ZW0iOiJwZXJtaXNzaW9ucyIsImhpZGRlbiI6dHJ1ZX1dLCJzdGFydCI6eyJyb3ciOnsiaWQiOiJhIiwibiI6bnVsbH0sImV4Y2x1c2l2ZSI6dHJ1ZX19LCJuYW1lIjoiw5%2FkuK3ugIDEsO6AgCIsImFyZ3MiOls2ODcyN119XSwidXNlclB1c2hIZWFkZXJzIjp7IkLDqV%2FDqfCdkpwiOiLDqSIsIiBC8J%2BYgCI6IvCfmIBcXGJcbmEifX1dLCJhdXRoVG9rZW4iOiLOqSJ9",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "put",
+                "hash": "bß",
+                "ttl": 1e-7,
+                "ast": {
+                  "table": "issue",
+                  "where": {
+                    "type": "simple",
+                    "op": "=",
+                    "left": {
+                      "type": "column",
+                      "name": "ownerID"
+                    },
+                    "right": {
+                      "type": "static",
+                      "anchor": "authData",
+                      "field": [
+                        "user",
+                        "sub"
+                      ]
+                    }
+                  }
+                },
+                "args": [
+                  null
+                ]
+              },
+              {
+                "op": "clear"
+              },
+              {
+                "op": "put",
+                "hash": "\\b_😀",
+                "ttl": 2147483648,
+                "ast": {
+                  "table": "issue",
+                  "alias": "i",
+                  "schema": "public",
+                  "related": [
+                    {
+                      "correlation": {
+                        "parentField": [
+                          "id"
+                        ],
+                        "childField": [
+                          "issueID"
+                        ]
+                      },
+                      "subquery": {
+                        "table": "comment",
+                        "alias": "comments",
+                        "orderBy": [
+                          [
+                            "id",
+                            "desc"
+                          ]
+                        ]
+                      },
+                      "system": "permissions",
+                      "hidden": true
+                    }
+                  ],
+                  "start": {
+                    "row": {
+                      "id": "a",
+                      "n": null
+                    },
+                    "exclusive": true
+                  }
+                },
+                "name": "ß中İ",
+                "args": [
+                  68727
+                ]
+              }
+            ],
+            "userPushHeaders": {
+              "Bé_é𝒜": "é",
+              " B😀": "😀\\b\na"
+            }
+          }
+        ],
+        "authToken": "Ω"
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "bß",
+              "ttl": 1e-7,
+              "ast": {
+                "table": "issue",
+                "where": {
+                  "type": "simple",
+                  "op": "=",
+                  "left": {
+                    "type": "column",
+                    "name": "ownerID"
+                  },
+                  "right": {
+                    "type": "static",
+                    "anchor": "authData",
+                    "field": [
+                      "user",
+                      "sub"
+                    ]
+                  }
+                }
+              },
+              "args": [
+                null
+              ]
+            },
+            {
+              "op": "clear"
+            },
+            {
+              "op": "put",
+              "hash": "\\b_😀",
+              "ttl": 2147483648,
+              "ast": {
+                "table": "issue",
+                "alias": "i",
+                "schema": "public",
+                "related": [
+                  {
+                    "correlation": {
+                      "parentField": [
+                        "id"
+                      ],
+                      "childField": [
+                        "issueID"
+                      ]
+                    },
+                    "subquery": {
+                      "table": "comment",
+                      "alias": "comments",
+                      "orderBy": [
+                        [
+                          "id",
+                          "desc"
+                        ]
+                      ]
+                    },
+                    "system": "permissions",
+                    "hidden": true
+                  }
+                ],
+                "start": {
+                  "row": {
+                    "id": "a",
+                    "n": null
+                  },
+                  "exclusive": true
+                }
+              },
+              "name": "ß中İ",
+              "args": [
+                68727
+              ]
+            }
+          ],
+          "userPushHeaders": {
+            "Bé_é𝒜": "é",
+            " B😀": "😀\\b\na"
+          }
+        }
+      ],
+      "authToken": "Ω"
+    },
+    {
+      "encoded": "e30%3D",
+      "ok": true,
+      "decoded": {}
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W10sImNsaWVudFNjaGVtYSI6eyJ0YWJsZXMiOnsiaXNzdWUiOnsiY29sdW1ucyI6eyJpc3N1ZSI6eyJ0eXBlIjoianNvbiJ9fSwicHJpbWFyeUtleSI6WyJpc3N1ZSJdfX19LCJ1c2VyUXVlcnlVUkwiOiJiIiwidHJhY2VwYXJlbnQiOiLDqcOpX2HEsF8gICJ9XSwiYXV0aFRva2VuIjoiQuS4rSJ9",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [],
+            "clientSchema": {
+              "tables": {
+                "issue": {
+                  "columns": {
+                    "issue": {
+                      "type": "json"
+                    }
+                  },
+                  "primaryKey": [
+                    "issue"
+                  ]
+                }
+              }
+            },
+            "userQueryURL": "b",
+            "traceparent": "éé_aİ_  "
+          }
+        ],
+        "authToken": "B中"
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [],
+          "clientSchema": {
+            "tables": {
+              "issue": {
+                "columns": {
+                  "issue": {
+                    "type": "json"
+                  }
+                },
+                "primaryKey": [
+                  "issue"
+                ]
+              }
+            }
+          },
+          "userQueryURL": "b",
+          "traceparent": "éé_aİ_  "
+        }
+      ],
+      "authToken": "B中"
+    },
+    {
+      "encoded": "eyJhdXRoVG9rZW4iOiJhIn0%3D",
+      "ok": true,
+      "decoded": {
+        "authToken": "a"
+      },
+      "authToken": "a"
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJkZWwiLCJoYXNoIjoiQSJ9LHsib3AiOiJjbGVhciJ9LHsib3AiOiJwdXQiLCJoYXNoIjoiYiIsInR0bCI6ODQ5NTIsImFyZ3MiOltbXSxudWxsXX1dLCJ1c2VyUHVzaFVSTCI6IkJcbsOfw58lXCIiLCJhY3RpdmVDbGllbnRzIjpbImHkuK1ixLBcbsSwIl0sInRyYWNlcGFyZW50IjoiXFwifV0sImF1dGhUb2tlbiI6ImFiIn0%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "del",
+                "hash": "A"
+              },
+              {
+                "op": "clear"
+              },
+              {
+                "op": "put",
+                "hash": "b",
+                "ttl": 84952,
+                "args": [
+                  [],
+                  null
+                ]
+              }
+            ],
+            "userPushURL": "B\nßß%\"",
+            "activeClients": [
+              "a中bİ\nİ"
+            ],
+            "traceparent": "\\"
+          }
+        ],
+        "authToken": "ab"
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "del",
+              "hash": "A"
+            },
+            {
+              "op": "clear"
+            },
+            {
+              "op": "put",
+              "hash": "b",
+              "ttl": 84952,
+              "args": [
+                [],
+                null
+              ]
+            }
+          ],
+          "userPushURL": "B\nßß%\"",
+          "activeClients": [
+            "a中bİ\nİ"
+          ],
+          "traceparent": "\\"
+        }
+      ],
+      "authToken": "ab"
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W10sImNsaWVudFNjaGVtYSI6eyJ0YWJsZXMiOnt9fSwidXNlclF1ZXJ5SGVhZGVycyI6eyJcIuS4reS4rUHDqV8iOiJh8J%2BYgCJ9fV0sImF1dGhUb2tlbiI6IiJ9",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [],
+            "clientSchema": {
+              "tables": {}
+            },
+            "userQueryHeaders": {
+              "\"中中Aé_": "a😀"
+            }
+          }
+        ],
+        "authToken": ""
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [],
+          "clientSchema": {
+            "tables": {}
+          },
+          "userQueryHeaders": {
+            "\"中中Aé_": "a😀"
+          }
+        }
+      ],
+      "authToken": ""
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJjbGVhciJ9XSwidXNlclF1ZXJ5VVJMIjoiw6kifV0sImF1dGhUb2tlbiI6IsOfIn0%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "clear"
+              }
+            ],
+            "userQueryURL": "é"
+          }
+        ],
+        "authToken": "ß"
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "clear"
+            }
+          ],
+          "userQueryURL": "é"
+        }
+      ],
+      "authToken": "ß"
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJkZWwiLCJoYXNoIjoiXyJ9LHsib3AiOiJwdXQiLCJoYXNoIjoixLDDnyUiLCJhc3QiOnsidGFibGUiOiJpc3N1ZSIsImFsaWFzIjoiaSIsInNjaGVtYSI6InB1YmxpYyIsInJlbGF0ZWQiOlt7ImNvcnJlbGF0aW9uIjp7InBhcmVudEZpZWxkIjpbImlkIl0sImNoaWxkRmllbGQiOlsiaXNzdWVJRCJdfSwic3VicXVlcnkiOnsidGFibGUiOiJjb21tZW50IiwiYWxpYXMiOiJjb21tZW50cyIsIm9yZGVyQnkiOltbImlkIiwiZGVzYyJdXX0sInN5c3RlbSI6InBlcm1pc3Npb25zIiwiaGlkZGVuIjp0cnVlfV0sInN0YXJ0Ijp7InJvdyI6eyJpZCI6ImEiLCJuIjpudWxsfSwiZXhjbHVzaXZlIjp0cnVlfX0sImFyZ3MiOltdfSx7Im9wIjoicHV0IiwiaGFzaCI6IsSxIiwiYXN0Ijp7InRhYmxlIjoiaXNzdWUiLCJhbGlhcyI6ImkiLCJzY2hlbWEiOiJwdWJsaWMiLCJyZWxhdGVkIjpbeyJjb3JyZWxhdGlvbiI6eyJwYXJlbnRGaWVsZCI6WyJpZCJdLCJjaGlsZEZpZWxkIjpbImlzc3VlSUQiXX0sInN1YnF1ZXJ5Ijp7InRhYmxlIjoiY29tbWVudCIsImFsaWFzIjoiY29tbWVudHMiLCJvcmRlckJ5IjpbWyJpZCIsImRlc2MiXV19LCJzeXN0ZW0iOiJwZXJtaXNzaW9ucyIsImhpZGRlbiI6dHJ1ZX1dLCJzdGFydCI6eyJyb3ciOnsiaWQiOiJhIiwibiI6bnVsbH0sImV4Y2x1c2l2ZSI6dHJ1ZX19LCJuYW1lIjoiYsSwQiXwn5iAJcOpw58ifV0sInVzZXJRdWVyeUhlYWRlcnMiOnsiw6kiOiIifSwidHJhY2VwYXJlbnQiOiIifV19",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "del",
+                "hash": "_"
+              },
+              {
+                "op": "put",
+                "hash": "İß%",
+                "ast": {
+                  "table": "issue",
+                  "alias": "i",
+                  "schema": "public",
+                  "related": [
+                    {
+                      "correlation": {
+                        "parentField": [
+                          "id"
+                        ],
+                        "childField": [
+                          "issueID"
+                        ]
+                      },
+                      "subquery": {
+                        "table": "comment",
+                        "alias": "comments",
+                        "orderBy": [
+                          [
+                            "id",
+                            "desc"
+                          ]
+                        ]
+                      },
+                      "system": "permissions",
+                      "hidden": true
+                    }
+                  ],
+                  "start": {
+                    "row": {
+                      "id": "a",
+                      "n": null
+                    },
+                    "exclusive": true
+                  }
+                },
+                "args": []
+              },
+              {
+                "op": "put",
+                "hash": "ı",
+                "ast": {
+                  "table": "issue",
+                  "alias": "i",
+                  "schema": "public",
+                  "related": [
+                    {
+                      "correlation": {
+                        "parentField": [
+                          "id"
+                        ],
+                        "childField": [
+                          "issueID"
+                        ]
+                      },
+                      "subquery": {
+                        "table": "comment",
+                        "alias": "comments",
+                        "orderBy": [
+                          [
+                            "id",
+                            "desc"
+                          ]
+                        ]
+                      },
+                      "system": "permissions",
+                      "hidden": true
+                    }
+                  ],
+                  "start": {
+                    "row": {
+                      "id": "a",
+                      "n": null
+                    },
+                    "exclusive": true
+                  }
+                },
+                "name": "bİB%😀%éß"
+              }
+            ],
+            "userQueryHeaders": {
+              "é": ""
+            },
+            "traceparent": ""
+          }
+        ]
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "del",
+              "hash": "_"
+            },
+            {
+              "op": "put",
+              "hash": "İß%",
+              "ast": {
+                "table": "issue",
+                "alias": "i",
+                "schema": "public",
+                "related": [
+                  {
+                    "correlation": {
+                      "parentField": [
+                        "id"
+                      ],
+                      "childField": [
+                        "issueID"
+                      ]
+                    },
+                    "subquery": {
+                      "table": "comment",
+                      "alias": "comments",
+                      "orderBy": [
+                        [
+                          "id",
+                          "desc"
+                        ]
+                      ]
+                    },
+                    "system": "permissions",
+                    "hidden": true
+                  }
+                ],
+                "start": {
+                  "row": {
+                    "id": "a",
+                    "n": null
+                  },
+                  "exclusive": true
+                }
+              },
+              "args": []
+            },
+            {
+              "op": "put",
+              "hash": "ı",
+              "ast": {
+                "table": "issue",
+                "alias": "i",
+                "schema": "public",
+                "related": [
+                  {
+                    "correlation": {
+                      "parentField": [
+                        "id"
+                      ],
+                      "childField": [
+                        "issueID"
+                      ]
+                    },
+                    "subquery": {
+                      "table": "comment",
+                      "alias": "comments",
+                      "orderBy": [
+                        [
+                          "id",
+                          "desc"
+                        ]
+                      ]
+                    },
+                    "system": "permissions",
+                    "hidden": true
+                  }
+                ],
+                "start": {
+                  "row": {
+                    "id": "a",
+                    "n": null
+                  },
+                  "exclusive": true
+                }
+              },
+              "name": "bİB%😀%éß"
+            }
+          ],
+          "userQueryHeaders": {
+            "é": ""
+          },
+          "traceparent": ""
+        }
+      ]
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJkZWwiLCJoYXNoIjoiw6lhYu6AgMSwXG4ifSx7Im9wIjoicHV0IiwiaGFzaCI6IiAiLCJ0dGwiOjAuNSwiYXN0Ijp7InRhYmxlIjoiaXNzdWUiLCJ3aGVyZSI6eyJ0eXBlIjoiYW5kIiwiY29uZGl0aW9ucyI6W3sidHlwZSI6ImNvcnJlbGF0ZWRTdWJxdWVyeSIsIm9wIjoiRVhJU1RTIiwicmVsYXRlZCI6eyJjb3JyZWxhdGlvbiI6eyJwYXJlbnRGaWVsZCI6WyJvd25lcklEIl0sImNoaWxkRmllbGQiOlsiaWQiXX0sInN1YnF1ZXJ5Ijp7InRhYmxlIjoidXNlciJ9fX0seyJ0eXBlIjoic2ltcGxlIiwib3AiOiJJTiIsImxlZnQiOnsidHlwZSI6ImNvbHVtbiIsIm5hbWUiOiJuIn0sInJpZ2h0Ijp7InR5cGUiOiJsaXRlcmFsIiwidmFsdWUiOlsxLCJhIix0cnVlXX19XX19fV0sInVzZXJQdXNoVVJMIjoi8J2SnPCfmIBhQSIsInVzZXJRdWVyeVVSTCI6Ilxc5LitQV9cXCBBIiwidXNlclF1ZXJ5SGVhZGVycyI6eyLDqe6AgFwiXG5ixLBcXPCdkpwiOiJBw58ifX1dLCJhdXRoVG9rZW4iOiLwn5iAQiVhIn0%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "del",
+                "hash": "éabİ\n"
+              },
+              {
+                "op": "put",
+                "hash": " ",
+                "ttl": 0.5,
+                "ast": {
+                  "table": "issue",
+                  "where": {
+                    "type": "and",
+                    "conditions": [
+                      {
+                        "type": "correlatedSubquery",
+                        "op": "EXISTS",
+                        "related": {
+                          "correlation": {
+                            "parentField": [
+                              "ownerID"
+                            ],
+                            "childField": [
+                              "id"
+                            ]
+                          },
+                          "subquery": {
+                            "table": "user"
+                          }
+                        }
+                      },
+                      {
+                        "type": "simple",
+                        "op": "IN",
+                        "left": {
+                          "type": "column",
+                          "name": "n"
+                        },
+                        "right": {
+                          "type": "literal",
+                          "value": [
+                            1,
+                            "a",
+                            true
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "userPushURL": "𝒜😀aA",
+            "userQueryURL": "\\中A_\\ A",
+            "userQueryHeaders": {
+              "é\"\nbİ\\𝒜": "Aß"
+            }
+          }
+        ],
+        "authToken": "😀B%a"
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "del",
+              "hash": "éabİ\n"
+            },
+            {
+              "op": "put",
+              "hash": " ",
+              "ttl": 0.5,
+              "ast": {
+                "table": "issue",
+                "where": {
+                  "type": "and",
+                  "conditions": [
+                    {
+                      "type": "correlatedSubquery",
+                      "op": "EXISTS",
+                      "related": {
+                        "correlation": {
+                          "parentField": [
+                            "ownerID"
+                          ],
+                          "childField": [
+                            "id"
+                          ]
+                        },
+                        "subquery": {
+                          "table": "user"
+                        }
+                      }
+                    },
+                    {
+                      "type": "simple",
+                      "op": "IN",
+                      "left": {
+                        "type": "column",
+                        "name": "n"
+                      },
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          1,
+                          "a",
+                          true
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "userPushURL": "𝒜😀aA",
+          "userQueryURL": "\\中A_\\ A",
+          "userQueryHeaders": {
+            "é\"\nbİ\\𝒜": "Aß"
+          }
+        }
+      ],
+      "authToken": "😀B%a"
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJjbGVhciJ9XSwidXNlclF1ZXJ5SGVhZGVycyI6e30sInRyYWNlcGFyZW50IjoiYSJ9XSwiYXV0aFRva2VuIjoi8J%2BYgMOf8J2SnF8lQkFfIn0%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "clear"
+              }
+            ],
+            "userQueryHeaders": {},
+            "traceparent": "a"
+          }
+        ],
+        "authToken": "😀ß𝒜_%BA_"
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "clear"
+            }
+          ],
+          "userQueryHeaders": {},
+          "traceparent": "a"
+        }
+      ],
+      "authToken": "😀ß𝒜_%BA_"
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W10sImRlbGV0ZWQiOnsiY2xpZW50R3JvdXBJRHMiOlsiJfCfmIBiIl19LCJhY3RpdmVDbGllbnRzIjpbXX1dLCJhdXRoVG9rZW4iOiJhYmMifQ%3D%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [],
+            "deleted": {
+              "clientGroupIDs": [
+                "%😀b"
+              ]
+            },
+            "activeClients": []
+          }
+        ],
+        "authToken": "abc"
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [],
+          "deleted": {
+            "clientGroupIDs": [
+              "%😀b"
+            ]
+          },
+          "activeClients": []
+        }
+      ],
+      "authToken": "abc"
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJwdXQiLCJoYXNoIjoi9I%2B%2FvyIsImFyZ3MiOls1ZS0zMjQsIvCfmIAg8J%2BYgCJdfV0sInVzZXJQdXNoVVJMIjoiYfCfmIAiLCJ1c2VyUHVzaEhlYWRlcnMiOnsi77%2B9IjoixLDEsFwi8J2SnCIsIsOfQeS4rcOpYeS4rSI6Il%2FkuK1f8J2SnO6AgEElIn0sInRyYWNlcGFyZW50IjoiZcyBIn1dLCJhdXRoVG9rZW4iOiIifQ%3D%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "put",
+                "hash": "􏿿",
+                "args": [
+                  5e-324,
+                  "😀 😀"
+                ]
+              }
+            ],
+            "userPushURL": "a😀",
+            "userPushHeaders": {
+              "�": "İİ\"𝒜",
+              "ßA中éa中": "_中_𝒜A%"
+            },
+            "traceparent": "é"
+          }
+        ],
+        "authToken": ""
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "􏿿",
+              "args": [
+                5e-324,
+                "😀 😀"
+              ]
+            }
+          ],
+          "userPushURL": "a😀",
+          "userPushHeaders": {
+            "�": "İİ\"𝒜",
+            "ßA中éa中": "_中_𝒜A%"
+          },
+          "traceparent": "é"
+        }
+      ],
+      "authToken": ""
+    },
+    {
+      "encoded": "eyJhdXRoVG9rZW4iOiJcIiJ9",
+      "ok": true,
+      "decoded": {
+        "authToken": "\""
+      },
+      "authToken": "\""
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W119XSwiYXV0aFRva2VuIjoi8J2SnO6AgCJ9",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": []
+          }
+        ],
+        "authToken": "𝒜"
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": []
+        }
+      ],
+      "authToken": "𝒜"
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W10sImNsaWVudFNjaGVtYSI6eyJ0YWJsZXMiOnsiIjp7ImNvbHVtbnMiOnsiY29tbWVudCI6eyJ0eXBlIjoic3RyaW5nIn19LCJwcmltYXJ5S2V5IjpbImNvbW1lbnQiXX19fSwidXNlclB1c2hVUkwiOiJcIiIsImFjdGl2ZUNsaWVudHMiOlsiXFzwnZKcYmFfICIsIsSwIl19XSwiYXV0aFRva2VuIjoixLEifQ%3D%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [],
+            "clientSchema": {
+              "tables": {
+                "": {
+                  "columns": {
+                    "comment": {
+                      "type": "string"
+                    }
+                  },
+                  "primaryKey": [
+                    "comment"
+                  ]
+                }
+              }
+            },
+            "userPushURL": "\"",
+            "activeClients": [
+              "\\𝒜ba_ ",
+              "İ"
+            ]
+          }
+        ],
+        "authToken": "ı"
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [],
+          "clientSchema": {
+            "tables": {
+              "": {
+                "columns": {
+                  "comment": {
+                    "type": "string"
+                  }
+                },
+                "primaryKey": [
+                  "comment"
+                ]
+              }
+            }
+          },
+          "userPushURL": "\"",
+          "activeClients": [
+            "\\𝒜ba_ ",
+            "İ"
+          ]
+        }
+      ],
+      "authToken": "ı"
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJkZWwiLCJoYXNoIjoiX%2FCfmIBh7oCA7oCAw6kifSx7Im9wIjoiY2xlYXIifV0sImNsaWVudFNjaGVtYSI6eyJ0YWJsZXMiOnt9fSwidXNlclF1ZXJ5VVJMIjoiYiIsInVzZXJRdWVyeUhlYWRlcnMiOnsiIjoiYvCfmIBCIGIifSwiYWN0aXZlQ2xpZW50cyI6WyLDqSIsIlxuX%2BS4rVwi8J%2BYgGFhIl0sInRyYWNlcGFyZW50IjoiXHUwMDAwIn1dLCJhdXRoVG9rZW4iOiLvv70ifQ%3D%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "del",
+                "hash": "_😀aé"
+              },
+              {
+                "op": "clear"
+              }
+            ],
+            "clientSchema": {
+              "tables": {}
+            },
+            "userQueryURL": "b",
+            "userQueryHeaders": {
+              "": "b😀B b"
+            },
+            "activeClients": [
+              "é",
+              "\n_中\"😀aa"
+            ],
+            "traceparent": "\u0000"
+          }
+        ],
+        "authToken": "�"
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "del",
+              "hash": "_😀aé"
+            },
+            {
+              "op": "clear"
+            }
+          ],
+          "clientSchema": {
+            "tables": {}
+          },
+          "userQueryURL": "b",
+          "userQueryHeaders": {
+            "": "b😀B b"
+          },
+          "activeClients": [
+            "é",
+            "\n_中\"😀aa"
+          ],
+          "traceparent": "\u0000"
+        }
+      ],
+      "authToken": "�"
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJwdXQiLCJoYXNoIjoiIiwidHRsIjowLjV9LHsib3AiOiJjbGVhciJ9LHsib3AiOiJwdXQiLCJoYXNoIjoiw59iYiVCIiwidHRsIjo3LCJuYW1lIjoiYiIsImFyZ3MiOltdfV0sImFjdGl2ZUNsaWVudHMiOlsi8J%2BYgGEiLCJfXCIgw6lcbsSwXFwiXX1dLCJhdXRoVG9rZW4iOiJiJSDugIBB8J2SnEIifQ%3D%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "put",
+                "hash": "",
+                "ttl": 0.5
+              },
+              {
+                "op": "clear"
+              },
+              {
+                "op": "put",
+                "hash": "ßbb%B",
+                "ttl": 7,
+                "name": "b",
+                "args": []
+              }
+            ],
+            "activeClients": [
+              "😀a",
+              "_\" é\nİ\\"
+            ]
+          }
+        ],
+        "authToken": "b% A𝒜B"
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "",
+              "ttl": 0.5
+            },
+            {
+              "op": "clear"
+            },
+            {
+              "op": "put",
+              "hash": "ßbb%B",
+              "ttl": 7,
+              "name": "b",
+              "args": []
+            }
+          ],
+          "activeClients": [
+            "😀a",
+            "_\" é\nİ\\"
+          ]
+        }
+      ],
+      "authToken": "b% A𝒜B"
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJwdXQiLCJoYXNoIjoiICIsIm5hbWUiOiJcXO6AgMSwIn1dLCJkZWxldGVkIjp7fSwidXNlclF1ZXJ5SGVhZGVycyI6e319XX0%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "put",
+                "hash": " ",
+                "name": "\\İ"
+              }
+            ],
+            "deleted": {},
+            "userQueryHeaders": {}
+          }
+        ]
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": " ",
+              "name": "\\İ"
+            }
+          ],
+          "deleted": {},
+          "userQueryHeaders": {}
+        }
+      ]
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJkZWwiLCJoYXNoIjoiQSJ9XSwiY2xpZW50U2NoZW1hIjp7InRhYmxlcyI6e319fV0sImF1dGhUb2tlbiI6IsKgIn0%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "del",
+                "hash": "A"
+              }
+            ],
+            "clientSchema": {
+              "tables": {}
+            }
+          }
+        ],
+        "authToken": " "
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "del",
+              "hash": "A"
+            }
+          ],
+          "clientSchema": {
+            "tables": {}
+          }
+        }
+      ],
+      "authToken": " "
+    },
+    {
+      "encoded": "eyJhdXRoVG9rZW4iOiIifQ%3D%3D",
+      "ok": true,
+      "decoded": {
+        "authToken": ""
+      },
+      "authToken": ""
+    },
+    {
+      "encoded": "e30%3D",
+      "ok": true,
+      "decoded": {}
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJwdXQiLCJoYXNoIjoiXFxcblwiXG4l7oCAIiwidHRsIjo0MDQ1OCwiYXN0Ijp7InRhYmxlIjoiaXNzdWUiLCJhbGlhcyI6ImkiLCJzY2hlbWEiOiJwdWJsaWMiLCJyZWxhdGVkIjpbeyJjb3JyZWxhdGlvbiI6eyJwYXJlbnRGaWVsZCI6WyJpZCJdLCJjaGlsZEZpZWxkIjpbImlzc3VlSUQiXX0sInN1YnF1ZXJ5Ijp7InRhYmxlIjoiY29tbWVudCIsImFsaWFzIjoiY29tbWVudHMiLCJvcmRlckJ5IjpbWyJpZCIsImRlc2MiXV19LCJzeXN0ZW0iOiJwZXJtaXNzaW9ucyIsImhpZGRlbiI6dHJ1ZX1dLCJzdGFydCI6eyJyb3ciOnsiaWQiOiJhIiwibiI6bnVsbH0sImV4Y2x1c2l2ZSI6dHJ1ZX19LCJhcmdzIjpbXX0seyJvcCI6InB1dCIsImhhc2giOiLugIBi8J%2BYgMSwXFxcbmEiLCJuYW1lIjoiYiJ9LHsib3AiOiJjbGVhciJ9XSwiZGVsZXRlZCI6eyJjbGllbnRJRHMiOlsi77%2B9Iiwi5LitxLAiXX0sImFjdGl2ZUNsaWVudHMiOltdfV0sImF1dGhUb2tlbiI6IlxcxLBiXCJBYl9BIn0%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "put",
+                "hash": "\\\n\"\n%",
+                "ttl": 40458,
+                "ast": {
+                  "table": "issue",
+                  "alias": "i",
+                  "schema": "public",
+                  "related": [
+                    {
+                      "correlation": {
+                        "parentField": [
+                          "id"
+                        ],
+                        "childField": [
+                          "issueID"
+                        ]
+                      },
+                      "subquery": {
+                        "table": "comment",
+                        "alias": "comments",
+                        "orderBy": [
+                          [
+                            "id",
+                            "desc"
+                          ]
+                        ]
+                      },
+                      "system": "permissions",
+                      "hidden": true
+                    }
+                  ],
+                  "start": {
+                    "row": {
+                      "id": "a",
+                      "n": null
+                    },
+                    "exclusive": true
+                  }
+                },
+                "args": []
+              },
+              {
+                "op": "put",
+                "hash": "b😀İ\\\na",
+                "name": "b"
+              },
+              {
+                "op": "clear"
+              }
+            ],
+            "deleted": {
+              "clientIDs": [
+                "�",
+                "中İ"
+              ]
+            },
+            "activeClients": []
+          }
+        ],
+        "authToken": "\\İb\"Ab_A"
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "\\\n\"\n%",
+              "ttl": 40458,
+              "ast": {
+                "table": "issue",
+                "alias": "i",
+                "schema": "public",
+                "related": [
+                  {
+                    "correlation": {
+                      "parentField": [
+                        "id"
+                      ],
+                      "childField": [
+                        "issueID"
+                      ]
+                    },
+                    "subquery": {
+                      "table": "comment",
+                      "alias": "comments",
+                      "orderBy": [
+                        [
+                          "id",
+                          "desc"
+                        ]
+                      ]
+                    },
+                    "system": "permissions",
+                    "hidden": true
+                  }
+                ],
+                "start": {
+                  "row": {
+                    "id": "a",
+                    "n": null
+                  },
+                  "exclusive": true
+                }
+              },
+              "args": []
+            },
+            {
+              "op": "put",
+              "hash": "b😀İ\\\na",
+              "name": "b"
+            },
+            {
+              "op": "clear"
+            }
+          ],
+          "deleted": {
+            "clientIDs": [
+              "�",
+              "中İ"
+            ]
+          },
+          "activeClients": []
+        }
+      ],
+      "authToken": "\\İb\"Ab_A"
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJkZWwiLCJoYXNoIjoiz4kifSx7Im9wIjoiY2xlYXIifSx7Im9wIjoicHV0IiwiaGFzaCI6IsOfQSIsInR0bCI6NWUtMzI0LCJhc3QiOnsidGFibGUiOiJpc3N1ZSJ9LCJuYW1lIjoiYWIifV0sInVzZXJQdXNoSGVhZGVycyI6eyLwnZKcw6lfxLDwnZKc8J2SnCAlIjoiX18ifSwidXNlclF1ZXJ5SGVhZGVycyI6eyJCXG7DqfCfmIDugIAiOiLugIBhXCLkuK0ifSwiYWN0aXZlQ2xpZW50cyI6WyJfXG7kuK0iLCJcXMOfw5%2FwnZKcYVwiIl19XX0%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "del",
+                "hash": "ω"
+              },
+              {
+                "op": "clear"
+              },
+              {
+                "op": "put",
+                "hash": "ßA",
+                "ttl": 5e-324,
+                "ast": {
+                  "table": "issue"
+                },
+                "name": "ab"
+              }
+            ],
+            "userPushHeaders": {
+              "𝒜é_İ𝒜𝒜 %": "__"
+            },
+            "userQueryHeaders": {
+              "B\né😀": "a\"中"
+            },
+            "activeClients": [
+              "_\n中",
+              "\\ßß𝒜a\""
+            ]
+          }
+        ]
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "del",
+              "hash": "ω"
+            },
+            {
+              "op": "clear"
+            },
+            {
+              "op": "put",
+              "hash": "ßA",
+              "ttl": 5e-324,
+              "ast": {
+                "table": "issue"
+              },
+              "name": "ab"
+            }
+          ],
+          "userPushHeaders": {
+            "𝒜é_İ𝒜𝒜 %": "__"
+          },
+          "userQueryHeaders": {
+            "B\né😀": "a\"中"
+          },
+          "activeClients": [
+            "_\n中",
+            "\\ßß𝒜a\""
+          ]
+        }
+      ]
+    },
+    {
+      "encoded": "eyJpbml0Q29ubmVjdGlvbk1lc3NhZ2UiOlsiaW5pdENvbm5lY3Rpb24iLHsiZGVzaXJlZFF1ZXJpZXNQYXRjaCI6W3sib3AiOiJkZWwiLCJoYXNoIjoiXHUwMDAwIn0seyJvcCI6InB1dCIsImhhc2giOiJcImLwnZKcIiwidHRsIjowLjUsIm5hbWUiOiIgIGFf7oCAXCLwnZKcQiJ9LHsib3AiOiJwdXQiLCJoYXNoIjoiOSIsInR0bCI6MjE0NzQ4MzY0OCwiYXN0Ijp7InRhYmxlIjoiaXNzdWUiLCJ3aGVyZSI6eyJ0eXBlIjoic2ltcGxlIiwib3AiOiI9IiwibGVmdCI6eyJ0eXBlIjoiY29sdW1uIiwibmFtZSI6ImlkIn0sInJpZ2h0Ijp7InR5cGUiOiJsaXRlcmFsIiwidmFsdWUiOiIxIn19LCJvcmRlckJ5IjpbWyJpZCIsImFzYyJdXSwibGltaXQiOjEwfX1dLCJjbGllbnRTY2hlbWEiOnsidGFibGVzIjp7IiI6eyJjb2x1bW5zIjp7ImEiOnsidHlwZSI6InN0cmluZyJ9fSwicHJpbWFyeUtleSI6WyJhIl19LCJfIjp7ImNvbHVtbnMiOnsiZSI6eyJ0eXBlIjoianNvbiJ9fSwicHJpbWFyeUtleSI6WyJlIl19fX0sInVzZXJQdXNoVVJMIjoiXG5BQlwiIn1dLCJhdXRoVG9rZW4iOiJCXG5cbsOfIn0%3D",
+      "ok": true,
+      "decoded": {
+        "initConnectionMessage": [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "op": "del",
+                "hash": "\u0000"
+              },
+              {
+                "op": "put",
+                "hash": "\"b𝒜",
+                "ttl": 0.5,
+                "name": "  a_\"𝒜B"
+              },
+              {
+                "op": "put",
+                "hash": "9",
+                "ttl": 2147483648,
+                "ast": {
+                  "table": "issue",
+                  "where": {
+                    "type": "simple",
+                    "op": "=",
+                    "left": {
+                      "type": "column",
+                      "name": "id"
+                    },
+                    "right": {
+                      "type": "literal",
+                      "value": "1"
+                    }
+                  },
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc"
+                    ]
+                  ],
+                  "limit": 10
+                }
+              }
+            ],
+            "clientSchema": {
+              "tables": {
+                "": {
+                  "columns": {
+                    "a": {
+                      "type": "string"
+                    }
+                  },
+                  "primaryKey": [
+                    "a"
+                  ]
+                },
+                "_": {
+                  "columns": {
+                    "e": {
+                      "type": "json"
+                    }
+                  },
+                  "primaryKey": [
+                    "e"
+                  ]
+                }
+              }
+            },
+            "userPushURL": "\nAB\""
+          }
+        ],
+        "authToken": "B\n\nß"
+      },
+      "initConnectionMessage": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "del",
+              "hash": "\u0000"
+            },
+            {
+              "op": "put",
+              "hash": "\"b𝒜",
+              "ttl": 0.5,
+              "name": "  a_\"𝒜B"
+            },
+            {
+              "op": "put",
+              "hash": "9",
+              "ttl": 2147483648,
+              "ast": {
+                "table": "issue",
+                "where": {
+                  "type": "simple",
+                  "op": "=",
+                  "left": {
+                    "type": "column",
+                    "name": "id"
+                  },
+                  "right": {
+                    "type": "literal",
+                    "value": "1"
+                  }
+                },
+                "orderBy": [
+                  [
+                    "id",
+                    "asc"
+                  ]
+                ],
+                "limit": 10
+              }
+            }
+          ],
+          "clientSchema": {
+            "tables": {
+              "": {
+                "columns": {
+                  "a": {
+                    "type": "string"
+                  }
+                },
+                "primaryKey": [
+                  "a"
+                ]
+              },
+              "_": {
+                "columns": {
+                  "e": {
+                    "type": "json"
+                  }
+                },
+                "primaryKey": [
+                  "e"
+                ]
+              }
+            }
+          },
+          "userPushURL": "\nAB\""
+        }
+      ],
+      "authToken": "B\n\nß"
+    }
+  ]
+}

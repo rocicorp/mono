@@ -1,0 +1,4954 @@
+{
+  "formatVersion": 1,
+  "kind": "protocol-upstream",
+  "description": "Upstream messages (`upstreamSchema`, an open tagged tuple union). `ok` is whether valita accepts the message in `passthrough` mode; `output` is its `strip` output. Deeply nested messages are given as JSON text, in `messageText` and `outputText`.",
+  "cases": [
+    {
+      "messageText": "[\"changeDesiredQueries\",{\"desiredQueriesPatch\":[{\"op\":\"put\",\"hash\":\"h\",\"ast\":{\"table\":\"issue\",\"where\":{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"simple\",\"op\":\"=\",\"left\":{\"type\":\"column\",\"name\":\"id\"},\"right\":{\"type\":\"literal\",\"value\":\"1\"}}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}}}]}]",
+      "ok": true,
+      "outputText": "[\"changeDesiredQueries\",{\"desiredQueriesPatch\":[{\"op\":\"put\",\"hash\":\"h\",\"ast\":{\"table\":\"issue\",\"where\":{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"simple\",\"op\":\"=\",\"left\":{\"type\":\"column\",\"name\":\"id\"},\"right\":{\"type\":\"literal\",\"value\":\"1\"}}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}}}]}]"
+    },
+    {
+      "messageText": "[\"changeDesiredQueries\",{\"desiredQueriesPatch\":[{\"op\":\"put\",\"hash\":\"h\",\"ast\":{\"table\":\"issue\",\"where\":{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"simple\",\"op\":\"=\",\"left\":{\"type\":\"column\",\"name\":\"id\"},\"right\":{\"type\":\"literal\",\"value\":\"1\"}}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}}}]}]",
+      "ok": true,
+      "outputText": "[\"changeDesiredQueries\",{\"desiredQueriesPatch\":[{\"op\":\"put\",\"hash\":\"h\",\"ast\":{\"table\":\"issue\",\"where\":{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"simple\",\"op\":\"=\",\"left\":{\"type\":\"column\",\"name\":\"id\"},\"right\":{\"type\":\"literal\",\"value\":\"1\"}}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}}}]}]"
+    },
+    {
+      "messageText": "[\"changeDesiredQueries\",{\"desiredQueriesPatch\":[{\"op\":\"put\",\"hash\":\"h\",\"ast\":{\"table\":\"issue\",\"where\":{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"and\",\"conditions\":[{\"type\":\"simple\",\"op\":\"=\",\"left\":{\"type\":\"column\",\"name\":\"id\"},\"right\":{\"type\":\"literal\",\"value\":\"1\"}}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}}}]}]",
+      "ok": false
+    },
+    {
+      "messageText": "[\"changeDesiredQueries\",{\"desiredQueriesPatch\":[{\"op\":\"put\",\"hash\":\"h\",\"ast\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\"}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}]",
+      "ok": true,
+      "outputText": "[\"changeDesiredQueries\",{\"desiredQueriesPatch\":[{\"op\":\"put\",\"hash\":\"h\",\"ast\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\"}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}]"
+    },
+    {
+      "messageText": "[\"changeDesiredQueries\",{\"desiredQueriesPatch\":[{\"op\":\"put\",\"hash\":\"h\",\"ast\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\",\"related\":[{\"correlation\":{\"parentField\":[\"id\"],\"childField\":[\"id\"]},\"subquery\":{\"table\":\"issue\"}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}}]}]",
+      "ok": false
+    },
+    {
+      "message": [
+        "ping",
+        {}
+      ],
+      "ok": true,
+      "output": [
+        "ping",
+        {}
+      ]
+    },
+    {
+      "message": [
+        "ping",
+        {
+          "zExtra": 1
+        }
+      ],
+      "ok": true,
+      "output": [
+        "ping",
+        {}
+      ]
+    },
+    {
+      "message": [
+        "ping"
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "ping",
+        {},
+        1
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "ping",
+        []
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "newMessage"
+      ],
+      "ok": true,
+      "output": [
+        "newMessage"
+      ]
+    },
+    {
+      "message": [
+        "newMessage",
+        1,
+        2,
+        3
+      ],
+      "ok": true,
+      "output": [
+        "newMessage",
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "message": [
+        ""
+      ],
+      "ok": true,
+      "output": [
+        ""
+      ]
+    },
+    {
+      "message": [
+        1,
+        {}
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        null
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        true,
+        {}
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        [
+          "ping"
+        ],
+        {}
+      ],
+      "ok": false
+    },
+    {
+      "message": [],
+      "ok": false
+    },
+    {
+      "message": "ping",
+      "ok": false
+    },
+    {
+      "message": {},
+      "ok": false
+    },
+    {
+      "message": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": []
+        }
+      ],
+      "ok": true,
+      "output": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": []
+        }
+      ]
+    },
+    {
+      "message": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "h1",
+              "ttl": 300000,
+              "ast": {
+                "table": "issue",
+                "alias": "i",
+                "schema": "public",
+                "related": [
+                  {
+                    "correlation": {
+                      "parentField": [
+                        "id"
+                      ],
+                      "childField": [
+                        "issueID"
+                      ]
+                    },
+                    "subquery": {
+                      "table": "comment",
+                      "alias": "comments",
+                      "orderBy": [
+                        [
+                          "id",
+                          "desc"
+                        ]
+                      ]
+                    },
+                    "system": "permissions",
+                    "hidden": true
+                  }
+                ],
+                "start": {
+                  "row": {
+                    "id": "a",
+                    "n": null
+                  },
+                  "exclusive": true
+                }
+              }
+            },
+            {
+              "op": "put",
+              "hash": "h2",
+              "name": "issues",
+              "args": [
+                1,
+                "a",
+                {
+                  "b": null
+                }
+              ]
+            },
+            {
+              "op": "del",
+              "hash": "h3"
+            },
+            {
+              "op": "clear"
+            }
+          ],
+          "clientSchema": {
+            "tables": {
+              "issue": {
+                "columns": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "n": {
+                    "type": "number"
+                  }
+                },
+                "primaryKey": [
+                  "id"
+                ]
+              }
+            }
+          },
+          "deleted": {
+            "clientIDs": [
+              "a"
+            ],
+            "clientGroupIDs": []
+          },
+          "userPushURL": "https://example.com/push",
+          "userPushHeaders": {
+            "authorization": "Bearer x"
+          },
+          "userQueryURL": "https://example.com/query",
+          "userQueryHeaders": {},
+          "activeClients": [
+            "c1",
+            "c2"
+          ],
+          "traceparent": "00-abc-def-01"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "h1",
+              "ttl": 300000,
+              "ast": {
+                "schema": "public",
+                "table": "issue",
+                "alias": "i",
+                "related": [
+                  {
+                    "correlation": {
+                      "parentField": [
+                        "id"
+                      ],
+                      "childField": [
+                        "issueID"
+                      ]
+                    },
+                    "subquery": {
+                      "table": "comment",
+                      "alias": "comments",
+                      "orderBy": [
+                        [
+                          "id",
+                          "desc"
+                        ]
+                      ]
+                    },
+                    "system": "permissions",
+                    "hidden": true
+                  }
+                ],
+                "start": {
+                  "row": {
+                    "id": "a",
+                    "n": null
+                  },
+                  "exclusive": true
+                }
+              }
+            },
+            {
+              "op": "put",
+              "hash": "h2",
+              "name": "issues",
+              "args": [
+                1,
+                "a",
+                {
+                  "b": null
+                }
+              ]
+            },
+            {
+              "op": "del",
+              "hash": "h3"
+            },
+            {
+              "op": "clear"
+            }
+          ],
+          "clientSchema": {
+            "tables": {
+              "issue": {
+                "columns": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "n": {
+                    "type": "number"
+                  }
+                },
+                "primaryKey": [
+                  "id"
+                ]
+              }
+            }
+          },
+          "deleted": {
+            "clientIDs": [
+              "a"
+            ],
+            "clientGroupIDs": []
+          },
+          "userPushURL": "https://example.com/push",
+          "userPushHeaders": {
+            "authorization": "Bearer x"
+          },
+          "userQueryURL": "https://example.com/query",
+          "userQueryHeaders": {},
+          "activeClients": [
+            "c1",
+            "c2"
+          ],
+          "traceparent": "00-abc-def-01"
+        }
+      ]
+    },
+    {
+      "message": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [],
+          "clientSchema": {
+            "tables": {
+              "issue": {
+                "columns": {
+                  "id": {
+                    "type": "date"
+                  }
+                },
+                "primaryKey": [
+                  "id"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [],
+          "clientSchema": {
+            "tables": {
+              "issue": {
+                "columns": {}
+              }
+            }
+          }
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [],
+          "userPushHeaders": {
+            "a": 1
+          }
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [],
+          "activeClients": "c1"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "initConnection",
+        {}
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "h",
+              "ast": {
+                "table": "issue",
+                "zExtra": 1
+              }
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "h",
+              "ast": {
+                "table": "issue",
+                "where": {
+                  "type": "simple",
+                  "op": "=",
+                  "left": {
+                    "type": "column",
+                    "name": "a",
+                    "zExtra": 1
+                  },
+                  "right": {
+                    "type": "literal",
+                    "value": 1
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "h",
+              "ast": {
+                "table": "issue",
+                "where": {
+                  "type": "and",
+                  "conditions": [],
+                  "zExtra": 1
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "h",
+              "ast": {
+                "table": "issue",
+                "related": [
+                  {
+                    "correlation": {
+                      "parentField": [
+                        "id"
+                      ],
+                      "childField": [
+                        "id"
+                      ],
+                      "zExtra": 1
+                    },
+                    "subquery": {
+                      "table": "comment"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "h",
+              "ast": {
+                "table": "issue",
+                "related": [
+                  {
+                    "correlation": {
+                      "parentField": [
+                        "id"
+                      ],
+                      "childField": [
+                        "id"
+                      ]
+                    },
+                    "subquery": {
+                      "table": "comment",
+                      "zExtra": 1
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "h",
+              "ast": {
+                "table": "issue",
+                "start": {
+                  "row": {
+                    "id": 1
+                  },
+                  "exclusive": false,
+                  "zExtra": 1
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "h",
+              "ast": {
+                "table": "issue",
+                "start": {
+                  "row": {
+                    "zExtra": 1
+                  },
+                  "exclusive": false
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "h",
+              "ast": {
+                "table": "issue",
+                "start": {
+                  "row": {
+                    "zExtra": 1
+                  },
+                  "exclusive": false
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "h",
+              "ast": {
+                "table": "issue",
+                "orderBy": [
+                  [
+                    "id",
+                    "asc",
+                    "extra"
+                  ]
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "h",
+              "ast": {
+                "table": 1
+              }
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "h",
+              "ast": null
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put"
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "clientGroupID": "g",
+          "cookie": null,
+          "requestID": "r"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pull",
+        {
+          "clientGroupID": "g",
+          "cookie": null,
+          "requestID": "r"
+        }
+      ]
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "clientGroupID": "g",
+          "cookie": "5",
+          "requestID": "r"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pull",
+        {
+          "clientGroupID": "g",
+          "cookie": "5",
+          "requestID": "r"
+        }
+      ]
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "clientGroupID": "g",
+          "requestID": "r"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "updateAuth",
+        {
+          "auth": "x"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "updateAuth",
+        {
+          "auth": "x"
+        }
+      ]
+    },
+    {
+      "message": [
+        "updateAuth",
+        {}
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "push",
+        {
+          "clientGroupID": "g",
+          "mutations": [
+            {
+              "type": "crud",
+              "id": 1,
+              "clientID": "c",
+              "name": "_zero_crud",
+              "args": [
+                {
+                  "ops": [
+                    {
+                      "op": "insert",
+                      "tableName": "issue",
+                      "primaryKey": [
+                        "id"
+                      ],
+                      "value": {
+                        "id": "a"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "timestamp": 1
+            }
+          ],
+          "pushVersion": 1,
+          "timestamp": 1,
+          "requestID": "r"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "push",
+        {
+          "clientGroupID": "g",
+          "mutations": [
+            {
+              "type": "crud",
+              "id": 1,
+              "clientID": "c",
+              "name": "_zero_crud",
+              "args": [
+                {
+                  "ops": [
+                    {
+                      "op": "insert",
+                      "tableName": "issue",
+                      "primaryKey": [
+                        "id"
+                      ],
+                      "value": {
+                        "id": "a"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "timestamp": 1
+            }
+          ],
+          "pushVersion": 1,
+          "timestamp": 1,
+          "requestID": "r"
+        }
+      ]
+    },
+    {
+      "message": [
+        "push",
+        {
+          "clientGroupID": "g",
+          "mutations": [
+            {
+              "type": "crud",
+              "id": 1,
+              "clientID": "c",
+              "name": "other",
+              "args": [
+                {
+                  "ops": [
+                    {
+                      "op": "insert",
+                      "tableName": "issue",
+                      "primaryKey": [
+                        "id"
+                      ],
+                      "value": {
+                        "id": "a"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "timestamp": 1
+            }
+          ],
+          "pushVersion": 1,
+          "timestamp": 1,
+          "requestID": "r"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "push",
+        {
+          "clientGroupID": "g",
+          "mutations": [
+            {
+              "type": "crud",
+              "id": 1,
+              "clientID": "c",
+              "name": "_zero_crud",
+              "args": [],
+              "timestamp": 1
+            }
+          ],
+          "pushVersion": 1,
+          "timestamp": 1,
+          "requestID": "r"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "push",
+        {
+          "clientGroupID": "g",
+          "mutations": [
+            {
+              "type": "crud",
+              "id": 1,
+              "clientID": "c",
+              "name": "_zero_crud",
+              "args": [
+                {
+                  "ops": []
+                },
+                {
+                  "ops": []
+                }
+              ],
+              "timestamp": 1
+            }
+          ],
+          "pushVersion": 1,
+          "timestamp": 1,
+          "requestID": "r"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "push",
+        {
+          "clientGroupID": "g",
+          "mutations": [
+            {
+              "type": "crud",
+              "id": 1,
+              "clientID": "c",
+              "name": "_zero_crud",
+              "args": [
+                {}
+              ],
+              "timestamp": 1
+            }
+          ],
+          "pushVersion": 1,
+          "timestamp": 1,
+          "requestID": "r"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "push",
+        {
+          "clientGroupID": "g",
+          "mutations": [
+            {
+              "type": "custom",
+              "id": 1,
+              "clientID": "c",
+              "name": "_zero_crud",
+              "args": [
+                {
+                  "ops": [
+                    {
+                      "op": "insert",
+                      "tableName": "issue",
+                      "primaryKey": [
+                        "id"
+                      ],
+                      "value": {
+                        "id": "a"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "timestamp": 1
+            }
+          ],
+          "pushVersion": 1,
+          "timestamp": 1,
+          "requestID": "r"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "push",
+        {
+          "clientGroupID": "g",
+          "mutations": [
+            {
+              "type": "custom",
+              "id": 1,
+              "clientID": "c",
+              "name": "_zero_crud",
+              "args": [
+                {
+                  "ops": [
+                    {
+                      "op": "insert",
+                      "tableName": "issue",
+                      "primaryKey": [
+                        "id"
+                      ],
+                      "value": {
+                        "id": "a"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "timestamp": 1
+            }
+          ],
+          "pushVersion": 1,
+          "timestamp": 1,
+          "requestID": "r"
+        }
+      ]
+    },
+    {
+      "message": [
+        "push",
+        {
+          "clientGroupID": "g",
+          "mutations": [
+            {
+              "type": "crud",
+              "id": 1,
+              "clientID": "c",
+              "name": "_zero_crud",
+              "args": [
+                {
+                  "ops": [
+                    {
+                      "op": "upsert",
+                      "tableName": "t",
+                      "primaryKey": [
+                        "a",
+                        "b"
+                      ],
+                      "value": {
+                        "a": 1,
+                        "b": 2,
+                        "c": null
+                      }
+                    },
+                    {
+                      "op": "update",
+                      "tableName": "t",
+                      "primaryKey": [
+                        "a"
+                      ],
+                      "value": {
+                        "a": 1
+                      }
+                    },
+                    {
+                      "op": "delete",
+                      "tableName": "t",
+                      "primaryKey": [
+                        "a"
+                      ],
+                      "value": {
+                        "a": 1
+                      }
+                    }
+                  ]
+                }
+              ],
+              "timestamp": 1
+            },
+            {
+              "type": "custom",
+              "id": 2,
+              "clientID": "c",
+              "name": "issue.create",
+              "args": [
+                {
+                  "id": "a"
+                }
+              ],
+              "timestamp": 2
+            }
+          ],
+          "pushVersion": 1,
+          "schemaVersion": 3,
+          "timestamp": 3,
+          "requestID": "r",
+          "auth": "token",
+          "traceparent": "t"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "push",
+        {
+          "clientGroupID": "g",
+          "mutations": [
+            {
+              "type": "crud",
+              "id": 1,
+              "clientID": "c",
+              "name": "_zero_crud",
+              "args": [
+                {
+                  "ops": [
+                    {
+                      "op": "upsert",
+                      "tableName": "t",
+                      "primaryKey": [
+                        "a",
+                        "b"
+                      ],
+                      "value": {
+                        "a": 1,
+                        "b": 2,
+                        "c": null
+                      }
+                    },
+                    {
+                      "op": "update",
+                      "tableName": "t",
+                      "primaryKey": [
+                        "a"
+                      ],
+                      "value": {
+                        "a": 1
+                      }
+                    },
+                    {
+                      "op": "delete",
+                      "tableName": "t",
+                      "primaryKey": [
+                        "a"
+                      ],
+                      "value": {
+                        "a": 1
+                      }
+                    }
+                  ]
+                }
+              ],
+              "timestamp": 1
+            },
+            {
+              "type": "custom",
+              "id": 2,
+              "clientID": "c",
+              "name": "issue.create",
+              "args": [
+                {
+                  "id": "a"
+                }
+              ],
+              "timestamp": 2
+            }
+          ],
+          "pushVersion": 1,
+          "schemaVersion": 3,
+          "timestamp": 3,
+          "requestID": "r",
+          "auth": "token",
+          "traceparent": "t"
+        }
+      ]
+    },
+    {
+      "message": [
+        "push",
+        {
+          "clientGroupID": "g",
+          "mutations": [
+            {
+              "type": "crud",
+              "id": 1,
+              "clientID": "c",
+              "name": "_zero_crud",
+              "args": [
+                {
+                  "ops": [
+                    {
+                      "op": "insert",
+                      "tableName": "t",
+                      "primaryKey": [],
+                      "value": {}
+                    }
+                  ]
+                }
+              ],
+              "timestamp": 1
+            }
+          ],
+          "pushVersion": 1,
+          "timestamp": 1,
+          "requestID": "r"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "push",
+        {
+          "clientGroupID": "g",
+          "mutations": [
+            {
+              "type": "crud",
+              "id": 1,
+              "clientID": "c",
+              "name": "_zero_crud",
+              "args": [
+                {
+                  "ops": [
+                    {
+                      "op": "delete",
+                      "tableName": "t",
+                      "primaryKey": [
+                        "a"
+                      ],
+                      "value": {
+                        "a": null
+                      }
+                    }
+                  ]
+                }
+              ],
+              "timestamp": 1
+            }
+          ],
+          "pushVersion": 1,
+          "timestamp": 1,
+          "requestID": "r"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "push",
+        {
+          "clientGroupID": "g",
+          "mutations": [
+            {
+              "type": "custom",
+              "id": 1,
+              "clientID": "c",
+              "name": "_zero_crud",
+              "args": [],
+              "timestamp": 1
+            }
+          ],
+          "pushVersion": 1,
+          "timestamp": 1,
+          "requestID": "r"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "push",
+        {
+          "clientGroupID": "g",
+          "mutations": [
+            {
+              "type": "custom",
+              "id": 1,
+              "clientID": "c",
+              "name": "_zero_crud",
+              "args": [],
+              "timestamp": 1
+            }
+          ],
+          "pushVersion": 1,
+          "timestamp": 1,
+          "requestID": "r"
+        }
+      ]
+    },
+    {
+      "message": [
+        "closeConnection",
+        []
+      ],
+      "ok": true,
+      "output": [
+        "closeConnection",
+        []
+      ]
+    },
+    {
+      "message": [
+        "closeConnection",
+        [
+          1,
+          "a",
+          null,
+          {
+            "b": []
+          }
+        ]
+      ],
+      "ok": true,
+      "output": [
+        "closeConnection",
+        [
+          1,
+          "a",
+          null,
+          {
+            "b": []
+          }
+        ]
+      ]
+    },
+    {
+      "message": [
+        "closeConnection",
+        {}
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "ackMutationResponses",
+        {
+          "id": 1,
+          "clientID": "c"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "ackMutationResponses",
+        {
+          "id": 1,
+          "clientID": "c"
+        }
+      ]
+    },
+    {
+      "message": [
+        "ackMutationResponses",
+        {
+          "id": "1",
+          "clientID": "c"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "i",
+          "op": "queries"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "inspect",
+        {
+          "id": "i",
+          "op": "queries"
+        }
+      ]
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "i",
+          "op": "queries",
+          "clientID": "c"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "inspect",
+        {
+          "id": "i",
+          "op": "queries",
+          "clientID": "c"
+        }
+      ]
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "i",
+          "op": "authenticate",
+          "value": "secret"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "inspect",
+        {
+          "id": "i",
+          "op": "authenticate",
+          "value": "secret"
+        }
+      ]
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "i",
+          "op": "authenticate"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "i",
+          "op": "newOp"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "i",
+          "op": "analyze-query",
+          "value": {
+            "table": "issue",
+            "where": {
+              "type": "simple",
+              "op": "=",
+              "left": {
+                "type": "column",
+                "name": "id"
+              },
+              "right": {
+                "type": "literal",
+                "value": "1"
+              }
+            },
+            "orderBy": [
+              [
+                "id",
+                "asc"
+              ]
+            ],
+            "limit": 10
+          },
+          "ast": {
+            "table": "issue",
+            "where": {
+              "type": "and",
+              "conditions": [
+                {
+                  "type": "correlatedSubquery",
+                  "op": "EXISTS",
+                  "related": {
+                    "correlation": {
+                      "parentField": [
+                        "ownerID"
+                      ],
+                      "childField": [
+                        "id"
+                      ]
+                    },
+                    "subquery": {
+                      "table": "user"
+                    }
+                  }
+                },
+                {
+                  "type": "simple",
+                  "op": "IN",
+                  "left": {
+                    "type": "column",
+                    "name": "n"
+                  },
+                  "right": {
+                    "type": "literal",
+                    "value": [
+                      1,
+                      "a",
+                      true
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          "options": {
+            "vendedRows": true,
+            "syncedRows": false,
+            "joinPlans": true
+          },
+          "name": "q",
+          "args": []
+        }
+      ],
+      "ok": true,
+      "output": [
+        "inspect",
+        {
+          "id": "i",
+          "op": "analyze-query",
+          "value": {
+            "table": "issue",
+            "where": {
+              "type": "simple",
+              "op": "=",
+              "left": {
+                "type": "column",
+                "name": "id"
+              },
+              "right": {
+                "type": "literal",
+                "value": "1"
+              }
+            },
+            "orderBy": [
+              [
+                "id",
+                "asc"
+              ]
+            ],
+            "limit": 10
+          },
+          "ast": {
+            "table": "issue",
+            "where": {
+              "type": "and",
+              "conditions": [
+                {
+                  "type": "correlatedSubquery",
+                  "op": "EXISTS",
+                  "related": {
+                    "correlation": {
+                      "parentField": [
+                        "ownerID"
+                      ],
+                      "childField": [
+                        "id"
+                      ]
+                    },
+                    "subquery": {
+                      "table": "user"
+                    }
+                  }
+                },
+                {
+                  "type": "simple",
+                  "op": "IN",
+                  "left": {
+                    "type": "column",
+                    "name": "n"
+                  },
+                  "right": {
+                    "type": "literal",
+                    "value": [
+                      1,
+                      "a",
+                      true
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          "options": {
+            "vendedRows": true,
+            "syncedRows": false,
+            "joinPlans": true
+          },
+          "name": "q",
+          "args": []
+        }
+      ]
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "i",
+          "op": "analyze-query",
+          "ast": {
+            "table": "issue",
+            "zExtra": 1
+          }
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "i",
+          "op": "analyze-query",
+          "options": {
+            "vendedRows": 1
+          }
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "clientGroupID": "\na%bİ\"İ",
+          "cookie": "",
+          "requestID": "\" \\中bAB"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pull",
+        {
+          "clientGroupID": "\na%bİ\"İ",
+          "cookie": "",
+          "requestID": "\" \\中bAB"
+        }
+      ]
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "A\n%b𝒜",
+              "ttl": 2,
+              "ast": {
+                "table": "issue"
+              }
+            },
+            {
+              "op": "put",
+              "hash": " ",
+              "name": "\\",
+              "": []
+            },
+            {
+              "op": "del",
+              "hash": "𝒜B中中"
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "A\n%b𝒜",
+              "ttl": 2,
+              "ast": {
+                "table": "issue"
+              }
+            },
+            {
+              "op": "put",
+              "hash": " ",
+              "name": "\\"
+            },
+            {
+              "op": "del",
+              "hash": "𝒜B中中"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "closeConnection",
+        []
+      ],
+      "ok": true,
+      "output": [
+        "closeConnection",
+        []
+      ]
+    },
+    {
+      "message": [
+        "ackMutationResponses",
+        {
+          "id": 371,
+          "clientID": " ßba\"é𝒜"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "ackMutationResponses",
+        {
+          "id": 371,
+          "clientID": " ßba\"é𝒜"
+        }
+      ]
+    },
+    {
+      "message": [
+        "ping",
+        {
+          "zExtra": " \\ßİ"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "ping",
+        {}
+      ]
+    },
+    {
+      "message": [
+        "push",
+        {
+          "clientGroupID": "ß",
+          "mutations": [],
+          "pushVersion": 1,
+          "timestamp": 2,
+          "requestID": " 𝒜%%𝒜b_"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "push",
+        {
+          "clientGroupID": "ß",
+          "mutations": [],
+          "pushVersion": 1,
+          "timestamp": 2,
+          "requestID": " 𝒜%%𝒜b_"
+        }
+      ]
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "clear"
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "clear"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "closeConnection",
+        []
+      ],
+      "ok": true,
+      "output": [
+        "closeConnection",
+        []
+      ]
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "clientGroupID": "é",
+          "cookie": null,
+          "requestID": ""
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pull",
+        {
+          "clientGroupID": "é",
+          "cookie": null,
+          "requestID": ""
+        }
+      ]
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": " %B_中aİ",
+              "ast": {
+                "table": "issue",
+                "where": {
+                  "type": "and",
+                  "conditions": [
+                    {
+                      "type": "correlatedSubquery",
+                      "op": "EXISTS",
+                      "related": {
+                        "correlation": {
+                          "parentField": [
+                            "ownerID"
+                          ],
+                          "childField": [
+                            "id"
+                          ]
+                        },
+                        "subquery": {
+                          "table": "user"
+                        }
+                      }
+                    },
+                    {
+                      "type": "simple",
+                      "op": "IN",
+                      "left": {
+                        "type": "column",
+                        "name": "n"
+                      },
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          1,
+                          "a",
+                          true
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              "args": [
+                "􏿿",
+                true
+              ]
+            },
+            {
+              "op": "clear"
+            },
+            {
+              "op": "put",
+              "hash": "\n",
+              "ast": {
+                "table": "issue",
+                "where": {
+                  "type": "and",
+                  "conditions": [
+                    {
+                      "type": "correlatedSubquery",
+                      "op": "EXISTS",
+                      "related": {
+                        "correlation": {
+                          "parentField": [
+                            "ownerID"
+                          ],
+                          "childField": [
+                            "id"
+                          ]
+                        },
+                        "subquery": {
+                          "table": "user"
+                        }
+                      }
+                    },
+                    {
+                      "type": "simple",
+                      "op": "IN",
+                      "left": {
+                        "type": "column",
+                        "name": "n"
+                      },
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          1,
+                          "a",
+                          true
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "traceparent": "中文"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": " %B_中aİ",
+              "ast": {
+                "table": "issue",
+                "where": {
+                  "type": "and",
+                  "conditions": [
+                    {
+                      "type": "correlatedSubquery",
+                      "op": "EXISTS",
+                      "related": {
+                        "correlation": {
+                          "parentField": [
+                            "ownerID"
+                          ],
+                          "childField": [
+                            "id"
+                          ]
+                        },
+                        "subquery": {
+                          "table": "user"
+                        }
+                      }
+                    },
+                    {
+                      "type": "simple",
+                      "op": "IN",
+                      "left": {
+                        "type": "column",
+                        "name": "n"
+                      },
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          1,
+                          "a",
+                          true
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              "args": [
+                "􏿿",
+                true
+              ]
+            },
+            {
+              "op": "clear"
+            },
+            {
+              "op": "put",
+              "hash": "\n",
+              "ast": {
+                "table": "issue",
+                "where": {
+                  "type": "and",
+                  "conditions": [
+                    {
+                      "type": "correlatedSubquery",
+                      "op": "EXISTS",
+                      "related": {
+                        "correlation": {
+                          "parentField": [
+                            "ownerID"
+                          ],
+                          "childField": [
+                            "id"
+                          ]
+                        },
+                        "subquery": {
+                          "table": "user"
+                        }
+                      }
+                    },
+                    {
+                      "type": "simple",
+                      "op": "IN",
+                      "left": {
+                        "type": "column",
+                        "name": "n"
+                      },
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          1,
+                          "a",
+                          true
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "traceparent": "中文"
+        }
+      ]
+    },
+    {
+      "message": [
+        "deleteClients",
+        {
+          "clientIDs": [
+            " %",
+            "é"
+          ],
+          "clientGroupIDs": [
+            "b%"
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "deleteClients",
+        {
+          "clientIDs": [
+            " %",
+            "é"
+          ],
+          "clientGroupIDs": [
+            "b%"
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [],
+          "traceparent": "B𝒜𝒜B😀"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [],
+          "traceparent": "B𝒜𝒜B😀"
+        }
+      ]
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "",
+          "op": "authenticate",
+          "value": "z"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "inspect",
+        {
+          "id": "",
+          "op": "authenticate",
+          "value": "z"
+        }
+      ]
+    },
+    {
+      "message": [
+        "closeConnection",
+        []
+      ],
+      "ok": true,
+      "output": [
+        "closeConnection",
+        []
+      ]
+    },
+    {
+      "message": [
+        "push",
+        {
+          "clientGroupID": "_A\n中",
+          "mutations": [],
+          "pushVersion": 1,
+          "schemaVersion": 4,
+          "timestamp": 0.5,
+          "requestID": "b\nA\\Bé"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "push",
+        {
+          "clientGroupID": "_A\n中",
+          "mutations": [],
+          "pushVersion": 1,
+          "schemaVersion": 4,
+          "timestamp": 0.5,
+          "requestID": "b\nA\\Bé"
+        }
+      ]
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "clientGroupID": "İb_",
+          "cookie": "",
+          "requestID": "B𝒜😀A"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pull",
+        {
+          "clientGroupID": "İb_",
+          "cookie": "",
+          "requestID": "B𝒜😀A"
+        }
+      ]
+    },
+    {
+      "message": [
+        "closeConnection",
+        []
+      ],
+      "ok": true,
+      "output": [
+        "closeConnection",
+        []
+      ]
+    },
+    {
+      "message": [
+        "push",
+        {
+          "clientGroupID": "b\"\\",
+          "mutations": [
+            {
+              "type": "crud",
+              "id": 925,
+              "clientID": "中\nß_𝒜é\"A",
+              "timestamp": -2.25,
+              "name": "_zero_crud",
+              "args": [
+                {
+                  "ops": [
+                    {
+                      "op": "upsert",
+                      "tableName": "comment",
+                      "primaryKey": [
+                        "id",
+                        "n"
+                      ],
+                      "value": {
+                        "id": 35275,
+                        "title": [
+                          "B😀",
+                          "_😀 "
+                        ],
+                        "n": "𝒜bA"
+                      },
+                      "é": "_a中_中"
+                    },
+                    {
+                      "op": "upsert",
+                      "tableName": "comment",
+                      "primaryKey": [
+                        "id",
+                        "n"
+                      ],
+                      "value": {
+                        "title": []
+                      }
+                    },
+                    {
+                      "op": "insert",
+                      "tableName": "issue",
+                      "primaryKey": [
+                        "id",
+                        "n"
+                      ],
+                      "value": {
+                        "n": null
+                      }
+                    }
+                  ],
+                  "é": [
+                    "",
+                    true,
+                    null
+                  ]
+                }
+              ],
+              "": "A_\\ß"
+            }
+          ],
+          "pushVersion": 1,
+          "timestamp": 2,
+          "requestID": ""
+        }
+      ],
+      "ok": true,
+      "output": [
+        "push",
+        {
+          "clientGroupID": "b\"\\",
+          "mutations": [
+            {
+              "type": "crud",
+              "id": 925,
+              "clientID": "中\nß_𝒜é\"A",
+              "name": "_zero_crud",
+              "timestamp": -2.25,
+              "args": [
+                {
+                  "ops": [
+                    {
+                      "op": "upsert",
+                      "tableName": "comment",
+                      "primaryKey": [
+                        "id",
+                        "n"
+                      ],
+                      "value": {
+                        "id": 35275,
+                        "title": [
+                          "B😀",
+                          "_😀 "
+                        ],
+                        "n": "𝒜bA"
+                      }
+                    },
+                    {
+                      "op": "upsert",
+                      "tableName": "comment",
+                      "primaryKey": [
+                        "id",
+                        "n"
+                      ],
+                      "value": {
+                        "title": []
+                      }
+                    },
+                    {
+                      "op": "insert",
+                      "tableName": "issue",
+                      "primaryKey": [
+                        "id",
+                        "n"
+                      ],
+                      "value": {
+                        "n": null
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "pushVersion": 1,
+          "timestamp": 2,
+          "requestID": ""
+        }
+      ]
+    },
+    {
+      "message": [
+        "push",
+        {
+          "clientGroupID": "\"\"İ ",
+          "mutations": [],
+          "pushVersion": 1,
+          "schemaVersion": 2,
+          "timestamp": -2.25,
+          "requestID": "bb_\\\\a \\",
+          "😀": [
+            -1,
+            2147483648,
+            null
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "push",
+        {
+          "clientGroupID": "\"\"İ ",
+          "mutations": [],
+          "pushVersion": 1,
+          "schemaVersion": 2,
+          "timestamp": -2.25,
+          "requestID": "bb_\\\\a \\"
+        }
+      ]
+    },
+    {
+      "message": [
+        "updateAuth",
+        {
+          "auth": "İ"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "updateAuth",
+        {
+          "auth": "İ"
+        }
+      ]
+    },
+    {
+      "message": [
+        "",
+        [
+          1e+21,
+          " "
+        ],
+        "�"
+      ],
+      "ok": true,
+      "output": [
+        "",
+        [
+          1e+21,
+          " "
+        ],
+        "�"
+      ]
+    },
+    {
+      "message": [
+        "Ping"
+      ],
+      "ok": true,
+      "output": [
+        "Ping"
+      ]
+    },
+    {
+      "message": [
+        "closeConnection",
+        [
+          "𝒜é\\ß%Bb",
+          null
+        ]
+      ],
+      "ok": true,
+      "output": [
+        "closeConnection",
+        [
+          "𝒜é\\ß%Bb",
+          null
+        ]
+      ]
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [],
+          "traceparent": "𝒜"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [],
+          "traceparent": "𝒜"
+        }
+      ]
+    },
+    {
+      "message": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [],
+          "traceparent": "BB"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [],
+          "traceparent": "BB"
+        }
+      ]
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "clientGroupID": "a",
+          "cookie": null,
+          "requestID": "中文"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pull",
+        {
+          "clientGroupID": "a",
+          "cookie": null,
+          "requestID": "中文"
+        }
+      ]
+    },
+    {
+      "message": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [],
+          "clientSchema": {
+            "tables": {
+              "Issue": {
+                "columns": {
+                  "issue": {
+                    "type": "json"
+                  },
+                  "_": {
+                    "type": "null"
+                  },
+                  "𝒜": {
+                    "type": "number",
+                    "": {
+                      "é𝒜𝒜Aa中": true,
+                      "abc": "",
+                      "": " %B\\İ"
+                    }
+                  },
+                  "e": {
+                    "type": "boolean"
+                  }
+                },
+                "primaryKey": []
+              },
+              "": {
+                "columns": {
+                  "a": {
+                    "type": "string"
+                  },
+                  "_": {
+                    "type": "json"
+                  },
+                  "b": {
+                    "type": "boolean"
+                  }
+                },
+                "primaryKey": [
+                  "b"
+                ]
+              },
+              "😀": {
+                "columns": {
+                  "ab": {
+                    "type": "number"
+                  }
+                },
+                "primaryKey": [
+                  "ab"
+                ]
+              }
+            }
+          },
+          "userQueryHeaders": {
+            "z": "\n",
+            "ß  ß\"İA": "𝒜é%é"
+          },
+          "activeClients": [
+            ""
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [],
+          "clientSchema": {
+            "tables": {
+              "Issue": {
+                "columns": {
+                  "issue": {
+                    "type": "json"
+                  },
+                  "_": {
+                    "type": "null"
+                  },
+                  "𝒜": {
+                    "type": "number"
+                  },
+                  "e": {
+                    "type": "boolean"
+                  }
+                },
+                "primaryKey": []
+              },
+              "": {
+                "columns": {
+                  "a": {
+                    "type": "string"
+                  },
+                  "_": {
+                    "type": "json"
+                  },
+                  "b": {
+                    "type": "boolean"
+                  }
+                },
+                "primaryKey": [
+                  "b"
+                ]
+              },
+              "😀": {
+                "columns": {
+                  "ab": {
+                    "type": "number"
+                  }
+                },
+                "primaryKey": [
+                  "ab"
+                ]
+              }
+            }
+          },
+          "userQueryHeaders": {
+            "z": "\n",
+            "ß  ß\"İA": "𝒜é%é"
+          },
+          "activeClients": [
+            ""
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "Ping",
+        "𝒜% b\\中İ",
+        29381
+      ],
+      "ok": true,
+      "output": [
+        "Ping",
+        "𝒜% b\\中İ",
+        29381
+      ]
+    },
+    {
+      "message": [
+        "ackMutationResponses",
+        {
+          "id": 528,
+          "clientID": "\n"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "ackMutationResponses",
+        {
+          "id": 528,
+          "clientID": "\n"
+        }
+      ]
+    },
+    {
+      "message": [
+        "closeConnection",
+        [
+          {},
+          null
+        ]
+      ],
+      "ok": true,
+      "output": [
+        "closeConnection",
+        [
+          {},
+          null
+        ]
+      ]
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "clientGroupID": "",
+          "cookie": null,
+          "requestID": "a% _éb\"a",
+          "": {
+            " A\nb": -9007199254740992,
+            "%𝒜BA": null
+          }
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pull",
+        {
+          "clientGroupID": "",
+          "cookie": null,
+          "requestID": "a% _éb\"a"
+        }
+      ]
+    },
+    {
+      "message": [
+        "push",
+        {
+          "clientGroupID": "ßß",
+          "mutations": [
+            {
+              "type": "crud",
+              "id": 410,
+              "clientID": "",
+              "timestamp": 4120,
+              "name": "_zero_crud",
+              "args": [
+                {
+                  "ops": [
+                    {
+                      "op": "upsert",
+                      "tableName": "user",
+                      "primaryKey": [
+                        "id"
+                      ],
+                      "value": {
+                        "title": 9007199254740992,
+                        "n": 76073
+                      }
+                    },
+                    {
+                      "op": "update",
+                      "tableName": "été",
+                      "primaryKey": [
+                        "id",
+                        "n"
+                      ],
+                      "value": {
+                        "n": "éİB %B",
+                        "": null
+                      }
+                    },
+                    {
+                      "op": "insert",
+                      "tableName": "user",
+                      "primaryKey": [
+                        "id"
+                      ],
+                      "value": {
+                        "😀": 9007199254740992
+                      }
+                    }
+                  ],
+                  "é": "\\"
+                }
+              ],
+              "😀": [
+                false
+              ]
+            },
+            {
+              "type": "custom",
+              "id": 599,
+              "clientID": "\"",
+              "timestamp": -1,
+              "name": "İ%ß😀é😀😀\\",
+              "args": []
+            }
+          ],
+          "pushVersion": 1,
+          "timestamp": 5e-324,
+          "requestID": "\\A\n中_𝒜B"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "push",
+        {
+          "clientGroupID": "ßß",
+          "mutations": [
+            {
+              "type": "crud",
+              "id": 410,
+              "clientID": "",
+              "name": "_zero_crud",
+              "timestamp": 4120,
+              "args": [
+                {
+                  "ops": [
+                    {
+                      "op": "upsert",
+                      "tableName": "user",
+                      "primaryKey": [
+                        "id"
+                      ],
+                      "value": {
+                        "title": 9007199254740992,
+                        "n": 76073
+                      }
+                    },
+                    {
+                      "op": "update",
+                      "tableName": "été",
+                      "primaryKey": [
+                        "id",
+                        "n"
+                      ],
+                      "value": {
+                        "n": "éİB %B",
+                        "": null
+                      }
+                    },
+                    {
+                      "op": "insert",
+                      "tableName": "user",
+                      "primaryKey": [
+                        "id"
+                      ],
+                      "value": {
+                        "😀": 9007199254740992
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "custom",
+              "id": 599,
+              "clientID": "\"",
+              "timestamp": -1,
+              "name": "İ%ß😀é😀😀\\",
+              "args": []
+            }
+          ],
+          "pushVersion": 1,
+          "timestamp": 5e-324,
+          "requestID": "\\A\n中_𝒜B"
+        }
+      ]
+    },
+    {
+      "message": [
+        "ackMutationResponses",
+        {
+          "id": 172,
+          "clientID": "ω"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "ackMutationResponses",
+        {
+          "id": 172,
+          "clientID": "ω"
+        }
+      ]
+    },
+    {
+      "message": [
+        "newMessage",
+        null
+      ],
+      "ok": true,
+      "output": [
+        "newMessage",
+        null
+      ]
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": []
+        }
+      ],
+      "ok": true,
+      "output": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": []
+        }
+      ]
+    },
+    {
+      "message": [
+        "deleteClients",
+        {
+          "clientIDs": [
+            "b",
+            "\n "
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "deleteClients",
+        {
+          "clientIDs": [
+            "b",
+            "\n "
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "aA😀%",
+          "op": "queries",
+          "clientID": "\n\"İ中_",
+          "": 1e+21
+        }
+      ],
+      "ok": true,
+      "output": [
+        "inspect",
+        {
+          "id": "aA😀%",
+          "op": "queries",
+          "clientID": "\n\"İ中_"
+        }
+      ]
+    },
+    {
+      "message": [
+        "push",
+        {
+          "clientGroupID": "b",
+          "mutations": [
+            {
+              "type": "crud",
+              "id": 66,
+              "clientID": "_ßé_A",
+              "timestamp": -1,
+              "name": "_zero_crud",
+              "args": [
+                {
+                  "ops": [
+                    {
+                      "op": "delete",
+                      "tableName": "issue",
+                      "primaryKey": [
+                        "id"
+                      ],
+                      "value": {
+                        "id": true,
+                        "n": true
+                      }
+                    },
+                    {
+                      "op": "delete",
+                      "tableName": "comment",
+                      "primaryKey": [
+                        "id"
+                      ],
+                      "value": {
+                        "id": "",
+                        "n": 0
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "pushVersion": 1,
+          "schemaVersion": 1,
+          "timestamp": 68021,
+          "requestID": "%béBA_ba",
+          "auth": "𝒜B 𝒜% "
+        }
+      ],
+      "ok": true,
+      "output": [
+        "push",
+        {
+          "clientGroupID": "b",
+          "mutations": [
+            {
+              "type": "crud",
+              "id": 66,
+              "clientID": "_ßé_A",
+              "timestamp": -1,
+              "name": "_zero_crud",
+              "args": [
+                {
+                  "ops": [
+                    {
+                      "op": "delete",
+                      "tableName": "issue",
+                      "primaryKey": [
+                        "id"
+                      ],
+                      "value": {
+                        "id": true,
+                        "n": true
+                      }
+                    },
+                    {
+                      "op": "delete",
+                      "tableName": "comment",
+                      "primaryKey": [
+                        "id"
+                      ],
+                      "value": {
+                        "id": "",
+                        "n": 0
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "pushVersion": 1,
+          "schemaVersion": 1,
+          "timestamp": 68021,
+          "requestID": "%béBA_ba",
+          "auth": "𝒜B 𝒜% "
+        }
+      ]
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "clientGroupID": "İ",
+          "cookie": null,
+          "requestID": "😀"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pull",
+        {
+          "clientGroupID": "İ",
+          "cookie": null,
+          "requestID": "😀"
+        }
+      ]
+    },
+    {
+      "message": [
+        "ping",
+        {}
+      ],
+      "ok": true,
+      "output": [
+        "ping",
+        {}
+      ]
+    },
+    {
+      "message": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "%a%a中\"é",
+              "ast": {
+                "table": "issue",
+                "alias": "i",
+                "schema": "public",
+                "related": [
+                  {
+                    "correlation": {
+                      "parentField": [
+                        "id"
+                      ],
+                      "childField": [
+                        "issueID"
+                      ]
+                    },
+                    "subquery": {
+                      "table": "comment",
+                      "alias": "comments",
+                      "orderBy": [
+                        [
+                          "id",
+                          "desc"
+                        ]
+                      ]
+                    },
+                    "system": "permissions",
+                    "hidden": true
+                  }
+                ],
+                "start": {
+                  "row": {
+                    "id": "a",
+                    "n": null
+                  },
+                  "exclusive": true
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "%a%a中\"é",
+              "ast": {
+                "schema": "public",
+                "table": "issue",
+                "alias": "i",
+                "related": [
+                  {
+                    "correlation": {
+                      "parentField": [
+                        "id"
+                      ],
+                      "childField": [
+                        "issueID"
+                      ]
+                    },
+                    "subquery": {
+                      "table": "comment",
+                      "alias": "comments",
+                      "orderBy": [
+                        [
+                          "id",
+                          "desc"
+                        ]
+                      ]
+                    },
+                    "system": "permissions",
+                    "hidden": true
+                  }
+                ],
+                "start": {
+                  "row": {
+                    "id": "a",
+                    "n": null
+                  },
+                  "exclusive": true
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "clientGroupID": "",
+          "cookie": null,
+          "requestID": "😀",
+          "zExtra": 2
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pull",
+        {
+          "clientGroupID": "",
+          "cookie": null,
+          "requestID": "😀"
+        }
+      ]
+    },
+    {
+      "message": [
+        "closeConnection",
+        [
+          null
+        ]
+      ],
+      "ok": true,
+      "output": [
+        "closeConnection",
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "message": [
+        "closeConnection",
+        [
+          [
+            "𝒜",
+            false,
+            "�"
+          ]
+        ]
+      ],
+      "ok": true,
+      "output": [
+        "closeConnection",
+        [
+          [
+            "𝒜",
+            false,
+            "�"
+          ]
+        ]
+      ]
+    },
+    {
+      "message": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "\\ß_İ \"",
+              "ttl": 1e-7,
+              "name": "BéßB"
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "\\ß_İ \"",
+              "ttl": 1e-7,
+              "name": "BéßB"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "deleteClients",
+        {
+          "clientIDs": [
+            "𝒜a",
+            "𝒜İ\\_İ\\😀\\"
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "deleteClients",
+        {
+          "clientIDs": [
+            "𝒜a",
+            "𝒜İ\\_İ\\😀\\"
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "ackMutationResponses",
+        {
+          "id": 426,
+          "clientID": "İİA%\n%\n",
+          "newField": "\\"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "ackMutationResponses",
+        {
+          "id": 426,
+          "clientID": "İİA%\n%\n"
+        }
+      ]
+    },
+    {
+      "message": [
+        "closeConnection",
+        []
+      ],
+      "ok": true,
+      "output": [
+        "closeConnection",
+        []
+      ]
+    },
+    {
+      "message": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "\n_A",
+              "name": "_B \\a",
+              "args": [
+                [
+                  false
+                ],
+                false
+              ]
+            }
+          ],
+          "clientSchema": {
+            "tables": {
+              "e": {
+                "columns": {
+                  "𝒜": {
+                    "type": "null"
+                  },
+                  "comment": {
+                    "type": "string"
+                  },
+                  "Issue": {
+                    "type": "null",
+                    "😀": 5e-324
+                  }
+                },
+                "primaryKey": []
+              },
+              "ab": {
+                "columns": {
+                  "😀": {
+                    "type": "number"
+                  },
+                  "é": {
+                    "type": "number"
+                  },
+                  "": {
+                    "type": "null"
+                  },
+                  "𝒜": {
+                    "type": "boolean"
+                  }
+                },
+                "primaryKey": [
+                  "😀"
+                ]
+              },
+              "_": {
+                "columns": {
+                  "": {
+                    "type": "number"
+                  },
+                  "𝒜": {
+                    "type": "null"
+                  },
+                  "issue": {
+                    "type": "null"
+                  }
+                },
+                "primaryKey": [
+                  "",
+                  "𝒜"
+                ]
+              },
+              "𝒜": {
+                "columns": {
+                  "": {
+                    "type": "null"
+                  }
+                },
+                "primaryKey": [
+                  ""
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "ok": true,
+      "output": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "\n_A",
+              "name": "_B \\a",
+              "args": [
+                [
+                  false
+                ],
+                false
+              ]
+            }
+          ],
+          "clientSchema": {
+            "tables": {
+              "e": {
+                "columns": {
+                  "𝒜": {
+                    "type": "null"
+                  },
+                  "comment": {
+                    "type": "string"
+                  },
+                  "Issue": {
+                    "type": "null"
+                  }
+                },
+                "primaryKey": []
+              },
+              "ab": {
+                "columns": {
+                  "😀": {
+                    "type": "number"
+                  },
+                  "é": {
+                    "type": "number"
+                  },
+                  "": {
+                    "type": "null"
+                  },
+                  "𝒜": {
+                    "type": "boolean"
+                  }
+                },
+                "primaryKey": [
+                  "😀"
+                ]
+              },
+              "_": {
+                "columns": {
+                  "": {
+                    "type": "number"
+                  },
+                  "𝒜": {
+                    "type": "null"
+                  },
+                  "issue": {
+                    "type": "null"
+                  }
+                },
+                "primaryKey": [
+                  "",
+                  "𝒜"
+                ]
+              },
+              "𝒜": {
+                "columns": {
+                  "": {
+                    "type": "null"
+                  }
+                },
+                "primaryKey": [
+                  ""
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "message": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "clear"
+            }
+          ],
+          "deleted": {
+            "clientIDs": []
+          },
+          "userPushURL": "\""
+        }
+      ],
+      "ok": true,
+      "output": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "clear"
+            }
+          ],
+          "deleted": {
+            "clientIDs": []
+          },
+          "userPushURL": "\""
+        }
+      ]
+    },
+    {
+      "message": true,
+      "ok": false
+    },
+    {
+      "message": [
+        "updateAuth",
+        {
+          "auth": "İ"
+        },
+        "updateAuth"
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "push",
+        {
+          "clientGroupID": "b\"\\",
+          "mutations": [
+            {
+              "type": "crud",
+              "id": 925,
+              "clientID": "中\nß_𝒜é\"A",
+              "timestamp": -2.25,
+              "name": "_zero_crud",
+              "args": [
+                {
+                  "ops": [
+                    {
+                      "op": "upsert",
+                      "tableName": "comment",
+                      "primaryKey": [
+                        "id",
+                        "n"
+                      ],
+                      "value": {
+                        "title": [
+                          "B😀",
+                          "_😀 "
+                        ],
+                        "n": "𝒜bA"
+                      },
+                      "é": "_a中_中"
+                    },
+                    {
+                      "op": "upsert",
+                      "tableName": "comment",
+                      "primaryKey": [
+                        "id",
+                        "n"
+                      ],
+                      "value": {
+                        "title": []
+                      }
+                    },
+                    {
+                      "op": "insert",
+                      "tableName": {
+                        "zExtra": 1
+                      },
+                      "primaryKey": [
+                        "id",
+                        "n"
+                      ],
+                      "value": {
+                        "n": null
+                      }
+                    }
+                  ],
+                  "é": [
+                    "",
+                    true,
+                    null
+                  ]
+                }
+              ],
+              "": "A_\\ß"
+            }
+          ],
+          "pushVersion": 1,
+          "timestamp": 2,
+          "requestID": ""
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": "bogus",
+      "ok": false
+    },
+    {
+      "message": [
+        "_zero_crud",
+        {
+          "clientGroupID": "_A\n中",
+          "mutations": [],
+          "pushVersion": 1,
+          "schemaVersion": 4,
+          "timestamp": 0.5,
+          "requestID": "b\nA\\Bé"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "_zero_crud",
+        {
+          "clientGroupID": "_A\n中",
+          "mutations": [],
+          "pushVersion": 1,
+          "schemaVersion": 4,
+          "timestamp": 0.5,
+          "requestID": "b\nA\\Bé"
+        }
+      ]
+    },
+    {
+      "message": [
+        [],
+        true
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "push",
+        {
+          "clientGroupID": "_A\n中",
+          "mutations": [],
+          "pushVersion": [],
+          "schemaVersion": 4,
+          "timestamp": 0.5,
+          "requestID": "b\nA\\Bé"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        [],
+        {
+          "id": 426,
+          "clientID": "İİA%\n%\n",
+          "newField": "\\"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        [
+          "𝒜é\\ß%Bb",
+          null
+        ]
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "initConnection",
+        null
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "op": "zeroCache",
+          "value": "z"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        {},
+        {
+          "clientGroupID": "\na%bİ\"İ",
+          "requestID": "\" \\中bAB"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pull"
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": "",
+          "traceparent": "𝒜"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": "",
+      "ok": false
+    },
+    {
+      "message": [
+        {
+          "clientIDs": [
+            "b",
+            "\n "
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {
+          "traceparent": "𝒜"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        1
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        [
+          null
+        ],
+        null
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        {}
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        "clear"
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "clientGroupID": "",
+          "cookie": "",
+          "requestID": "a% _éb\"a",
+          "": {
+            " A\nb": -9007199254740992,
+            "%𝒜BA": null
+          }
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pull",
+        {
+          "clientGroupID": "",
+          "cookie": "",
+          "requestID": "a% _éb\"a"
+        }
+      ]
+    },
+    {
+      "message": [
+        "pull",
+        0
+      ],
+      "ok": false
+    },
+    {
+      "message": "queries",
+      "ok": false
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "clientGroupID": "",
+          "cookie": null,
+          "requestID": "a% _éb\"a",
+          "": {
+            " A\nb": -9007199254740992,
+            "%𝒜BA": ""
+          }
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pull",
+        {
+          "clientGroupID": "",
+          "cookie": null,
+          "requestID": "a% _éb\"a"
+        }
+      ]
+    },
+    {
+      "message": [
+        "pokePart",
+        {
+          "clientGroupID": "",
+          "cookie": null,
+          "requestID": "a% _éb\"a",
+          "": {
+            " A\nb": -9007199254740992,
+            "%𝒜BA": {}
+          }
+        }
+      ],
+      "ok": true,
+      "output": [
+        "pokePart",
+        {
+          "clientGroupID": "",
+          "cookie": null,
+          "requestID": "a% _éb\"a",
+          "": {
+            " A\nb": -9007199254740992,
+            "%𝒜BA": {}
+          }
+        }
+      ]
+    },
+    {
+      "message": [
+        "closeConnection",
+        [],
+        "closeConnection"
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "push",
+        {
+          "mutations": [],
+          "pushVersion": 1,
+          "timestamp": 2,
+          "requestID": " 𝒜%%𝒜b_"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        {},
+        {
+          "desiredQueriesPatch": [],
+          "deleted": {
+            "clientIDs": []
+          },
+          "userPushURL": "\""
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "clientGroupID": "",
+          "requestID": "a% _éb\"a",
+          "": {
+            " A\nb": -9007199254740992,
+            "%𝒜BA": null
+          }
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "custom",
+              "hash": "\\ß_İ \"",
+              "ttl": 1e-7,
+              "name": "BéßB"
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [],
+          "clientSchema": {
+            "tables": {
+              "Issue": {
+                "columns": {
+                  "issue": {
+                    "type": "json"
+                  },
+                  "_": {
+                    "type": "null"
+                  },
+                  "𝒜": {
+                    "type": "number",
+                    "": {
+                      "é𝒜𝒜Aa中": true,
+                      "abc": "",
+                      "": " %B\\İ"
+                    }
+                  },
+                  "e": {
+                    "type": "boolean"
+                  }
+                },
+                "primaryKey": []
+              },
+              "": {
+                "columns": {
+                  "a": {
+                    "type": "string"
+                  },
+                  "_": {
+                    "type": "json"
+                  },
+                  "b": {
+                    "type": 0
+                  }
+                },
+                "primaryKey": [
+                  "b"
+                ]
+              },
+              "😀": {
+                "columns": {
+                  "ab": {
+                    "type": "number"
+                  }
+                },
+                "primaryKey": [
+                  "ab"
+                ]
+              }
+            }
+          },
+          "userQueryHeaders": {
+            "z": "\n",
+            "ß  ß\"İA": "𝒜é%é"
+          },
+          "activeClients": [
+            ""
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "deleteClients",
+        {
+          "clientIDs": [
+            "and",
+            "é"
+          ],
+          "clientGroupIDs": [
+            1
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "closeConnection",
+        [
+          [
+            "𝒜",
+            false,
+            "�",
+            "𝒜"
+          ]
+        ]
+      ],
+      "ok": true,
+      "output": [
+        "closeConnection",
+        [
+          [
+            "𝒜",
+            false,
+            "�",
+            "𝒜"
+          ]
+        ]
+      ]
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": " %B_中aİ",
+              "ast": {
+                "table": "issue",
+                "where": {
+                  "type": "and",
+                  "conditions": [
+                    {
+                      "type": "correlatedSubquery",
+                      "op": "EXISTS",
+                      "related": {
+                        "correlation": {
+                          "parentField": [
+                            "ownerID"
+                          ],
+                          "childField": [
+                            "id"
+                          ]
+                        },
+                        "subquery": {
+                          "table": "user"
+                        }
+                      }
+                    },
+                    {
+                      "type": "simple",
+                      "left": {
+                        "type": "column",
+                        "name": "n"
+                      },
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          1,
+                          "a",
+                          true
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              "args": [
+                "􏿿",
+                true
+              ]
+            },
+            {
+              "op": "clear"
+            },
+            {
+              "op": "put",
+              "hash": "\n",
+              "ast": {
+                "table": "issue",
+                "where": {
+                  "type": "and",
+                  "conditions": [
+                    {
+                      "type": "correlatedSubquery",
+                      "op": "EXISTS",
+                      "related": {
+                        "correlation": {
+                          "parentField": [
+                            "ownerID"
+                          ],
+                          "childField": [
+                            "id"
+                          ]
+                        },
+                        "subquery": {
+                          "table": "user"
+                        }
+                      }
+                    },
+                    {
+                      "type": "simple",
+                      "left": {
+                        "type": "column",
+                        "name": "n"
+                      },
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          1,
+                          "a",
+                          true
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "traceparent": "中文"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "𝒜% b\\中İ",
+        29381
+      ],
+      "ok": true,
+      "output": [
+        "𝒜% b\\中İ",
+        29381
+      ]
+    },
+    {
+      "message": [
+        "delete",
+        []
+      ],
+      "ok": true,
+      "output": [
+        "delete",
+        []
+      ]
+    },
+    {
+      "message": [
+        "closeConnection",
+        [
+          {}
+        ]
+      ],
+      "ok": true,
+      "output": [
+        "closeConnection",
+        [
+          {}
+        ]
+      ]
+    },
+    {
+      "message": [
+        -1.5,
+        {
+          "id": "aA😀%",
+          "op": "queries",
+          "clientID": "\n\"İ中_",
+          "": 1e+21
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "http",
+        null
+      ],
+      "ok": true,
+      "output": [
+        "http",
+        null
+      ]
+    },
+    {
+      "message": [
+        {
+          "desiredQueriesPatch": []
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "closeConnection",
+        "http"
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "push",
+        {
+          "clientGroupID": "_A\n中",
+          "mutations": [],
+          "pushVersion": 1,
+          "schemaVersion": 4,
+          "timestamp": null,
+          "requestID": "b\nA\\Bé"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": "update",
+      "ok": false
+    },
+    {
+      "message": [
+        {
+          "id": "",
+          "op": "authenticate",
+          "value": "z"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": -1.5,
+      "ok": false
+    },
+    {
+      "message": [
+        "closeConnection",
+        [
+          [
+            "𝒜",
+            false
+          ]
+        ]
+      ],
+      "ok": true,
+      "output": [
+        "closeConnection",
+        [
+          [
+            "𝒜",
+            false
+          ]
+        ]
+      ]
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "zExtra": 1
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "bogus",
+        ""
+      ],
+      "ok": true,
+      "output": [
+        "bogus",
+        ""
+      ]
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "clientGroupID": "a",
+          "cookie": null
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "\\ß_İ \"",
+              "ttl": 1e-7,
+              "name": "BéßB"
+            }
+          ]
+        },
+        "initConnection"
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "",
+          "op": "authenticate",
+          "value": "z"
+        },
+        "inspect"
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        [
+          1
+        ],
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "A\n%b𝒜",
+              "ttl": 2,
+              "ast": {
+                "table": "issue"
+              }
+            },
+            {
+              "op": "put",
+              "hash": " ",
+              "name": "\\",
+              "": []
+            },
+            {
+              "op": "del",
+              "hash": "𝒜B中中"
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": "",
+      "ok": false
+    },
+    {
+      "message": "app",
+      "ok": false
+    },
+    {
+      "message": [
+        []
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "push",
+        {
+          "clientGroupID": "ß",
+          "mutations": [],
+          "pushVersion": 1,
+          "timestamp": "2",
+          "requestID": " 𝒜%%𝒜b_"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": "update",
+      "ok": false
+    },
+    {
+      "message": [
+        "push",
+        {
+          "clientGroupID": "client",
+          "mutations": [
+            {
+              "type": "http",
+              "id": 410,
+              "clientID": "",
+              "timestamp": 4120,
+              "name": "_zero_crud",
+              "args": [
+                {
+                  "ops": [
+                    {
+                      "op": "upsert",
+                      "tableName": "user",
+                      "primaryKey": [
+                        "id"
+                      ],
+                      "value": {
+                        "title": 9007199254740992,
+                        "n": 76073
+                      }
+                    },
+                    {
+                      "op": "update",
+                      "tableName": "été",
+                      "primaryKey": [
+                        "id",
+                        "n"
+                      ],
+                      "value": {
+                        "n": "éİB %B",
+                        "": null
+                      }
+                    },
+                    {
+                      "op": "insert",
+                      "tableName": "user",
+                      "primaryKey": [
+                        "id"
+                      ],
+                      "value": {
+                        "😀": 9007199254740992
+                      }
+                    }
+                  ],
+                  "é": "\\"
+                }
+              ],
+              "😀": [
+                false
+              ]
+            },
+            {
+              "type": "custom",
+              "id": 599,
+              "clientID": "\"",
+              "timestamp": -1,
+              "name": "İ%ß😀é😀😀\\",
+              "args": []
+            }
+          ],
+          "pushVersion": 1,
+          "timestamp": 5e-324,
+          "requestID": "\\A\n中_𝒜B"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [],
+      "ok": false
+    },
+    {
+      "message": [
+        -1.5,
+        []
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": "queries",
+          "traceparent": "BB"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": -1.5,
+      "ok": false
+    },
+    {
+      "message": [
+        "closeConnection",
+        [],
+        true
+      ],
+      "ok": false
+    },
+    {
+      "message": null,
+      "ok": false
+    },
+    {
+      "message": [
+        "updateAuth",
+        {
+          "auth": "error"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "updateAuth",
+        {
+          "auth": "error"
+        }
+      ]
+    },
+    {
+      "message": [],
+      "ok": false
+    },
+    {
+      "message": "custom",
+      "ok": false
+    },
+    {
+      "message": [
+        0,
+        [
+          {},
+          null
+        ]
+      ],
+      "ok": false
+    },
+    {
+      "message": [],
+      "ok": false
+    },
+    {
+      "message": [
+        1
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "deleteClients",
+        {
+          "clientIDs": [
+            " %",
+            {}
+          ],
+          "clientGroupIDs": [
+            "b%"
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "\\ß_İ \"",
+              "ttl": 0,
+              "name": "BéßB"
+            }
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "\\ß_İ \"",
+              "ttl": 0,
+              "name": "BéßB"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "message": [],
+      "ok": false
+    },
+    {
+      "message": [
+        []
+      ],
+      "ok": false
+    },
+    {
+      "message": {
+        "zExtra": 1
+      },
+      "ok": false
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [
+            {}
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": []
+        }
+      ],
+      "ok": true,
+      "output": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": []
+        }
+      ]
+    },
+    {
+      "message": [
+        "updateAuth",
+        {
+          "auth": "İ"
+        },
+        [
+          1
+        ]
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {}
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "pull",
+        {
+          "clientGroupID": "a",
+          "requestID": "bogus"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "updateAuth",
+        {},
+        {
+          "zExtra": 1
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "ping",
+        {},
+        "ping"
+      ],
+      "ok": false
+    },
+    {
+      "message": "crud",
+      "ok": false
+    },
+    {
+      "message": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": "pull",
+          "traceparent": "BB"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "clear"
+            }
+          ],
+          "deleted": {
+            "clientIDs": []
+          },
+          "userPushURL": "\""
+        },
+        null
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        1
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        [
+          1
+        ]
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "initConnection",
+        {
+          "traceparent": "BB"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "clear"
+            }
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "push",
+        {
+          "clientGroupID": "b\"\\",
+          "mutations": [
+            {
+              "type": "crud",
+              "id": 925,
+              "clientID": "中\nß_𝒜é\"A",
+              "timestamp": -2.25,
+              "name": "_zero_crud",
+              "args": [
+                {
+                  "ops": [
+                    {
+                      "op": "upsert",
+                      "tableName": "comment",
+                      "primaryKey": [
+                        "id",
+                        "n"
+                      ],
+                      "value": {
+                        "id": 35275,
+                        "title": [
+                          "B😀",
+                          "_😀 "
+                        ],
+                        "n": "𝒜bA"
+                      },
+                      "é": {
+                        "zExtra": 1
+                      }
+                    },
+                    {
+                      "op": "upsert",
+                      "tableName": "comment",
+                      "primaryKey": [
+                        "id",
+                        "n"
+                      ],
+                      "value": {
+                        "title": []
+                      }
+                    },
+                    {
+                      "op": "insert",
+                      "tableName": "issue",
+                      "primaryKey": [
+                        "id",
+                        "n"
+                      ],
+                      "value": {
+                        "n": null
+                      }
+                    }
+                  ],
+                  "é": [
+                    "",
+                    true,
+                    null
+                  ]
+                }
+              ],
+              "": "A_\\ß"
+            }
+          ],
+          "pushVersion": 1,
+          "timestamp": 2,
+          "requestID": ""
+        }
+      ],
+      "ok": true,
+      "output": [
+        "push",
+        {
+          "clientGroupID": "b\"\\",
+          "mutations": [
+            {
+              "type": "crud",
+              "id": 925,
+              "clientID": "中\nß_𝒜é\"A",
+              "name": "_zero_crud",
+              "timestamp": -2.25,
+              "args": [
+                {
+                  "ops": [
+                    {
+                      "op": "upsert",
+                      "tableName": "comment",
+                      "primaryKey": [
+                        "id",
+                        "n"
+                      ],
+                      "value": {
+                        "id": 35275,
+                        "title": [
+                          "B😀",
+                          "_😀 "
+                        ],
+                        "n": "𝒜bA"
+                      }
+                    },
+                    {
+                      "op": "upsert",
+                      "tableName": "comment",
+                      "primaryKey": [
+                        "id",
+                        "n"
+                      ],
+                      "value": {
+                        "title": []
+                      }
+                    },
+                    {
+                      "op": "insert",
+                      "tableName": "issue",
+                      "primaryKey": [
+                        "id",
+                        "n"
+                      ],
+                      "value": {
+                        "n": null
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "pushVersion": 1,
+          "timestamp": 2,
+          "requestID": ""
+        }
+      ]
+    },
+    {
+      "message": [
+        "Ping",
+        "Ping"
+      ],
+      "ok": true,
+      "output": [
+        "Ping",
+        "Ping"
+      ]
+    },
+    {
+      "message": [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "op": "put",
+              "hash": "\n_A",
+              "name": "_B \\a",
+              "args": [
+                [
+                  false
+                ],
+                false
+              ]
+            }
+          ],
+          "clientSchema": {
+            "tables": {
+              "e": {
+                "columns": {
+                  "𝒜": {
+                    "type": "null"
+                  },
+                  "comment": {
+                    "type": "string"
+                  },
+                  "Issue": {
+                    "type": "null",
+                    "😀": 5e-324
+                  }
+                },
+                "primaryKey": []
+              },
+              "ab": {
+                "columns": {
+                  "😀": {
+                    "type": "number"
+                  },
+                  "é": {
+                    "type": "number"
+                  },
+                  "": {
+                    "type": "null"
+                  },
+                  "𝒜": {
+                    "type": "boolean"
+                  }
+                },
+                "primaryKey": [
+                  "😀"
+                ]
+              },
+              "_": {
+                "columns": {
+                  "": {
+                    "type": "number"
+                  },
+                  "𝒜": {
+                    "type": "null"
+                  },
+                  "issue": {
+                    "type": "null"
+                  }
+                },
+                "primaryKey": [
+                  null,
+                  "𝒜"
+                ]
+              },
+              "𝒜": {
+                "columns": {
+                  "": {
+                    "type": "null"
+                  }
+                },
+                "primaryKey": [
+                  ""
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "inspect",
+        {
+          "id": "",
+          "op": "authenticate",
+          "value": "Rebalance"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "inspect",
+        {
+          "id": "",
+          "op": "authenticate",
+          "value": "Rebalance"
+        }
+      ]
+    },
+    {
+      "message": -1.5,
+      "ok": false
+    },
+    {
+      "message": [
+        "deleteClients",
+        {
+          "clientIDs": [
+            "queries",
+            "é"
+          ],
+          "clientGroupIDs": [
+            "b%"
+          ]
+        }
+      ],
+      "ok": true,
+      "output": [
+        "deleteClients",
+        {
+          "clientIDs": [
+            "queries",
+            "é"
+          ],
+          "clientGroupIDs": [
+            "b%"
+          ]
+        }
+      ]
+    },
+    {
+      "message": [
+        "deleteClients",
+        {
+          "clientIDs": "parse",
+          "clientGroupIDs": [
+            "b%"
+          ]
+        }
+      ],
+      "ok": false
+    },
+    {
+      "message": [
+        "deleteClients",
+        {}
+      ],
+      "ok": true,
+      "output": [
+        "deleteClients",
+        {}
+      ]
+    },
+    {
+      "message": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [],
+          "traceparent": "B𝒜𝒜B😀",
+          "error": "clear"
+        }
+      ],
+      "ok": true,
+      "output": [
+        "changeDesiredQueries",
+        {
+          "desiredQueriesPatch": [],
+          "traceparent": "B𝒜𝒜B😀"
+        }
+      ]
+    },
+    {
+      "message": [
+        "ackMutationResponses",
+        {
+          "id": 528
+        }
+      ],
+      "ok": false
+    }
+  ]
+}

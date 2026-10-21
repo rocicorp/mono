@@ -1,0 +1,167 @@
+name: Swift Release
+
+# Releases the Swift client, versioned with Changesets (see .changeset/README.md).
+# The zero-swift npm package (packages/zero-swift-cli) and the Swift package
+# (swift/) share one version, kept in step by `pnpm --filter zero-swift version-packages`.
+#
+# On each push to main:
+# - With pending changesets, opens or updates the "Version Packages" PR.
+# - Otherwise, if the version in swift/VERSION isn't released yet, after
+#   approval in the swift-release environment:
+#   - publishes swift/ to the SwiftPM mirror (wevm/zero-swift) and tags the
+#     version there. SwiftPM needs Package.swift at a repository root and
+#     clones whole repositories, so consumers install from the mirror.
+#   - publishes the zero-swift CLI to npm with trusted publishing.
+# Each step is skipped when its release already exists, so a failed run can be
+# rerun.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: swift-release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Version PR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      has-changesets: ${{ steps.changesets.outputs.has-changesets }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 11.11.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - id: changesets
+        uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          version-script: pnpm --filter zero-swift version-packages
+          commit-message: 'chore(zero-swift): version packages'
+          pr-title: 'chore(zero-swift): version packages'
+
+  plan:
+    name: Plan release
+    runs-on: ubuntu-latest
+    needs: version
+    if: needs.version.outputs.has-changesets == 'false'
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      mirror: ${{ steps.plan.outputs.mirror }}
+      npm: ${{ steps.plan.outputs.npm }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            swift/VERSION
+            packages/zero-swift-cli/package.json
+          sparse-checkout-cone-mode: false
+      - id: plan
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < swift/VERSION)"
+          package="$(jq -r .version packages/zero-swift-cli/package.json)"
+          if [ "$package" != "$version" ]; then
+            echo "packages/zero-swift-cli is $package but swift/VERSION is $version." >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags https://github.com/wevm/zero-swift.git "refs/tags/$version" >/dev/null; then
+            echo "mirror=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "mirror=true" >> "$GITHUB_OUTPUT"
+          fi
+          if npm view "zero-swift@$version" version >/dev/null 2>&1; then
+            echo "npm=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "npm=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  mirror:
+    name: Publish mirror
+    runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.mirror == 'true'
+    environment: swift-release
+    env:
+      MIRROR_TOKEN: ${{ secrets.ZERO_SWIFT_MIRROR_TOKEN }}
+      MIRROR_REPO: wevm/zero-swift
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Split and push
+        run: |
+          set -euo pipefail
+          git subtree split --prefix=swift -b mirror
+          remote="https://x-access-token:${MIRROR_TOKEN}@github.com/${MIRROR_REPO}.git"
+          git push "$remote" mirror:main
+          git tag "$VERSION" mirror
+          git push "$remote" "refs/tags/$VERSION"
+
+  npm-build:
+    name: Build npm package
+    runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.npm == 'true'
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 11.11.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - name: Build and pack
+        run: |
+          pnpm --filter zero-swift build
+          pnpm --filter zero-swift pack --pack-destination "$GITHUB_WORKSPACE/dist/npm"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: zero-swift-npm
+          path: dist/npm/*.tgz
+          if-no-files-found: error
+
+  npm-publish:
+    name: Publish npm package
+    runs-on: ubuntu-latest
+    needs: [plan, npm-build]
+    environment: swift-release
+    permissions:
+      contents: read
+      id-token: write # For npm trusted publishing.
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.x
+          registry-url: 'https://registry.npmjs.org'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: zero-swift-npm
+          path: dist/npm
+      - name: Publish
+        run: npm publish "dist/npm/zero-swift-$VERSION.tgz" --provenance --access public

@@ -1,0 +1,206 @@
+name: zbugs screenshots
+
+# Runs the Swift zbugs app on an iPhone and an iPad simulator and on macOS
+# against zbugs' backend (apps/zbugs-swift/server/server.ts), and keeps a
+# screenshot of each screen (apps/zbugs-swift/App/UITests) as the
+# zbugs-screenshots artifact. Then it stops the backend and runs each again
+# offline, from what the app stored locally. Alongside, the virtual list
+# UI tests run the ZeroVirtual test app (swift/TestHost), which needs no
+# backend.
+# Path-filtered to the app and the UI layer: macOS runners are slow to start.
+
+on:
+  push:
+    branches: [main, swift-client]
+    paths:
+      - 'apps/zbugs-swift/**'
+      - 'swift/Sources/ZeroUI/**'
+      - 'swift/Sources/ZeroVirtual/**'
+      - 'swift/Sources/ZeroTesting/**'
+      - 'swift/TestHost/**'
+      - '.github/workflows/zbugs-screenshots.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/zbugs-swift/**'
+      - 'swift/Sources/ZeroUI/**'
+      - 'swift/Sources/ZeroVirtual/**'
+      - 'swift/Sources/ZeroTesting/**'
+      - 'swift/TestHost/**'
+      - '.github/workflows/zbugs-screenshots.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  screenshots:
+    name: zbugs screenshots (iPhone, iPad, and macOS)
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 11.11.0
+      # zero-cache runs from source, which needs Node 24 (`using`).
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.x
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - name: Start Postgres
+        run: |
+          brew install postgresql@17
+          pg="$(brew --prefix postgresql@17)/bin"
+          echo "$pg" >> "$GITHUB_PATH"
+          "$pg/initdb" -D "$RUNNER_TEMP/pg" -U postgres --auth=trust
+          "$pg/pg_ctl" -D "$RUNNER_TEMP/pg" -l "$RUNNER_TEMP/pg.log" \
+            -o "-c wal_level=logical -p 5432" start
+          until "$pg/pg_isready" -q -h 127.0.0.1; do sleep 1; done
+      # On the ports the app connects to by default.
+      - name: Start zbugs' backend
+        env:
+          ZBUGS_PG: postgresql://postgres@127.0.0.1:5432/postgres
+        run: |
+          node apps/zbugs-swift/server/server.ts > "$RUNNER_TEMP/zbugs.log" 2>&1 &
+          for _ in $(seq 1 300); do
+            grep -q '^ready ' "$RUNNER_TEMP/zbugs.log" && exit 0
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/zbugs.log"
+          exit 1
+      - name: Generate the Xcode project
+        working-directory: apps/zbugs-swift/App
+        run: brew install xcodegen && xcodegen generate
+      - name: Take screenshots
+        working-directory: apps/zbugs-swift/App
+        run: |
+          TEST_RUNNER_ZBUGS_TOKEN="$(grep '^token ' "$RUNNER_TEMP/zbugs.log" | cut -d' ' -f2)"
+          export TEST_RUNNER_ZBUGS_TOKEN
+          # The first available simulator whose name starts with $1.
+          simulator() {
+            xcrun simctl list devices available -j |
+              python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for k,v in d.items() if "iOS" in k for x in v if x["name"].startswith(sys.argv[1])))' "$1"
+          }
+          # Booted, and done booting, before the test launches the app: a
+          # simulator xcodebuild boots itself can still be starting up when
+          # the first launch times out. One at a time, as the runner is small.
+          boot() {
+            xcrun simctl shutdown all
+            xcrun simctl bootstatus "$1" -b
+          }
+          # Every run, even after one fails, so each keeps its screenshots.
+          status=0
+          screenshots() {
+            name="$1"
+            shift
+            case "$1 $2" in
+              "-destination id="*) boot "${2#id=}" ;;
+              *) xcrun simctl shutdown all ;;
+            esac
+            xcodebuild test -project ZBugs.xcodeproj -scheme ZBugsApp \
+              -resultBundlePath "$RUNNER_TEMP/results/$name.xcresult" \
+              -skipPackagePluginValidation "$@" || status=1
+          }
+          screenshots iPhone -destination "id=$(simulator iPhone)" CODE_SIGNING_ALLOWED=NO
+          screenshots iPad -destination "id=$(simulator iPad)" CODE_SIGNING_ALLOWED=NO
+          # A macOS UI test needs a signed app; ad hoc does.
+          screenshots macOS -destination platform=macOS CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=-
+          # Again offline: with the backend stopped, each screen comes from
+          # what the app stored locally while it synced.
+          pkill -f apps/zbugs-swift/server/server.ts
+          for _ in $(seq 1 30); do
+            curl -s -o /dev/null http://127.0.0.1:4848/ || break
+            sleep 1
+          done
+          if curl -s -o /dev/null http://127.0.0.1:4848/; then
+            echo "zero-cache is still serving"
+            exit 1
+          fi
+          # Not the paging test: a list pages on once its page's query has the
+          # server's answer, as zero-virtual's does.
+          online=-skip-testing:ZBugsUITests/ScreenshotTests/testListPagesPastTheFirst200
+          screenshots iPhone-offline -destination "id=$(simulator iPhone)" CODE_SIGNING_ALLOWED=NO "$online"
+          screenshots iPad-offline -destination "id=$(simulator iPad)" CODE_SIGNING_ALLOWED=NO "$online"
+          screenshots macOS-offline -destination platform=macOS CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- "$online"
+          exit "$status"
+      - name: Export screenshots
+        if: always()
+        run: |
+          for result in "$RUNNER_TEMP"/results/*.xcresult; do
+            xcrun xcresulttool export attachments --path "$result" \
+              --output-path "$RUNNER_TEMP/screenshots/$(basename "$result" .xcresult)" || true
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: zbugs-screenshots
+          path: ${{ runner.temp }}/screenshots
+      - name: Server logs
+        if: failure()
+        run: |
+          cat "$RUNNER_TEMP/zbugs.log"
+          cat "$RUNNER_TEMP/pg.log" || true
+
+  virtual-list:
+    # Each platform and suite in its own job: together they outrun a job's
+    # timeout (the frame probe's scripts drive minutes of scrolling).
+    name: Virtual list UI tests (${{ matrix.platform }}, ${{ matrix.suite }})
+    runs-on: macos-26
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [iPhone, macOS]
+        # The Native suites run the same tests on the screens' UIKit and
+        # AppKit lists (VirtualListView).
+        suite:
+          [
+            VirtualListUITests,
+            FrameProbeUITests,
+            NativeVirtualListUITests,
+            NativeFrameProbeUITests,
+          ]
+    defaults:
+      run:
+        working-directory: swift/TestHost
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Generate the Xcode project
+        run: brew install xcodegen && xcodegen generate
+      - name: UI tests
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          SUITE: ${{ matrix.suite }}
+        run: |
+          simulator() {
+            xcrun simctl list devices available -j |
+              python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for k,v in d.items() if "iOS" in k for x in v if x["name"].startswith(sys.argv[1])))' "$1"
+          }
+          if [ "$PLATFORM" = macOS ]; then
+            set -- -destination platform=macOS CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=-
+          else
+            device="$(simulator "$PLATFORM")"
+            # Booted, and done booting, before the first test launches the
+            # app, which otherwise can time out on a simulator still starting.
+            xcrun simctl bootstatus "$device" -b
+            set -- -destination "id=$device" CODE_SIGNING_ALLOWED=NO
+          fi
+          xcodebuild test -project TestHost.xcodeproj -scheme TestHost \
+            -only-testing:"TestHostUITests/$SUITE" \
+            -resultBundlePath "$RUNNER_TEMP/results/$PLATFORM-$SUITE.xcresult" \
+            -skipPackagePluginValidation "$@"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure()
+        with:
+          name: virtual-list-results-${{ matrix.platform }}-${{ matrix.suite }}
+          path: ${{ runner.temp }}/results

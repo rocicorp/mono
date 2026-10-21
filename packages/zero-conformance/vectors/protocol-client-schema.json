@@ -1,0 +1,1527 @@
+{
+  "formatVersion": 1,
+  "kind": "protocol-client-schema",
+  "description": "normalizeClientSchema: tables, columns, and primary keys sorted by UTF-16 code units. `normalized` is `JSON.stringify` of the result.",
+  "cases": [
+    {
+      "schema": {
+        "tables": {
+          "a": {
+            "columns": {
+              "𝒜": {
+                "type": "string"
+              },
+              "comment": {
+                "type": "string"
+              },
+              "e": {
+                "type": "number"
+              }
+            },
+            "primaryKey": [
+              "e",
+              "𝒜"
+            ]
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"a\":{\"columns\":{\"comment\":{\"type\":\"string\"},\"e\":{\"type\":\"number\"},\"𝒜\":{\"type\":\"string\"}},\"primaryKey\":[\"e\",\"𝒜\"]}}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "a": {
+            "columns": {},
+            "primaryKey": []
+          },
+          "😀": {
+            "columns": {
+              "e": {
+                "type": "null"
+              },
+              "é": {
+                "type": "boolean"
+              }
+            },
+            "primaryKey": [
+              "e",
+              "é"
+            ]
+          },
+          "": {
+            "columns": {
+              "ab": {
+                "type": "boolean"
+              },
+              "": {
+                "type": "number"
+              },
+              "a": {
+                "type": "number"
+              },
+              "issue": {
+                "type": "boolean"
+              }
+            },
+            "primaryKey": [
+              "a",
+              ""
+            ]
+          },
+          "Issue": {
+            "columns": {
+              "é": {
+                "type": "boolean"
+              },
+              "e": {
+                "type": "json"
+              },
+              "b": {
+                "type": "null"
+              },
+              "issue": {
+                "type": "json"
+              }
+            },
+            "primaryKey": [
+              "b",
+              "é"
+            ]
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"\":{\"columns\":{\"a\":{\"type\":\"number\"},\"ab\":{\"type\":\"boolean\"},\"issue\":{\"type\":\"boolean\"},\"\":{\"type\":\"number\"}},\"primaryKey\":[\"a\",\"\"]},\"Issue\":{\"columns\":{\"b\":{\"type\":\"null\"},\"e\":{\"type\":\"json\"},\"issue\":{\"type\":\"json\"},\"é\":{\"type\":\"boolean\"}},\"primaryKey\":[\"b\",\"é\"]},\"a\":{\"columns\":{},\"primaryKey\":[]},\"😀\":{\"columns\":{\"e\":{\"type\":\"null\"},\"é\":{\"type\":\"boolean\"}},\"primaryKey\":[\"e\",\"é\"]}}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "issue": {
+            "columns": {},
+            "primaryKey": []
+          },
+          "_": {
+            "columns": {
+              "_": {
+                "type": "boolean"
+              },
+              "a": {
+                "type": "string"
+              }
+            },
+            "primaryKey": [
+              "_",
+              "a"
+            ]
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"_\":{\"columns\":{\"_\":{\"type\":\"boolean\"},\"a\":{\"type\":\"string\"}},\"primaryKey\":[\"_\",\"a\"]},\"issue\":{\"columns\":{},\"primaryKey\":[]}}}"
+    },
+    {
+      "schema": {
+        "tables": {}
+      },
+      "normalized": "{\"tables\":{}}"
+    },
+    {
+      "schema": {
+        "tables": {}
+      },
+      "normalized": "{\"tables\":{}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "𝒜": {
+            "columns": {
+              "": {
+                "type": "number"
+              },
+              "é": {
+                "type": "boolean"
+              }
+            },
+            "primaryKey": []
+          },
+          "e": {
+            "columns": {
+              "😀": {
+                "type": "boolean"
+              },
+              "a": {
+                "type": "string"
+              },
+              "ab": {
+                "type": "null"
+              }
+            },
+            "primaryKey": [
+              "a",
+              "ab",
+              "😀"
+            ]
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"e\":{\"columns\":{\"a\":{\"type\":\"string\"},\"ab\":{\"type\":\"null\"},\"😀\":{\"type\":\"boolean\"}},\"primaryKey\":[\"a\",\"ab\",\"😀\"]},\"𝒜\":{\"columns\":{\"é\":{\"type\":\"boolean\"},\"\":{\"type\":\"number\"}},\"primaryKey\":[]}}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "a": {
+            "columns": {
+              "𝒜": {
+                "type": "number"
+              },
+              "_": {
+                "type": "string"
+              },
+              "comment": {
+                "type": "null"
+              },
+              "é": {
+                "type": "json"
+              }
+            },
+            "primaryKey": [
+              "𝒜"
+            ]
+          },
+          "e": {
+            "columns": {
+              "_": {
+                "type": "boolean"
+              },
+              "": {
+                "type": "null"
+              },
+              "😀": {
+                "type": "string"
+              }
+            },
+            "primaryKey": []
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"a\":{\"columns\":{\"_\":{\"type\":\"string\"},\"comment\":{\"type\":\"null\"},\"é\":{\"type\":\"json\"},\"𝒜\":{\"type\":\"number\"}},\"primaryKey\":[\"𝒜\"]},\"e\":{\"columns\":{\"\":{\"type\":\"null\"},\"_\":{\"type\":\"boolean\"},\"😀\":{\"type\":\"string\"}},\"primaryKey\":[]}}}"
+    },
+    {
+      "schema": {
+        "tables": {}
+      },
+      "normalized": "{\"tables\":{}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "Issue": {
+            "columns": {
+              "issue": {
+                "type": "null"
+              },
+              "_": {
+                "type": "boolean"
+              }
+            },
+            "primaryKey": [
+              "issue"
+            ]
+          },
+          "𝒜": {
+            "columns": {
+              "b": {
+                "type": "null"
+              }
+            },
+            "primaryKey": [
+              "b"
+            ]
+          },
+          "": {
+            "columns": {
+              "issue": {
+                "type": "number"
+              },
+              "a": {
+                "type": "number"
+              },
+              "😀": {
+                "type": "boolean"
+              }
+            },
+            "primaryKey": []
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"\":{\"columns\":{\"a\":{\"type\":\"number\"},\"issue\":{\"type\":\"number\"},\"😀\":{\"type\":\"boolean\"}},\"primaryKey\":[]},\"Issue\":{\"columns\":{\"_\":{\"type\":\"boolean\"},\"issue\":{\"type\":\"null\"}},\"primaryKey\":[\"issue\"]},\"𝒜\":{\"columns\":{\"b\":{\"type\":\"null\"}},\"primaryKey\":[\"b\"]}}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "𝒜": {
+            "columns": {
+              "_": {
+                "type": "number"
+              },
+              "😀": {
+                "type": "string"
+              }
+            },
+            "primaryKey": [
+              "_"
+            ]
+          },
+          "ab": {
+            "columns": {
+              "é": {
+                "type": "boolean"
+              },
+              "😀": {
+                "type": "null"
+              },
+              "_": {
+                "type": "string"
+              }
+            },
+            "primaryKey": [
+              "_",
+              "😀"
+            ]
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"ab\":{\"columns\":{\"_\":{\"type\":\"string\"},\"é\":{\"type\":\"boolean\"},\"😀\":{\"type\":\"null\"}},\"primaryKey\":[\"_\",\"😀\"]},\"𝒜\":{\"columns\":{\"_\":{\"type\":\"number\"},\"😀\":{\"type\":\"string\"}},\"primaryKey\":[\"_\"]}}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "issue": {
+            "columns": {
+              "a": {
+                "type": "null"
+              },
+              "comment": {
+                "type": "boolean"
+              }
+            },
+            "primaryKey": [
+              "a",
+              "comment"
+            ]
+          },
+          "é": {
+            "columns": {
+              "e": {
+                "type": "number"
+              },
+              "ab": {
+                "type": "boolean"
+              }
+            },
+            "primaryKey": []
+          },
+          "b": {
+            "columns": {
+              "": {
+                "type": "json"
+              }
+            },
+            "primaryKey": [
+              ""
+            ]
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"b\":{\"columns\":{\"\":{\"type\":\"json\"}},\"primaryKey\":[\"\"]},\"issue\":{\"columns\":{\"a\":{\"type\":\"null\"},\"comment\":{\"type\":\"boolean\"}},\"primaryKey\":[\"a\",\"comment\"]},\"é\":{\"columns\":{\"ab\":{\"type\":\"boolean\"},\"e\":{\"type\":\"number\"}},\"primaryKey\":[]}}}"
+    },
+    {
+      "schema": {
+        "tables": {}
+      },
+      "normalized": "{\"tables\":{}}"
+    },
+    {
+      "schema": {
+        "tables": {}
+      },
+      "normalized": "{\"tables\":{}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "issue": {
+            "columns": {
+              "Issue": {
+                "type": "null"
+              },
+              "comment": {
+                "type": "number"
+              },
+              "_": {
+                "type": "null"
+              }
+            },
+            "primaryKey": [
+              "_"
+            ]
+          },
+          "": {
+            "columns": {
+              "😀": {
+                "type": "null"
+              },
+              "𝒜": {
+                "type": "json"
+              }
+            },
+            "primaryKey": []
+          },
+          "ab": {
+            "columns": {
+              "𝒜": {
+                "type": "null"
+              }
+            },
+            "primaryKey": []
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"\":{\"columns\":{\"𝒜\":{\"type\":\"json\"},\"😀\":{\"type\":\"null\"}},\"primaryKey\":[]},\"ab\":{\"columns\":{\"𝒜\":{\"type\":\"null\"}},\"primaryKey\":[]},\"issue\":{\"columns\":{\"Issue\":{\"type\":\"null\"},\"_\":{\"type\":\"null\"},\"comment\":{\"type\":\"number\"}},\"primaryKey\":[\"_\"]}}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "ab": {
+            "columns": {
+              "𝒜": {
+                "type": "json"
+              },
+              "b": {
+                "type": "json"
+              }
+            },
+            "primaryKey": [
+              "𝒜"
+            ]
+          },
+          "e": {
+            "columns": {
+              "𝒜": {
+                "type": "json"
+              },
+              "_": {
+                "type": "json"
+              },
+              "é": {
+                "type": "string"
+              },
+              "Issue": {
+                "type": "number"
+              }
+            },
+            "primaryKey": [
+              "_",
+              "é",
+              "𝒜"
+            ]
+          },
+          "comment": {
+            "columns": {
+              "😀": {
+                "type": "json"
+              }
+            },
+            "primaryKey": [
+              "😀"
+            ]
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"ab\":{\"columns\":{\"b\":{\"type\":\"json\"},\"𝒜\":{\"type\":\"json\"}},\"primaryKey\":[\"𝒜\"]},\"comment\":{\"columns\":{\"😀\":{\"type\":\"json\"}},\"primaryKey\":[\"😀\"]},\"e\":{\"columns\":{\"Issue\":{\"type\":\"number\"},\"_\":{\"type\":\"json\"},\"é\":{\"type\":\"string\"},\"𝒜\":{\"type\":\"json\"}},\"primaryKey\":[\"_\",\"é\",\"𝒜\"]}}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "e": {
+            "columns": {
+              "_": {
+                "type": "json"
+              }
+            },
+            "primaryKey": []
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"e\":{\"columns\":{\"_\":{\"type\":\"json\"}},\"primaryKey\":[]}}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "comment": {
+            "columns": {
+              "": {
+                "type": "number"
+              },
+              "b": {
+                "type": "boolean"
+              },
+              "😀": {
+                "type": "null"
+              }
+            },
+            "primaryKey": [
+              "b"
+            ]
+          },
+          "a": {
+            "columns": {
+              "issue": {
+                "type": "string"
+              },
+              "": {
+                "type": "json"
+              }
+            },
+            "primaryKey": [
+              "issue",
+              ""
+            ]
+          },
+          "é": {
+            "columns": {
+              "_": {
+                "type": "boolean"
+              },
+              "😀": {
+                "type": "number"
+              },
+              "Issue": {
+                "type": "null"
+              }
+            },
+            "primaryKey": []
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"a\":{\"columns\":{\"issue\":{\"type\":\"string\"},\"\":{\"type\":\"json\"}},\"primaryKey\":[\"issue\",\"\"]},\"comment\":{\"columns\":{\"b\":{\"type\":\"boolean\"},\"😀\":{\"type\":\"null\"},\"\":{\"type\":\"number\"}},\"primaryKey\":[\"b\"]},\"é\":{\"columns\":{\"Issue\":{\"type\":\"null\"},\"_\":{\"type\":\"boolean\"},\"😀\":{\"type\":\"number\"}},\"primaryKey\":[]}}}"
+    },
+    {
+      "schema": {
+        "tables": {}
+      },
+      "normalized": "{\"tables\":{}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "é": {
+            "columns": {
+              "": {
+                "type": "boolean"
+              },
+              "b": {
+                "type": "json"
+              },
+              "ab": {
+                "type": "number"
+              },
+              "issue": {
+                "type": "string"
+              }
+            },
+            "primaryKey": [
+              "ab"
+            ]
+          },
+          "Issue": {
+            "columns": {},
+            "primaryKey": []
+          },
+          "ab": {
+            "columns": {
+              "": {
+                "type": "boolean"
+              },
+              "b": {
+                "type": "null"
+              },
+              "_": {
+                "type": "string"
+              },
+              "é": {
+                "type": "null"
+              }
+            },
+            "primaryKey": []
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"Issue\":{\"columns\":{},\"primaryKey\":[]},\"ab\":{\"columns\":{\"_\":{\"type\":\"string\"},\"b\":{\"type\":\"null\"},\"é\":{\"type\":\"null\"},\"\":{\"type\":\"boolean\"}},\"primaryKey\":[]},\"é\":{\"columns\":{\"ab\":{\"type\":\"number\"},\"b\":{\"type\":\"json\"},\"issue\":{\"type\":\"string\"},\"\":{\"type\":\"boolean\"}},\"primaryKey\":[\"ab\"]}}}"
+    },
+    {
+      "schema": {
+        "tables": {}
+      },
+      "normalized": "{\"tables\":{}}"
+    },
+    {
+      "schema": {
+        "tables": {}
+      },
+      "normalized": "{\"tables\":{}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "𝒜": {
+            "columns": {
+              "": {
+                "type": "null"
+              },
+              "𝒜": {
+                "type": "number"
+              }
+            },
+            "primaryKey": [
+              ""
+            ]
+          },
+          "": {
+            "columns": {
+              "b": {
+                "type": "string"
+              },
+              "issue": {
+                "type": "string"
+              },
+              "é": {
+                "type": "string"
+              }
+            },
+            "primaryKey": [
+              "issue"
+            ]
+          },
+          "issue": {
+            "columns": {},
+            "primaryKey": []
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"\":{\"columns\":{\"b\":{\"type\":\"string\"},\"issue\":{\"type\":\"string\"},\"é\":{\"type\":\"string\"}},\"primaryKey\":[\"issue\"]},\"issue\":{\"columns\":{},\"primaryKey\":[]},\"𝒜\":{\"columns\":{\"𝒜\":{\"type\":\"number\"},\"\":{\"type\":\"null\"}},\"primaryKey\":[\"\"]}}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "_": {
+            "columns": {
+              "Issue": {
+                "type": "json"
+              },
+              "é": {
+                "type": "json"
+              },
+              "issue": {
+                "type": "boolean"
+              }
+            },
+            "primaryKey": [
+              "issue",
+              "é"
+            ]
+          },
+          "comment": {
+            "columns": {
+              "b": {
+                "type": "json"
+              },
+              "a": {
+                "type": "string"
+              }
+            },
+            "primaryKey": [
+              "a",
+              "b"
+            ]
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"_\":{\"columns\":{\"Issue\":{\"type\":\"json\"},\"issue\":{\"type\":\"boolean\"},\"é\":{\"type\":\"json\"}},\"primaryKey\":[\"issue\",\"é\"]},\"comment\":{\"columns\":{\"a\":{\"type\":\"string\"},\"b\":{\"type\":\"json\"}},\"primaryKey\":[\"a\",\"b\"]}}}"
+    },
+    {
+      "schema": {
+        "tables": {}
+      },
+      "normalized": "{\"tables\":{}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "é": {
+            "columns": {
+              "𝒜": {
+                "type": "boolean"
+              },
+              "": {
+                "type": "number"
+              }
+            },
+            "primaryKey": []
+          },
+          "ab": {
+            "columns": {
+              "": {
+                "type": "number"
+              }
+            },
+            "primaryKey": [
+              ""
+            ]
+          },
+          "": {
+            "columns": {
+              "𝒜": {
+                "type": "number"
+              },
+              "😀": {
+                "type": "string"
+              }
+            },
+            "primaryKey": [
+              "𝒜"
+            ]
+          },
+          "a": {
+            "columns": {},
+            "primaryKey": []
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"\":{\"columns\":{\"𝒜\":{\"type\":\"number\"},\"😀\":{\"type\":\"string\"}},\"primaryKey\":[\"𝒜\"]},\"a\":{\"columns\":{},\"primaryKey\":[]},\"ab\":{\"columns\":{\"\":{\"type\":\"number\"}},\"primaryKey\":[\"\"]},\"é\":{\"columns\":{\"\":{\"type\":\"number\"},\"𝒜\":{\"type\":\"boolean\"}},\"primaryKey\":[]}}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "": {
+            "columns": {
+              "a": {
+                "type": "boolean"
+              },
+              "😀": {
+                "type": "string"
+              }
+            },
+            "primaryKey": []
+          },
+          "b": {
+            "columns": {
+              "comment": {
+                "type": "number"
+              },
+              "𝒜": {
+                "type": "null"
+              },
+              "é": {
+                "type": "number"
+              }
+            },
+            "primaryKey": [
+              "𝒜"
+            ]
+          },
+          "Issue": {
+            "columns": {
+              "ab": {
+                "type": "number"
+              }
+            },
+            "primaryKey": [
+              "ab"
+            ]
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"Issue\":{\"columns\":{\"ab\":{\"type\":\"number\"}},\"primaryKey\":[\"ab\"]},\"b\":{\"columns\":{\"comment\":{\"type\":\"number\"},\"é\":{\"type\":\"number\"},\"𝒜\":{\"type\":\"null\"}},\"primaryKey\":[\"𝒜\"]},\"\":{\"columns\":{\"a\":{\"type\":\"boolean\"},\"😀\":{\"type\":\"string\"}},\"primaryKey\":[]}}}"
+    },
+    {
+      "schema": {
+        "tables": {}
+      },
+      "normalized": "{\"tables\":{}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "a": {
+            "columns": {
+              "ab": {
+                "type": "boolean"
+              }
+            },
+            "primaryKey": [
+              "ab"
+            ]
+          },
+          "comment": {
+            "columns": {
+              "": {
+                "type": "null"
+              },
+              "😀": {
+                "type": "boolean"
+              },
+              "é": {
+                "type": "json"
+              }
+            },
+            "primaryKey": [
+              "é"
+            ]
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"a\":{\"columns\":{\"ab\":{\"type\":\"boolean\"}},\"primaryKey\":[\"ab\"]},\"comment\":{\"columns\":{\"é\":{\"type\":\"json\"},\"😀\":{\"type\":\"boolean\"},\"\":{\"type\":\"null\"}},\"primaryKey\":[\"é\"]}}}"
+    },
+    {
+      "schema": {
+        "tables": {}
+      },
+      "normalized": "{\"tables\":{}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "a": {
+            "columns": {
+              "": {
+                "type": "number"
+              },
+              "b": {
+                "type": "number"
+              },
+              "comment": {
+                "type": "string"
+              }
+            },
+            "primaryKey": []
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"a\":{\"columns\":{\"b\":{\"type\":\"number\"},\"comment\":{\"type\":\"string\"},\"\":{\"type\":\"number\"}},\"primaryKey\":[]}}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "ab": {
+            "columns": {
+              "Issue": {
+                "type": "number"
+              }
+            },
+            "primaryKey": [
+              "Issue"
+            ]
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"ab\":{\"columns\":{\"Issue\":{\"type\":\"number\"}},\"primaryKey\":[\"Issue\"]}}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "b": {
+            "columns": {
+              "comment": {
+                "type": "number"
+              },
+              "": {
+                "type": "boolean"
+              }
+            },
+            "primaryKey": [
+              "comment",
+              ""
+            ]
+          },
+          "ab": {
+            "columns": {
+              "a": {
+                "type": "json"
+              },
+              "𝒜": {
+                "type": "number"
+              },
+              "é": {
+                "type": "boolean"
+              }
+            },
+            "primaryKey": [
+              "a",
+              "é"
+            ]
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"ab\":{\"columns\":{\"a\":{\"type\":\"json\"},\"é\":{\"type\":\"boolean\"},\"𝒜\":{\"type\":\"number\"}},\"primaryKey\":[\"a\",\"é\"]},\"b\":{\"columns\":{\"comment\":{\"type\":\"number\"},\"\":{\"type\":\"boolean\"}},\"primaryKey\":[\"comment\",\"\"]}}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "ab": {
+            "columns": {
+              "_": {
+                "type": "boolean"
+              }
+            },
+            "primaryKey": [
+              "_"
+            ]
+          },
+          "𝒜": {
+            "columns": {
+              "ab": {
+                "type": "string"
+              },
+              "b": {
+                "type": "string"
+              },
+              "": {
+                "type": "number"
+              }
+            },
+            "primaryKey": [
+              "b"
+            ]
+          },
+          "a": {
+            "columns": {
+              "": {
+                "type": "null"
+              },
+              "e": {
+                "type": "number"
+              }
+            },
+            "primaryKey": [
+              "e",
+              ""
+            ]
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"a\":{\"columns\":{\"e\":{\"type\":\"number\"},\"\":{\"type\":\"null\"}},\"primaryKey\":[\"e\",\"\"]},\"ab\":{\"columns\":{\"_\":{\"type\":\"boolean\"}},\"primaryKey\":[\"_\"]},\"𝒜\":{\"columns\":{\"ab\":{\"type\":\"string\"},\"b\":{\"type\":\"string\"},\"\":{\"type\":\"number\"}},\"primaryKey\":[\"b\"]}}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "b": {
+            "columns": {
+              "b": {
+                "type": "boolean"
+              },
+              "_": {
+                "type": "string"
+              },
+              "𝒜": {
+                "type": "string"
+              },
+              "issue": {
+                "type": "number"
+              }
+            },
+            "primaryKey": [
+              "issue"
+            ]
+          },
+          "Issue": {
+            "columns": {
+              "": {
+                "type": "json"
+              }
+            },
+            "primaryKey": [
+              ""
+            ]
+          },
+          "issue": {
+            "columns": {
+              "𝒜": {
+                "type": "number"
+              },
+              "ab": {
+                "type": "null"
+              },
+              "_": {
+                "type": "string"
+              },
+              "😀": {
+                "type": "null"
+              }
+            },
+            "primaryKey": [
+              "_",
+              "ab"
+            ]
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"Issue\":{\"columns\":{\"\":{\"type\":\"json\"}},\"primaryKey\":[\"\"]},\"b\":{\"columns\":{\"_\":{\"type\":\"string\"},\"b\":{\"type\":\"boolean\"},\"issue\":{\"type\":\"number\"},\"𝒜\":{\"type\":\"string\"}},\"primaryKey\":[\"issue\"]},\"issue\":{\"columns\":{\"_\":{\"type\":\"string\"},\"ab\":{\"type\":\"null\"},\"𝒜\":{\"type\":\"number\"},\"😀\":{\"type\":\"null\"}},\"primaryKey\":[\"_\",\"ab\"]}}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "Issue": {
+            "columns": {
+              "Issue": {
+                "type": "json"
+              },
+              "𝒜": {
+                "type": "boolean"
+              }
+            },
+            "primaryKey": []
+          },
+          "_": {
+            "columns": {},
+            "primaryKey": []
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"Issue\":{\"columns\":{\"Issue\":{\"type\":\"json\"},\"𝒜\":{\"type\":\"boolean\"}},\"primaryKey\":[]},\"_\":{\"columns\":{},\"primaryKey\":[]}}}"
+    },
+    {
+      "schema": {
+        "tables": {}
+      },
+      "normalized": "{\"tables\":{}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "a": {
+            "columns": {},
+            "primaryKey": []
+          },
+          "𝒜": {
+            "columns": {
+              "Issue": {
+                "type": "json"
+              }
+            },
+            "primaryKey": []
+          },
+          "issue": {
+            "columns": {
+              "a": {
+                "type": "null"
+              },
+              "Issue": {
+                "type": "number"
+              },
+              "": {
+                "type": "json"
+              }
+            },
+            "primaryKey": []
+          },
+          "ab": {
+            "columns": {
+              "a": {
+                "type": "number"
+              }
+            },
+            "primaryKey": [
+              "a"
+            ]
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"a\":{\"columns\":{},\"primaryKey\":[]},\"ab\":{\"columns\":{\"a\":{\"type\":\"number\"}},\"primaryKey\":[\"a\"]},\"issue\":{\"columns\":{\"Issue\":{\"type\":\"number\"},\"a\":{\"type\":\"null\"},\"\":{\"type\":\"json\"}},\"primaryKey\":[]},\"𝒜\":{\"columns\":{\"Issue\":{\"type\":\"json\"}},\"primaryKey\":[]}}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "": {
+            "columns": {
+              "b": {
+                "type": "number"
+              },
+              "Issue": {
+                "type": "null"
+              },
+              "e": {
+                "type": "string"
+              }
+            },
+            "primaryKey": []
+          },
+          "comment": {
+            "columns": {},
+            "primaryKey": []
+          },
+          "Issue": {
+            "columns": {
+              "é": {
+                "type": "null"
+              },
+              "": {
+                "type": "boolean"
+              },
+              "😀": {
+                "type": "boolean"
+              },
+              "𝒜": {
+                "type": "null"
+              }
+            },
+            "primaryKey": [
+              "é"
+            ]
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"\":{\"columns\":{\"Issue\":{\"type\":\"null\"},\"b\":{\"type\":\"number\"},\"e\":{\"type\":\"string\"}},\"primaryKey\":[]},\"Issue\":{\"columns\":{\"é\":{\"type\":\"null\"},\"𝒜\":{\"type\":\"null\"},\"😀\":{\"type\":\"boolean\"},\"\":{\"type\":\"boolean\"}},\"primaryKey\":[\"é\"]},\"comment\":{\"columns\":{},\"primaryKey\":[]}}}"
+    },
+    {
+      "schema": {
+        "tables": {}
+      },
+      "normalized": "{\"tables\":{}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "_": {
+            "columns": {},
+            "primaryKey": []
+          },
+          "b": {
+            "columns": {
+              "😀": {
+                "type": "null"
+              }
+            },
+            "primaryKey": []
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"_\":{\"columns\":{},\"primaryKey\":[]},\"b\":{\"columns\":{\"😀\":{\"type\":\"null\"}},\"primaryKey\":[]}}}"
+    },
+    {
+      "schema": {
+        "tables": {}
+      },
+      "normalized": "{\"tables\":{}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "": {
+            "columns": {},
+            "primaryKey": []
+          },
+          "Issue": {
+            "columns": {
+              "_": {
+                "type": "string"
+              }
+            },
+            "primaryKey": [
+              "_"
+            ]
+          },
+          "": {
+            "columns": {
+              "é": {
+                "type": "null"
+              }
+            },
+            "primaryKey": [
+              "é"
+            ]
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"\":{\"columns\":{},\"primaryKey\":[]},\"Issue\":{\"columns\":{\"_\":{\"type\":\"string\"}},\"primaryKey\":[\"_\"]},\"\":{\"columns\":{\"é\":{\"type\":\"null\"}},\"primaryKey\":[\"é\"]}}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "a": {
+            "columns": {
+              "é": {
+                "type": "json"
+              },
+              "": {
+                "type": "json"
+              }
+            },
+            "primaryKey": [
+              "é"
+            ]
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"a\":{\"columns\":{\"é\":{\"type\":\"json\"},\"\":{\"type\":\"json\"}},\"primaryKey\":[\"é\"]}}}"
+    },
+    {
+      "schema": {
+        "tables": {}
+      },
+      "normalized": "{\"tables\":{}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "𝒜": {
+            "columns": {
+              "é": {
+                "type": "json"
+              },
+              "𝒜": {
+                "type": "number"
+              },
+              "comment": {
+                "type": "boolean"
+              },
+              "Issue": {
+                "type": "boolean"
+              }
+            },
+            "primaryKey": [
+              "Issue",
+              "comment"
+            ]
+          },
+          "_": {
+            "columns": {
+              "_": {
+                "type": "number"
+              },
+              "😀": {
+                "type": "json"
+              },
+              "": {
+                "type": "null"
+              },
+              "": {
+                "type": "string"
+              }
+            },
+            "primaryKey": [
+              "😀"
+            ]
+          },
+          "e": {
+            "columns": {},
+            "primaryKey": []
+          },
+          "ab": {
+            "columns": {},
+            "primaryKey": []
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"_\":{\"columns\":{\"\":{\"type\":\"null\"},\"_\":{\"type\":\"number\"},\"😀\":{\"type\":\"json\"},\"\":{\"type\":\"string\"}},\"primaryKey\":[\"😀\"]},\"ab\":{\"columns\":{},\"primaryKey\":[]},\"e\":{\"columns\":{},\"primaryKey\":[]},\"𝒜\":{\"columns\":{\"Issue\":{\"type\":\"boolean\"},\"comment\":{\"type\":\"boolean\"},\"é\":{\"type\":\"json\"},\"𝒜\":{\"type\":\"number\"}},\"primaryKey\":[\"Issue\",\"comment\"]}}}"
+    },
+    {
+      "schema": {
+        "tables": {}
+      },
+      "normalized": "{\"tables\":{}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "Issue": {
+            "columns": {
+              "issue": {
+                "type": "boolean"
+              },
+              "😀": {
+                "type": "number"
+              },
+              "b": {
+                "type": "number"
+              },
+              "": {
+                "type": "json"
+              }
+            },
+            "primaryKey": [
+              ""
+            ]
+          },
+          "ab": {
+            "columns": {
+              "": {
+                "type": "boolean"
+              },
+              "😀": {
+                "type": "number"
+              },
+              "issue": {
+                "type": "null"
+              }
+            },
+            "primaryKey": [
+              "😀"
+            ]
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"Issue\":{\"columns\":{\"\":{\"type\":\"json\"},\"b\":{\"type\":\"number\"},\"issue\":{\"type\":\"boolean\"},\"😀\":{\"type\":\"number\"}},\"primaryKey\":[\"\"]},\"ab\":{\"columns\":{\"\":{\"type\":\"boolean\"},\"issue\":{\"type\":\"null\"},\"😀\":{\"type\":\"number\"}},\"primaryKey\":[\"😀\"]}}}"
+    },
+    {
+      "schema": {
+        "tables": {}
+      },
+      "normalized": "{\"tables\":{}}"
+    },
+    {
+      "schema": {
+        "tables": {}
+      },
+      "normalized": "{\"tables\":{}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "comment": {
+            "columns": {
+              "ab": {
+                "type": "boolean"
+              },
+              "": {
+                "type": "null"
+              },
+              "": {
+                "type": "number"
+              },
+              "_": {
+                "type": "json"
+              }
+            },
+            "primaryKey": []
+          },
+          "𝒜": {
+            "columns": {
+              "": {
+                "type": "string"
+              },
+              "e": {
+                "type": "number"
+              },
+              "comment": {
+                "type": "number"
+              }
+            },
+            "primaryKey": [
+              "comment"
+            ]
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"comment\":{\"columns\":{\"\":{\"type\":\"null\"},\"_\":{\"type\":\"json\"},\"ab\":{\"type\":\"boolean\"},\"\":{\"type\":\"number\"}},\"primaryKey\":[]},\"𝒜\":{\"columns\":{\"comment\":{\"type\":\"number\"},\"e\":{\"type\":\"number\"},\"\":{\"type\":\"string\"}},\"primaryKey\":[\"comment\"]}}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "issue": {
+            "columns": {
+              "𝒜": {
+                "type": "string"
+              }
+            },
+            "primaryKey": []
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"issue\":{\"columns\":{\"𝒜\":{\"type\":\"string\"}},\"primaryKey\":[]}}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "ab": {
+            "columns": {
+              "𝒜": {
+                "type": "string"
+              },
+              "": {
+                "type": "null"
+              },
+              "ab": {
+                "type": "null"
+              }
+            },
+            "primaryKey": []
+          },
+          "𝒜": {
+            "columns": {
+              "issue": {
+                "type": "json"
+              },
+              "b": {
+                "type": "string"
+              }
+            },
+            "primaryKey": [
+              "b",
+              "issue"
+            ]
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"ab\":{\"columns\":{\"ab\":{\"type\":\"null\"},\"𝒜\":{\"type\":\"string\"},\"\":{\"type\":\"null\"}},\"primaryKey\":[]},\"𝒜\":{\"columns\":{\"b\":{\"type\":\"string\"},\"issue\":{\"type\":\"json\"}},\"primaryKey\":[\"b\",\"issue\"]}}}"
+    },
+    {
+      "schema": {
+        "tables": {}
+      },
+      "normalized": "{\"tables\":{}}"
+    },
+    {
+      "schema": {
+        "tables": {}
+      },
+      "normalized": "{\"tables\":{}}"
+    },
+    {
+      "schema": {
+        "tables": {}
+      },
+      "normalized": "{\"tables\":{}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "e": {
+            "columns": {
+              "a": {
+                "type": "boolean"
+              },
+              "😀": {
+                "type": "boolean"
+              },
+              "issue": {
+                "type": "number"
+              },
+              "é": {
+                "type": "string"
+              }
+            },
+            "primaryKey": [
+              "a",
+              "issue",
+              "😀"
+            ]
+          },
+          "_": {
+            "columns": {
+              "😀": {
+                "type": "boolean"
+              },
+              "_": {
+                "type": "null"
+              }
+            },
+            "primaryKey": [
+              "😀"
+            ]
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"_\":{\"columns\":{\"_\":{\"type\":\"null\"},\"😀\":{\"type\":\"boolean\"}},\"primaryKey\":[\"😀\"]},\"e\":{\"columns\":{\"a\":{\"type\":\"boolean\"},\"issue\":{\"type\":\"number\"},\"é\":{\"type\":\"string\"},\"😀\":{\"type\":\"boolean\"}},\"primaryKey\":[\"a\",\"issue\",\"😀\"]}}}"
+    },
+    {
+      "schema": {
+        "tables": {}
+      },
+      "normalized": "{\"tables\":{}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "issue": {
+            "columns": {
+              "comment": {
+                "type": "string"
+              },
+              "b": {
+                "type": "string"
+              },
+              "😀": {
+                "type": "boolean"
+              },
+              "Issue": {
+                "type": "null"
+              }
+            },
+            "primaryKey": [
+              "Issue",
+              "comment"
+            ]
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"issue\":{\"columns\":{\"Issue\":{\"type\":\"null\"},\"b\":{\"type\":\"string\"},\"comment\":{\"type\":\"string\"},\"😀\":{\"type\":\"boolean\"}},\"primaryKey\":[\"Issue\",\"comment\"]}}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "_": {
+            "columns": {
+              "Issue": {
+                "type": "null"
+              },
+              "a": {
+                "type": "number"
+              },
+              "_": {
+                "type": "boolean"
+              }
+            },
+            "primaryKey": []
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"_\":{\"columns\":{\"Issue\":{\"type\":\"null\"},\"_\":{\"type\":\"boolean\"},\"a\":{\"type\":\"number\"}},\"primaryKey\":[]}}}"
+    },
+    {
+      "schema": {
+        "tables": {
+          "Issue": {
+            "columns": {},
+            "primaryKey": []
+          },
+          "𝒜": {
+            "columns": {
+              "é": {
+                "type": "string"
+              },
+              "": {
+                "type": "null"
+              },
+              "Issue": {
+                "type": "boolean"
+              }
+            },
+            "primaryKey": []
+          },
+          "comment": {
+            "columns": {
+              "comment": {
+                "type": "null"
+              },
+              "a": {
+                "type": "boolean"
+              }
+            },
+            "primaryKey": []
+          }
+        }
+      },
+      "normalized": "{\"tables\":{\"Issue\":{\"columns\":{},\"primaryKey\":[]},\"comment\":{\"columns\":{\"a\":{\"type\":\"boolean\"},\"comment\":{\"type\":\"null\"}},\"primaryKey\":[]},\"𝒜\":{\"columns\":{\"\":{\"type\":\"null\"},\"Issue\":{\"type\":\"boolean\"},\"é\":{\"type\":\"string\"}},\"primaryKey\":[]}}}"
+    }
+  ]
+}

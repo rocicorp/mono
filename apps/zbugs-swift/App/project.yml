@@ -1,0 +1,56 @@
+# The zbugs app for iOS and macOS. Generate the Xcode project with
+# XcodeGen (`brew install xcodegen`): `xcodegen generate`, then open
+# ZBugs.xcodeproj.
+name: ZBugs
+options:
+  bundleIdPrefix: dev.rocicorp
+  deploymentTarget:
+    iOS: '26.0'
+    macOS: '26.0'
+packages:
+  ZBugs:
+    path: ..
+targets:
+  ZBugsApp:
+    type: application
+    supportedDestinations: [iOS, macOS]
+    scheme:
+      testTargets: [ZBugsUITests]
+    sources:
+      - path: ZBugsApp.swift
+      - path: Info.plist
+        buildPhase: none
+    dependencies:
+      - package: ZBugs
+        product: ZBugsUI
+    settings:
+      base:
+        PRODUCT_NAME: ZBugs
+        # Not ZBugs, the package module it imports.
+        PRODUCT_MODULE_NAME: ZBugsApp
+        PRODUCT_BUNDLE_IDENTIFIER: dev.rocicorp.zbugs
+        SWIFT_VERSION: '6.0'
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: Info.plist
+        INFOPLIST_KEY_CFBundleDisplayName: Zero Bugs
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        TARGETED_DEVICE_FAMILY: '1,2'
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+  # Screenshots of each screen against zbugs' backend (UITests/).
+  ZBugsUITests:
+    type: bundle.ui-testing
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - path: UITests
+    dependencies:
+      - target: ZBugsApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.rocicorp.zbugs.uitests
+        SWIFT_VERSION: '6.0'
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: ZBugsApp
+        CODE_SIGN_STYLE: Automatic

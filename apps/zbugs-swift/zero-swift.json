@@ -1,0 +1,9 @@
+{
+  "schema": "../zbugs/shared/schema.ts",
+  "output": "Sources/ZBugs/Schema.swift",
+  "schemaName": "zbugs",
+  "tables": {
+    "issue": {"columns": {"shortID": {"type": "int"}}},
+    "project": {"columns": {"issueCountEstimate": {"type": "int"}}}
+  }
+}

@@ -6,14 +6,18 @@ runs:
   steps:
     - name: Get Playwright version
       id: playwright-version
-      run: echo "version=$(pnpm exec playwright --version | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
+      # The OS release too: browsers built for one Ubuntu release don't run
+      # on the next, which ubuntu-latest moves to.
+      run: |
+        echo "version=$(pnpm exec playwright --version | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
+        echo "os=$(. /etc/os-release && echo "$ID-$VERSION_ID")" >> "$GITHUB_OUTPUT"
       shell: bash
     - name: Cache Playwright browsers
       id: playwright-cache
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ~/.cache/ms-playwright
-        key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright-version.outputs.version }}
+        key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.os }}-${{ runner.arch }}-${{ steps.playwright-version.outputs.version }}
     - name: Install Playwright browsers and system deps
       if: steps.playwright-cache.outputs.cache-hit != 'true'
       run: timeout -k 30s 20m pnpm exec playwright install --with-deps

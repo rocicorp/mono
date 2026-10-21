@@ -1,0 +1,1816 @@
+{
+  "formatVersion": 1,
+  "kind": "primary-key-string",
+  "description": "toPrimaryKeyString(table, primaryKey, row): the `e/` storage key of a row.",
+  "cases": [
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "",
+        "other": "x"
+      },
+      "key": "e/issue/"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "a",
+        "other": "x"
+      },
+      "key": "e/issue/a"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "A",
+        "other": "x"
+      },
+      "key": "e/issue/A"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "abc",
+        "other": "x"
+      },
+      "key": "e/issue/abc"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "ab",
+        "other": "x"
+      },
+      "key": "e/issue/ab"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "b",
+        "other": "x"
+      },
+      "key": "e/issue/b"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "Z",
+        "other": "x"
+      },
+      "key": "e/issue/Z"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "z",
+        "other": "x"
+      },
+      "key": "e/issue/z"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": " ",
+        "other": "x"
+      },
+      "key": "e/issue/ "
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "0",
+        "other": "x"
+      },
+      "key": "e/issue/0"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "9",
+        "other": "x"
+      },
+      "key": "e/issue/9"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "\u0000",
+        "other": "x"
+      },
+      "key": "e/issue/\u0000"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "\u001f",
+        "other": "x"
+      },
+      "key": "e/issue/\u001f"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "\"",
+        "other": "x"
+      },
+      "key": "e/issue/\""
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "\\",
+        "other": "x"
+      },
+      "key": "e/issue/\\"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "\n",
+        "other": "x"
+      },
+      "key": "e/issue/\n"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "é",
+        "other": "x"
+      },
+      "key": "e/issue/é"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "é",
+        "other": "x"
+      },
+      "key": "e/issue/é"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "ß",
+        "other": "x"
+      },
+      "key": "e/issue/ß"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "İ",
+        "other": "x"
+      },
+      "key": "e/issue/İ"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "ı",
+        "other": "x"
+      },
+      "key": "e/issue/ı"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "ﬀ",
+        "other": "x"
+      },
+      "key": "e/issue/ﬀ"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": " ",
+        "other": "x"
+      },
+      "key": "e/issue/ "
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "",
+        "other": "x"
+      },
+      "key": "e/issue/"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "�",
+        "other": "x"
+      },
+      "key": "e/issue/�"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "￿",
+        "other": "x"
+      },
+      "key": "e/issue/￿"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "😀",
+        "other": "x"
+      },
+      "key": "e/issue/😀"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "😀a",
+        "other": "x"
+      },
+      "key": "e/issue/😀a"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "a😀",
+        "other": "x"
+      },
+      "key": "e/issue/a😀"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "𝒜",
+        "other": "x"
+      },
+      "key": "e/issue/𝒜"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "中文",
+        "other": "x"
+      },
+      "key": "e/issue/中文"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "Ω",
+        "other": "x"
+      },
+      "key": "e/issue/Ω"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "ω",
+        "other": "x"
+      },
+      "key": "e/issue/ω"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": "􏿿",
+        "other": "x"
+      },
+      "key": "e/issue/􏿿"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": 0,
+        "other": "x"
+      },
+      "key": "e/issue/0"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": 0,
+        "other": "x"
+      },
+      "key": "e/issue/0"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": 1,
+        "other": "x"
+      },
+      "key": "e/issue/1"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": -1,
+        "other": "x"
+      },
+      "key": "e/issue/-1"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": 1.5,
+        "other": "x"
+      },
+      "key": "e/issue/1.5"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": 1e+21,
+        "other": "x"
+      },
+      "key": "e/issue/1e+21"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": 1e-7,
+        "other": "x"
+      },
+      "key": "e/issue/1e-7"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": 9007199254740992,
+        "other": "x"
+      },
+      "key": "e/issue/9007199254740992"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": 123456789,
+        "other": "x"
+      },
+      "key": "e/issue/123456789"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": true,
+        "other": "x"
+      },
+      "key": "e/issue/true"
+    },
+    {
+      "table": "issue",
+      "primaryKey": [
+        "id"
+      ],
+      "row": {
+        "id": false,
+        "other": "x"
+      },
+      "key": "e/issue/false"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "😀",
+        "b": "😀a",
+        "c": 1
+      },
+      "key": "e/a/b/138237440500213278766544576420175538153"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "a",
+        "b": "\u001f",
+        "c": 1
+      },
+      "key": "e/a/b/108953544491027897133118810734227504117"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "中文",
+        "b": "Ω",
+        "c": 1
+      },
+      "key": "e/issueLabel/298697958174904119828597442393412379150"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "ﬀ",
+        "b": "\u0000",
+        "c": 1
+      },
+      "key": "e/a/b/174057468085118144377299764343613956108"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "𝒜",
+        "b": "\n",
+        "c": 1
+      },
+      "key": "e/a/b/5083973163605689538709407885124552225"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "ω",
+        "b": "b",
+        "c": 1
+      },
+      "key": "e/T/324429194745012102815157364387854475334"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": " ",
+        "b": "\n",
+        "c": 1
+      },
+      "key": "e/a/b/20111422161262127299137814277831705957"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "中文",
+        "b": "Z",
+        "c": 1
+      },
+      "key": "e/T/288163432826267393645295772203882135741"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "😀",
+        "b": "ﬀ",
+        "c": 1
+      },
+      "key": "e/T/69353963259799663590030124423535688954"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "ß",
+        "b": "\"",
+        "c": 1
+      },
+      "key": "e/a/b/15119373219820456239748869485582419230"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": 123456789,
+        "b": 1.5,
+        "c": 1
+      },
+      "key": "e/T/70030911325523829558365918209963861322"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "\u001f",
+        "b": "A",
+        "c": 1
+      },
+      "key": "e/a/b/107849840668642228546486329285446987602"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "a😀",
+        "b": "b",
+        "c": 1
+      },
+      "key": "e/issueLabel/50621609346134512976613415856759239532"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "a",
+        "b": "abc",
+        "c": 1
+      },
+      "key": "e/issueLabel/125534053758872032010433667743440732573"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "\"",
+        "b": 123456789,
+        "c": 1
+      },
+      "key": "e/T/157876255552548717928228875885739892834"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "0",
+        "b": "Z",
+        "c": 1
+      },
+      "key": "e/T/33688599146367535308476222411125388361"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": false,
+        "b": 9007199254740992,
+        "c": 1
+      },
+      "key": "e/issueLabel/125342882607468997836025138316361085066"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": -1,
+        "b": "𝒜",
+        "c": 1
+      },
+      "key": "e/T/322677190894481446281944065921136200835"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": " ",
+        "b": "0",
+        "c": 1
+      },
+      "key": "e/issueLabel/150959838649620094276462845126391292143"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "\u001f",
+        "b": "😀a",
+        "c": 1
+      },
+      "key": "e/issueLabel/168203813663984148152088867871369561216"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "\"",
+        "b": "ab",
+        "c": 1
+      },
+      "key": "e/a/b/228239857778646129970252129512884072839"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "ab",
+        "b": " ",
+        "c": 1
+      },
+      "key": "e/a/b/200945460326997410844512284536355940238"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "0",
+        "b": "A",
+        "c": 1
+      },
+      "key": "e/T/99581474221892365417517847622793377579"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "9",
+        "b": "𝒜",
+        "c": 1
+      },
+      "key": "e/a/b/36428554136804102800734382375682860844"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "",
+        "b": "abc",
+        "c": 1
+      },
+      "key": "e/a/b/112042633584996058780323154254004858166"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": " ",
+        "b": "ω",
+        "c": 1
+      },
+      "key": "e/a/b/128733077402849419843058939129632512826"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": 0,
+        "b": "é",
+        "c": 1
+      },
+      "key": "e/T/216972578155720916255596934813343275522"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "",
+        "b": "",
+        "c": 1
+      },
+      "key": "e/issueLabel/327970993165733907483913338773888203364"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "A",
+        "b": "\\",
+        "c": 1
+      },
+      "key": "e/T/57056319883518651848811490593888278449"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": true,
+        "b": "9",
+        "c": 1
+      },
+      "key": "e/a/b/34432540034224198489912508140820750377"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": -1,
+        "b": "Ω",
+        "c": 1
+      },
+      "key": "e/T/291576052045140909396011381037730117768"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "�",
+        "b": "ω",
+        "c": 1
+      },
+      "key": "e/issueLabel/190298845942192748196995388155094637017"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "9",
+        "b": "😀",
+        "c": 1
+      },
+      "key": "e/a/b/330830603906885855059689932840073939137"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": 9007199254740992,
+        "b": "Ω",
+        "c": 1
+      },
+      "key": "e/T/315043682682061335616776018712350231967"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "\"",
+        "b": 1e-7,
+        "c": 1
+      },
+      "key": "e/a/b/237440861506891350671596720124902172833"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": true,
+        "b": 1,
+        "c": 1
+      },
+      "key": "e/a/b/78411978607788658615493657205782043922"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "􏿿",
+        "b": "é",
+        "c": 1
+      },
+      "key": "e/T/75455583978625570409743621297965845815"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "z",
+        "b": "𝒜",
+        "c": 1
+      },
+      "key": "e/issueLabel/101616210220851271147161439282941189856"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": " ",
+        "b": true,
+        "c": 1
+      },
+      "key": "e/a/b/46829720116334243019408552042163864756"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "abc",
+        "b": 1.5,
+        "c": 1
+      },
+      "key": "e/T/64048578147264822146398123571065236851"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "￿",
+        "b": 1.5,
+        "c": 1
+      },
+      "key": "e/T/317874927184929111149102636038329333040"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "Ω",
+        "b": 0,
+        "c": 1
+      },
+      "key": "e/T/325135499577073968285543816007604479784"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "9",
+        "b": -1,
+        "c": 1
+      },
+      "key": "e/issueLabel/61786085883502793018744180497656294249"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": 123456789,
+        "b": "Ω",
+        "c": 1
+      },
+      "key": "e/T/215684009329767761640860471127337290404"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "😀",
+        "b": "ß",
+        "c": 1
+      },
+      "key": "e/issueLabel/320193981998157265838888891975155501501"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "",
+        "b": false,
+        "c": 1
+      },
+      "key": "e/T/158236726775577381120598796334867873537"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "abc",
+        "b": "􏿿",
+        "c": 1
+      },
+      "key": "e/a/b/289065079426825981885888246342318617356"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "A",
+        "b": "z",
+        "c": 1
+      },
+      "key": "e/issueLabel/179060136545276317652261798870425989130"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "\n",
+        "b": "�",
+        "c": 1
+      },
+      "key": "e/issueLabel/190612110649815538729456182756485101778"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "\"",
+        "b": -1,
+        "c": 1
+      },
+      "key": "e/a/b/127001739953936009975223094780501680997"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "İ",
+        "b": "abc",
+        "c": 1
+      },
+      "key": "e/a/b/18831307009605723781816576344424793596"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": 1e+21,
+        "b": false,
+        "c": 1
+      },
+      "key": "e/T/65937749629351462764609993225687627125"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": 0,
+        "b": " ",
+        "c": 1
+      },
+      "key": "e/a/b/143246219368763434548493369281354183848"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": 1.5,
+        "b": "é",
+        "c": 1
+      },
+      "key": "e/T/159299925970059360783011581715802095448"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "a😀",
+        "b": "􏿿",
+        "c": 1
+      },
+      "key": "e/issueLabel/324939011670342040272630589850627470929"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": 1.5,
+        "b": "中文",
+        "c": 1
+      },
+      "key": "e/a/b/207871901021492906503983047150480434076"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": 0,
+        "b": 1e+21,
+        "c": 1
+      },
+      "key": "e/T/70163525744960846665241958113909593591"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": 1.5,
+        "b": 1e-7,
+        "c": 1
+      },
+      "key": "e/issueLabel/155079488285218437467907829788807103606"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "İ",
+        "b": "\u001f",
+        "c": 1
+      },
+      "key": "e/T/186422773973479497819357525176513524517"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": false,
+        "b": "￿",
+        "c": 1
+      },
+      "key": "e/issueLabel/79317005981325900607816290139328932864"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "z",
+        "b": 123456789,
+        "c": 1
+      },
+      "key": "e/T/6399303255988564931957762439559899632"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "z",
+        "b": 1,
+        "c": 1
+      },
+      "key": "e/T/198193634805884345557533887603028416635"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "😀",
+        "b": "\n",
+        "c": 1
+      },
+      "key": "e/issueLabel/17885664512885852230051151740110520126"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "ß",
+        "b": "�",
+        "c": 1
+      },
+      "key": "e/issueLabel/211464393569957171780078204392551827881"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "é",
+        "b": "abc",
+        "c": 1
+      },
+      "key": "e/T/118487262269115251264257623907098965396"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "İ",
+        "b": "�",
+        "c": 1
+      },
+      "key": "e/T/35398161988335902265402093060145852913"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "\u001f",
+        "b": true,
+        "c": 1
+      },
+      "key": "e/issueLabel/18466211484688823538057217979333077486"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "b",
+        "b": 1e-7,
+        "c": 1
+      },
+      "key": "e/issueLabel/54041244556617852768186306963445944461"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "",
+        "b": "\n",
+        "c": 1
+      },
+      "key": "e/issueLabel/300045346511509397034103317327319191170"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "ß",
+        "b": 1,
+        "c": 1
+      },
+      "key": "e/T/6896813769461230752784065333868751076"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "a😀",
+        "b": true,
+        "c": 1
+      },
+      "key": "e/a/b/9721472666910517981283068075515492105"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "A",
+        "b": true,
+        "c": 1
+      },
+      "key": "e/a/b/111713581439921651297581026986496836305"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": 0,
+        "b": "ß",
+        "c": 1
+      },
+      "key": "e/a/b/38133843252944601293852926323167589702"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": 1,
+        "b": 1e-7,
+        "c": 1
+      },
+      "key": "e/a/b/42465484080886270641466938407081859154"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": 123456789,
+        "b": "􏿿",
+        "c": 1
+      },
+      "key": "e/issueLabel/6183215748030952876286034738204560240"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "😀",
+        "b": "￿",
+        "c": 1
+      },
+      "key": "e/T/143547021887944509658265388626285181634"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "￿",
+        "b": "İ",
+        "c": 1
+      },
+      "key": "e/issueLabel/248870845571210344217745119129301599383"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "ﬀ",
+        "b": " ",
+        "c": 1
+      },
+      "key": "e/T/308859664407470953838277179172284281835"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "\\",
+        "b": "\"",
+        "c": 1
+      },
+      "key": "e/a/b/53081955814286587807398233289845056557"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "􏿿",
+        "b": "Ω",
+        "c": 1
+      },
+      "key": "e/a/b/118614057762437404711566357778112782733"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "ω",
+        "b": "0",
+        "c": 1
+      },
+      "key": "e/issueLabel/4986777469217447230184777457183934942"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "a",
+        "b": "a",
+        "c": 1
+      },
+      "key": "e/issueLabel/92234837145786221424074851044696905750"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "😀a",
+        "b": "é",
+        "c": 1
+      },
+      "key": "e/T/219717427851274269178975352696961414002"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": 0,
+        "b": 1,
+        "c": 1
+      },
+      "key": "e/issueLabel/295170494340311890617300055200635032228"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "\"",
+        "b": "abc",
+        "c": 1
+      },
+      "key": "e/T/238749775941851600778060135804831347619"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "é",
+        "b": 9007199254740992,
+        "c": 1
+      },
+      "key": "e/a/b/119745039924289343650236563576274633240"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "",
+        "b": -1,
+        "c": 1
+      },
+      "key": "e/a/b/2893012737170642695247897011367444056"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "z",
+        "b": "\\",
+        "c": 1
+      },
+      "key": "e/issueLabel/275359418673279422273815927308651637405"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "\\",
+        "b": "\n",
+        "c": 1
+      },
+      "key": "e/T/60128992136367324382740234172678835869"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": " ",
+        "b": "�",
+        "c": 1
+      },
+      "key": "e/T/17327414818598726598999821881078743270"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "0",
+        "b": "b",
+        "c": 1
+      },
+      "key": "e/a/b/57736290139742924998707954815414346261"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "ab",
+        "b": "",
+        "c": 1
+      },
+      "key": "e/issueLabel/245756579003707184509831813755821813560"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": 1,
+        "b": "�",
+        "c": 1
+      },
+      "key": "e/T/244004825321001507357998545663546775219"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "￿",
+        "b": "�",
+        "c": 1
+      },
+      "key": "e/T/368421437378419272236062167667437425"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "ı",
+        "b": 0,
+        "c": 1
+      },
+      "key": "e/T/128857581234351733708146465281690107524"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "z",
+        "b": "\"",
+        "c": 1
+      },
+      "key": "e/a/b/216199514477132186310266210059508007336"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "é",
+        "b": "é",
+        "c": 1
+      },
+      "key": "e/issueLabel/173928429345626310737325804715046303864"
+    },
+    {
+      "table": "a/b",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "\"",
+        "b": "􏿿",
+        "c": 1
+      },
+      "key": "e/a/b/264565957223921066041612742487091725285"
+    },
+    {
+      "table": "T",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "􏿿",
+        "b": " ",
+        "c": 1
+      },
+      "key": "e/T/145208218977391520964786729770952069982"
+    },
+    {
+      "table": "issueLabel",
+      "primaryKey": [
+        "a",
+        "b"
+      ],
+      "row": {
+        "a": "0",
+        "b": "Z",
+        "c": 1
+      },
+      "key": "e/issueLabel/33688599146367535308476222411125388361"
+    },
+    {
+      "table": "three",
+      "primaryKey": [
+        "z",
+        "a",
+        "m"
+      ],
+      "row": {
+        "a": 1,
+        "m": "x",
+        "z": true
+      },
+      "key": "e/three/4375090957187456350369291908112057677"
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+name: Swift (macOS)
+
+# The Apple-only layer (ZeroUI, the URLSession transport) and iOS simulator
+# tests. Path-filtered because macOS runners are slow to start.
+
+on:
+  push:
+    # swift-client is the development branch until the client lands on main.
+    branches: [main, swift-client]
+    paths:
+      - 'swift/**'
+      - 'packages/zero-conformance/**'
+      - 'apps/zbugs-swift/**'
+      - '.github/workflows/swift-macos.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'swift/**'
+      - 'packages/zero-conformance/**'
+      - 'apps/zbugs-swift/**'
+      - '.github/workflows/swift-macos.yml'
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    name: Swift (macOS)
+    runs-on: macos-26
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: swift
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - run: swift --version
+      - name: Build and test (macOS)
+        run: swift test
+      - name: Docs
+        run: scripts/docs.sh
+      - name: Test (iOS Simulator)
+        run: |
+          device="$(xcrun simctl list devices available -j |
+            python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for k,v in d.items() if "iOS" in k for x in v if x["name"].startswith("iPhone")))')"
+          xcodebuild test -scheme Zero-Package -destination "id=$device" -skipPackagePluginValidation
+
+  zbugs:
+    name: zbugs app (iOS and macOS)
+    runs-on: macos-26
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: apps/zbugs-swift
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      # The drift test again, and ZBugsUI (empty on Linux) for macOS.
+      - name: Build and test (macOS)
+        run: swift test
+      - name: Generate the Xcode project
+        working-directory: apps/zbugs-swift/App
+        run: brew install xcodegen && xcodegen generate
+      - name: Build the app (iOS Simulator)
+        working-directory: apps/zbugs-swift/App
+        run: >-
+          xcodebuild build -project ZBugs.xcodeproj -scheme ZBugsApp
+          -destination 'generic/platform=iOS Simulator'
+          -skipPackagePluginValidation CODE_SIGNING_ALLOWED=NO
+      - name: Build the app (macOS)
+        working-directory: apps/zbugs-swift/App
+        run: >-
+          xcodebuild build -project ZBugs.xcodeproj -scheme ZBugsApp
+          -destination 'generic/platform=macOS'
+          -skipPackagePluginValidation CODE_SIGNING_ALLOWED=NO

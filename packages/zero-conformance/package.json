@@ -1,0 +1,31 @@
+{
+  "name": "zero-conformance",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Conformance vectors generated from the JS Zero client, consumed by the Swift client.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "bench": "vitest run --config vitest.config.bench.ts",
+    "generate": "UPDATE_VECTORS=1 vitest run",
+    "check-types": "tsc",
+    "format": "oxfmt .",
+    "check-format": "oxfmt --check .",
+    "lint": "oxlint --quiet --config ../../oxlint.config.ts src/",
+    "fmt": "oxfmt .",
+    "check-fmt": "oxfmt --check ."
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "oxfmt": "^0.65.0",
+    "replicache": "workspace:*",
+    "shared": "workspace:*",
+    "typescript": "~7.0.2",
+    "vitest": "^5.0.0",
+    "zero-client": "workspace:*",
+    "zero-protocol": "workspace:*",
+    "zero-schema": "workspace:*",
+    "zero-types": "workspace:*",
+    "zql": "workspace:*"
+  }
+}

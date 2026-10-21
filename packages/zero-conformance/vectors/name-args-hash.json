@@ -1,0 +1,1180 @@
+{
+  "formatVersion": 1,
+  "kind": "name-args-hash",
+  "description": "hashOfNameAndArgs(name, args): the ID of a named query.",
+  "cases": [
+    {
+      "name": "issues.byId",
+      "args": [],
+      "hash": "1wrdiyo0n41o5n"
+    },
+    {
+      "name": "issues.byId",
+      "args": [
+        {
+          "id": "1"
+        }
+      ],
+      "hash": "0o8p5w607y247b"
+    },
+    {
+      "name": "issues.byId",
+      "args": [
+        {
+          "id": 1
+        }
+      ],
+      "hash": "0jm5ed012dgf3p"
+    },
+    {
+      "name": "issues.byId",
+      "args": [
+        {
+          "b": 1,
+          "a": 2
+        }
+      ],
+      "hash": "04mq5n815tl18d"
+    },
+    {
+      "name": "issues.byId",
+      "args": [
+        {
+          "a": 2,
+          "b": 1
+        }
+      ],
+      "hash": "04mq5n815tl18d"
+    },
+    {
+      "name": "x",
+      "args": [
+        null,
+        true,
+        false,
+        0,
+        0,
+        1.5,
+        "x",
+        [
+          1,
+          [
+            2
+          ]
+        ],
+        {}
+      ],
+      "hash": "0eonrvz1b4i0rn"
+    },
+    {
+      "name": "x",
+      "args": [
+        {
+          "nested": {
+            "z": 1,
+            "a": [
+              true,
+              null
+            ]
+          }
+        }
+      ],
+      "hash": "0j9yqq90h1cva9"
+    },
+    {
+      "name": "",
+      "args": [
+        {
+          "": ""
+        }
+      ],
+      "hash": "03xecnu0d4q4qf"
+    },
+    {
+      "name": "😀",
+      "args": [
+        {
+          "😀": "é",
+          "é": "é"
+        }
+      ],
+      "hash": "0vz84cg1a3ahbd"
+    },
+    {
+      "name": "",
+      "args": [
+        ""
+      ],
+      "hash": "0ksdkq51q4ukdk"
+    },
+    {
+      "name": "a",
+      "args": [
+        "a"
+      ],
+      "hash": "0cqx8hg1po6tkn"
+    },
+    {
+      "name": "A",
+      "args": [
+        "A"
+      ],
+      "hash": "0p4p4co0ewmytk"
+    },
+    {
+      "name": "abc",
+      "args": [
+        "abc"
+      ],
+      "hash": "154xmvf1phnwu7"
+    },
+    {
+      "name": "ab",
+      "args": [
+        "ab"
+      ],
+      "hash": "1ehcrqp0qe6bh4"
+    },
+    {
+      "name": "b",
+      "args": [
+        "b"
+      ],
+      "hash": "0eg6r990cbjsfh"
+    },
+    {
+      "name": "Z",
+      "args": [
+        "Z"
+      ],
+      "hash": "0nn9rus12lb5yo"
+    },
+    {
+      "name": "z",
+      "args": [
+        "z"
+      ],
+      "hash": "0gofsy900dh3eb"
+    },
+    {
+      "name": " ",
+      "args": [
+        " "
+      ],
+      "hash": "1s5oe3o11aa8i9"
+    },
+    {
+      "name": "0",
+      "args": [
+        "0"
+      ],
+      "hash": "1inuwt30sldx99"
+    },
+    {
+      "name": "9",
+      "args": [
+        "9"
+      ],
+      "hash": "1jwjyuc0tg33a5"
+    },
+    {
+      "name": "\u0000",
+      "args": [
+        "\u0000"
+      ],
+      "hash": "1gu0eu31ezovbg"
+    },
+    {
+      "name": "\u001f",
+      "args": [
+        "\u001f"
+      ],
+      "hash": "0s1inw21wpwvhn"
+    },
+    {
+      "name": "\"",
+      "args": [
+        "\""
+      ],
+      "hash": "01gpms10yp3fga"
+    },
+    {
+      "name": "\\",
+      "args": [
+        "\\"
+      ],
+      "hash": "0a08jio1snxuoa"
+    },
+    {
+      "name": "\n",
+      "args": [
+        "\n"
+      ],
+      "hash": "1p46tfx0pr7ly2"
+    },
+    {
+      "name": "é",
+      "args": [
+        "é"
+      ],
+      "hash": "0ff4t5w00a3703"
+    },
+    {
+      "name": "é",
+      "args": [
+        "é"
+      ],
+      "hash": "0ag600s0en3swf"
+    },
+    {
+      "name": "ß",
+      "args": [
+        "ß"
+      ],
+      "hash": "1r7a9o4127u58o"
+    },
+    {
+      "name": "İ",
+      "args": [
+        "İ"
+      ],
+      "hash": "0dg2xwp0scxyf8"
+    },
+    {
+      "name": "ı",
+      "args": [
+        "ı"
+      ],
+      "hash": "0xp2o960o6h9nm"
+    },
+    {
+      "name": "ﬀ",
+      "args": [
+        "ﬀ"
+      ],
+      "hash": "0f94i911rdvtax"
+    },
+    {
+      "name": " ",
+      "args": [
+        " "
+      ],
+      "hash": "1pg4gap1pntsnz"
+    },
+    {
+      "name": "",
+      "args": [
+        ""
+      ],
+      "hash": "0t1k47q06kking"
+    },
+    {
+      "name": "�",
+      "args": [
+        "�"
+      ],
+      "hash": "0c8ex5o1tuxrvi"
+    },
+    {
+      "name": "￿",
+      "args": [
+        "￿"
+      ],
+      "hash": "1mrn3f00jewh30"
+    },
+    {
+      "name": "😀",
+      "args": [
+        "😀"
+      ],
+      "hash": "1155ixk19wcb95"
+    },
+    {
+      "name": "😀a",
+      "args": [
+        "😀a"
+      ],
+      "hash": "03vs5ta0576g0m"
+    },
+    {
+      "name": "a😀",
+      "args": [
+        "a😀"
+      ],
+      "hash": "1okkkm80gwfvt1"
+    },
+    {
+      "name": "𝒜",
+      "args": [
+        "𝒜"
+      ],
+      "hash": "0v7ygw803al70y"
+    },
+    {
+      "name": "中文",
+      "args": [
+        "中文"
+      ],
+      "hash": "13wq4ld1fdanhb"
+    },
+    {
+      "name": "Ω",
+      "args": [
+        "Ω"
+      ],
+      "hash": "0mcyz811s8jrgz"
+    },
+    {
+      "name": "ω",
+      "args": [
+        "ω"
+      ],
+      "hash": "08nl8o805sg6pi"
+    },
+    {
+      "name": "􏿿",
+      "args": [
+        "􏿿"
+      ],
+      "hash": "05g5zo11kze7oj"
+    },
+    {
+      "name": "a",
+      "args": [
+        {
+          "closed": "",
+          "createdAt": 2147483648
+        }
+      ],
+      "hash": "1xa3u361ef4f4b"
+    },
+    {
+      "name": "a",
+      "args": [
+        {
+          "é": 0
+        }
+      ],
+      "hash": "18j774v0tb04dy"
+    },
+    {
+      "name": "users.byId",
+      "args": [],
+      "hash": "1ke1bry0uo4aq6"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        1e+21,
+        {
+          "closed": 1,
+          "createdAt": -2147483649
+        }
+      ],
+      "hash": "1uiw4s10vu0afj"
+    },
+    {
+      "name": "a",
+      "args": [
+        0
+      ],
+      "hash": "0k08b7r12abo0n"
+    },
+    {
+      "name": "a",
+      "args": [],
+      "hash": "1o2vimr0oukr3l"
+    },
+    {
+      "name": "users.byId",
+      "args": [],
+      "hash": "1ke1bry0uo4aq6"
+    },
+    {
+      "name": "a",
+      "args": [
+        false,
+        1.5
+      ],
+      "hash": "0vmt16505iwyki"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        {
+          "closed": 1e+21,
+          "id": "1"
+        }
+      ],
+      "hash": "0fxtadm066fe36"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        true
+      ],
+      "hash": "0dt51cf0rbo8o9"
+    },
+    {
+      "name": "a",
+      "args": [
+        2147483648,
+        1
+      ],
+      "hash": "1u8o3yh1f8b057"
+    },
+    {
+      "name": "a",
+      "args": [
+        "a"
+      ],
+      "hash": "0cqx8hg1po6tkn"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        2147483648,
+        "1"
+      ],
+      "hash": "0vfnq7m08s1ci5"
+    },
+    {
+      "name": "a",
+      "args": [],
+      "hash": "1o2vimr0oukr3l"
+    },
+    {
+      "name": "a",
+      "args": [
+        {
+          "a": -1,
+          "createdAt": "é"
+        }
+      ],
+      "hash": "05ksuyv07tr602"
+    },
+    {
+      "name": "a",
+      "args": [
+        {
+          "closed": "é",
+          "ownerId": "😀"
+        }
+      ],
+      "hash": "018kpt409ncys4"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        {
+          "closed": "",
+          "id": -1
+        }
+      ],
+      "hash": "1fjygdb1mkqtca"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        "é"
+      ],
+      "hash": "0k1fq9d1p6adqy"
+    },
+    {
+      "name": "a",
+      "args": [
+        {
+          "createdAt": 0,
+          "closed": 2147483648
+        },
+        {
+          "closed": true,
+          "createdAt": false
+        }
+      ],
+      "hash": "1pmrz3807awauc"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        {
+          "id": -1,
+          "ownerId": "1"
+        }
+      ],
+      "hash": "0ysd5vt10v8nvq"
+    },
+    {
+      "name": "a",
+      "args": [
+        -2147483649,
+        -1
+      ],
+      "hash": "1x6sdys17z7onv"
+    },
+    {
+      "name": "issues.list",
+      "args": [],
+      "hash": "13fodwg16cu4vt"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        -1,
+        -2147483649
+      ],
+      "hash": "0c5n5dp14ofs09"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        "b",
+        1
+      ],
+      "hash": "0eure1p17op66j"
+    },
+    {
+      "name": "a",
+      "args": [],
+      "hash": "1o2vimr0oukr3l"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        {
+          "closed": "",
+          "ownerId": 0
+        }
+      ],
+      "hash": "1b5zqqi1vcw88w"
+    },
+    {
+      "name": "a",
+      "args": [
+        "",
+        ""
+      ],
+      "hash": "1ap19mv0nf9dlk"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        {
+          "é": "é",
+          "id": "é"
+        }
+      ],
+      "hash": "1l9a9ca00vpu3a"
+    },
+    {
+      "name": "a",
+      "args": [],
+      "hash": "1o2vimr0oukr3l"
+    },
+    {
+      "name": "a",
+      "args": [
+        0
+      ],
+      "hash": "0k08b7r12abo0n"
+    },
+    {
+      "name": "users.byId",
+      "args": [],
+      "hash": "1ke1bry0uo4aq6"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        {
+          "id": true
+        }
+      ],
+      "hash": "1wfko5r0xms8zm"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        0,
+        {
+          "é": 1,
+          "createdAt": "1"
+        }
+      ],
+      "hash": "05iz0e41384lis"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        "😀"
+      ],
+      "hash": "1id5em8026fmen"
+    },
+    {
+      "name": "issues.list",
+      "args": [],
+      "hash": "13fodwg16cu4vt"
+    },
+    {
+      "name": "users.byId",
+      "args": [],
+      "hash": "1ke1bry0uo4aq6"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        "é"
+      ],
+      "hash": "0k1fq9d1p6adqy"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        {
+          "a": "é",
+          "é": "é"
+        }
+      ],
+      "hash": "19k8bav0lolkk9"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        {
+          "a": "b",
+          "é": "1"
+        },
+        "b"
+      ],
+      "hash": "1n1vw5f13e6x8e"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        {
+          "title": 0
+        },
+        {
+          "a": false
+        }
+      ],
+      "hash": "1f76afb11motje"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        {
+          "createdAt": -2147483649,
+          "id": 1.5
+        }
+      ],
+      "hash": "1xkwb3s16ymibm"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        false
+      ],
+      "hash": "03vc65q13nvtph"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        {
+          "é": 0,
+          "id": false
+        }
+      ],
+      "hash": "1sfi0fs1nn26ra"
+    },
+    {
+      "name": "a",
+      "args": [
+        {
+          "closed": "b",
+          "id": "a"
+        }
+      ],
+      "hash": "184kt34142bqqk"
+    },
+    {
+      "name": "a",
+      "args": [
+        0,
+        1
+      ],
+      "hash": "161izox1b52bw7"
+    },
+    {
+      "name": "a",
+      "args": [
+        {
+          "createdAt": -1,
+          "é": "a"
+        },
+        {
+          "id": "b",
+          "closed": false
+        }
+      ],
+      "hash": "1eql9yr14oedvf"
+    },
+    {
+      "name": "a",
+      "args": [],
+      "hash": "1o2vimr0oukr3l"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        2147483648
+      ],
+      "hash": "1pkwe231lgmoyq"
+    },
+    {
+      "name": "a",
+      "args": [],
+      "hash": "1o2vimr0oukr3l"
+    },
+    {
+      "name": "a",
+      "args": [
+        {
+          "title": "é",
+          "ownerId": "😀"
+        }
+      ],
+      "hash": "0sk6i4j0cnxi6h"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        {
+          "é": 0,
+          "a": -2147483649
+        }
+      ],
+      "hash": "183dcl619ybwxl"
+    },
+    {
+      "name": "issues.list",
+      "args": [],
+      "hash": "13fodwg16cu4vt"
+    },
+    {
+      "name": "a",
+      "args": [],
+      "hash": "1o2vimr0oukr3l"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        1e+21,
+        1e+21
+      ],
+      "hash": "01exy7q00jxh3u"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        "é"
+      ],
+      "hash": "0k1fq9d1p6adqy"
+    },
+    {
+      "name": "a",
+      "args": [
+        "b",
+        "é"
+      ],
+      "hash": "07i67200rghwk4"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        {
+          "a": "a",
+          "createdAt": 1e+21
+        }
+      ],
+      "hash": "0loo9cr02imnvd"
+    },
+    {
+      "name": "a",
+      "args": [
+        {
+          "é": 0,
+          "id": "😀"
+        },
+        "1"
+      ],
+      "hash": "10h9yie110fuqp"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        {
+          "title": "é",
+          "closed": "1"
+        }
+      ],
+      "hash": "1g6lkz81hv8m4a"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        {
+          "a": -2147483649,
+          "createdAt": true
+        }
+      ],
+      "hash": "1m2ih0y06nbl6v"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        "a",
+        {
+          "é": "1",
+          "createdAt": -2147483649
+        }
+      ],
+      "hash": "0gkqzfo0mq26d9"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        {
+          "createdAt": 0,
+          "ownerId": -2147483649
+        }
+      ],
+      "hash": "0szaybm0x4ja8f"
+    },
+    {
+      "name": "users.byId",
+      "args": [],
+      "hash": "1ke1bry0uo4aq6"
+    },
+    {
+      "name": "issues.list",
+      "args": [],
+      "hash": "13fodwg16cu4vt"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        {
+          "closed": "",
+          "title": 2147483648
+        }
+      ],
+      "hash": "0pklqty10t4mij"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        false,
+        "😀"
+      ],
+      "hash": "0eh8ob60oyirgp"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        1.5
+      ],
+      "hash": "0wdruz70o8npzd"
+    },
+    {
+      "name": "a",
+      "args": [
+        {
+          "closed": 1.5,
+          "id": 0
+        }
+      ],
+      "hash": "162y35a0qrthsn"
+    },
+    {
+      "name": "a",
+      "args": [
+        {
+          "a": "é",
+          "ownerId": -2147483649
+        }
+      ],
+      "hash": "10sfzmb1gylwh3"
+    },
+    {
+      "name": "users.byId",
+      "args": [],
+      "hash": "1ke1bry0uo4aq6"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        0
+      ],
+      "hash": "18d8piq0y28v3b"
+    },
+    {
+      "name": "a",
+      "args": [
+        true,
+        ""
+      ],
+      "hash": "19u9kmw0zxlktj"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        0,
+        {
+          "id": "é",
+          "a": 1e+21
+        }
+      ],
+      "hash": "1jq2mye0m2de1c"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        {
+          "id": "é",
+          "é": -2147483649
+        }
+      ],
+      "hash": "1mk3qt71ne4mym"
+    },
+    {
+      "name": "users.byId",
+      "args": [],
+      "hash": "1ke1bry0uo4aq6"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        {
+          "createdAt": "a",
+          "a": "a"
+        }
+      ],
+      "hash": "05874160h4y98i"
+    },
+    {
+      "name": "a",
+      "args": [],
+      "hash": "1o2vimr0oukr3l"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        1.5
+      ],
+      "hash": "0wdruz70o8npzd"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        {
+          "title": "é"
+        },
+        {
+          "é": "é",
+          "a": "é"
+        }
+      ],
+      "hash": "0kznllo1mwkp94"
+    },
+    {
+      "name": "issues.list",
+      "args": [],
+      "hash": "13fodwg16cu4vt"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        {
+          "id": 1e+21,
+          "é": "é"
+        }
+      ],
+      "hash": "1uwxokb1ypuwzk"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        {
+          "createdAt": 1,
+          "a": "😀"
+        }
+      ],
+      "hash": "0ib51kd0tbfyv8"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        {
+          "ownerId": "a",
+          "closed": -1
+        }
+      ],
+      "hash": "17kv3cs1n4wjge"
+    },
+    {
+      "name": "a",
+      "args": [
+        {
+          "title": "",
+          "createdAt": -2147483649
+        }
+      ],
+      "hash": "1d1309x0ir09av"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        {
+          "title": "b",
+          "createdAt": true
+        },
+        1
+      ],
+      "hash": "0uep2de0tdvw33"
+    },
+    {
+      "name": "a",
+      "args": [
+        "a"
+      ],
+      "hash": "0cqx8hg1po6tkn"
+    },
+    {
+      "name": "users.byId",
+      "args": [],
+      "hash": "1ke1bry0uo4aq6"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        {
+          "id": 1,
+          "createdAt": -2147483649
+        }
+      ],
+      "hash": "0m2e1wn0yw4i83"
+    },
+    {
+      "name": "a",
+      "args": [
+        {
+          "a": -2147483649,
+          "ownerId": "é"
+        }
+      ],
+      "hash": "0ka79dc1a6wpwi"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        {
+          "title": ""
+        },
+        "1"
+      ],
+      "hash": "0uccm3p1e8pw0c"
+    },
+    {
+      "name": "a",
+      "args": [
+        {
+          "closed": "😀",
+          "ownerId": ""
+        }
+      ],
+      "hash": "1jo98qz1wzimos"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        {
+          "id": -2147483649,
+          "ownerId": 0
+        },
+        "a"
+      ],
+      "hash": "0md85pg0nxnkgo"
+    },
+    {
+      "name": "a",
+      "args": [
+        "1",
+        true
+      ],
+      "hash": "1tchkzy0juko8e"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        1
+      ],
+      "hash": "1joh0fu1cdsjzh"
+    },
+    {
+      "name": "a",
+      "args": [
+        {
+          "é": "é",
+          "ownerId": 0
+        },
+        1e+21
+      ],
+      "hash": "1rlgnnw12o0w6n"
+    },
+    {
+      "name": "a",
+      "args": [],
+      "hash": "1o2vimr0oukr3l"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        {
+          "createdAt": "é",
+          "title": 0
+        }
+      ],
+      "hash": "1nv9cc8192g4zq"
+    },
+    {
+      "name": "users.byId",
+      "args": [
+        {
+          "createdAt": 2147483648,
+          "é": 0
+        },
+        {
+          "a": "b",
+          "closed": true
+        }
+      ],
+      "hash": "0usp7ot1lfercf"
+    },
+    {
+      "name": "issues.list",
+      "args": [
+        {
+          "ownerId": -1,
+          "a": "😀"
+        }
+      ],
+      "hash": "16gcx8w1f0dh59"
+    },
+    {
+      "name": "users.byId",
+      "args": [],
+      "hash": "1ke1bry0uo4aq6"
+    }
+  ]
+}

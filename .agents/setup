@@ -7,7 +7,8 @@ export DEBIAN_FRONTEND=noninteractive
 
 echo '==> Checking native build prerequisites'
 missing=()
-for package in build-essential python3 pkg-config curl ca-certificates xz-utils; do
+# postgresql backs the Swift end-to-end tests (packages/zero-conformance/src/e2e).
+for package in build-essential python3 pkg-config curl ca-certificates xz-utils postgresql; do
   if [[ "$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || true)" != 'install ok installed' ]]; then
     missing+=("$package")
   fi
@@ -16,6 +17,26 @@ if ((${#missing[@]})); then
   time sudo apt-get update
   time sudo apt-get install -y "${missing[@]}"
 fi
+
+echo '==> Installing the Swift toolchain for swift/'
+swift_version='6.2.4'
+if [[ "$(/opt/swift/usr/bin/swift --version 2>/dev/null || true)" != *"swift-${swift_version}-RELEASE"* ]]; then
+  time sudo apt-get update
+  time sudo apt-get install -y binutils-gold libicu-dev libcurl4-openssl-dev \
+    libedit-dev libsqlite3-dev libncurses-dev libpython3-dev libxml2-dev \
+    tzdata uuid-dev gnupg2 libstdc++-12-dev zlib1g-dev
+  swift_tmp="$(mktemp -d)"
+  time curl -sSfL -o "$swift_tmp/swift.tar.gz" \
+    "https://download.swift.org/swift-${swift_version}-release/debian12/swift-${swift_version}-RELEASE/swift-${swift_version}-RELEASE-debian12.tar.gz"
+  sudo rm -rf /opt/swift
+  sudo mkdir -p /opt/swift
+  sudo tar -xzf "$swift_tmp/swift.tar.gz" -C /opt/swift --strip-components=1
+  rm -rf "$swift_tmp"
+fi
+for tool in swift swiftc sourcekit-lsp docc; do
+  sudo ln -sf "/opt/swift/usr/bin/$tool" "/usr/local/bin/$tool"
+done
+swift --version
 
 echo '==> Selecting the repository Node and pnpm versions'
 node_version="$(tr -d '[:space:]' < .nvmrc)"
@@ -39,6 +60,14 @@ pnpm --version
 # The global config command requires pnpm's global bin directory on PATH.
 PATH="${PNPM_HOME:-$HOME/.local/share/pnpm}/bin:$PATH" \
   pnpm config set --global verify-deps-before-run false
+
+# zero-cache runs from source only on Node 24 (`using`), which the Swift
+# end-to-end server needs; the .nvmrc Node stays the default.
+echo '==> Installing Node 24 for zero-cache into ~/.local/node24'
+if [[ "$("$HOME/.local/node24/bin/node" --version 2>/dev/null || true)" != v24.* ]]; then
+  time N_PREFIX="$HOME/.local/node24" n install 24
+fi
+"$HOME/.local/node24/bin/node" --version
 
 echo '==> Installing workspace dependencies from the lockfile'
 time pnpm install --frozen-lockfile

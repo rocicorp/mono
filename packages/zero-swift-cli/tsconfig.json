@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "paths": {
+      "@rocicorp/zero": ["../zero/src/zero.ts"]
+    }
+  },
+  "include": ["src", "test", "../../apps/zbugs-swift/drift-samples.ts"]
+}

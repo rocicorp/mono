@@ -79,8 +79,9 @@ jobs:
   test:
     name: Public Test
     if: github.repository == 'rocicorp/mono' || github.repository == 'rocicorp/mono-internal' || github.repository == 'wevm/zero'
-    # See Public Checks. x64, since this runs WebKit and Firefox too.
-    runs-on: ${{ github.repository == 'rocicorp/mono-internal' && 'ubuntu-x64-8-core' || 'ubuntu-latest' }}
+    # See Public Checks. x64, since this runs WebKit and Firefox too. Ubuntu
+    # 24.04, not ubuntu-latest: Playwright 1.60 has no browsers for 26.04.
+    runs-on: ${{ github.repository == 'rocicorp/mono-internal' && 'ubuntu-x64-8-core' || 'ubuntu-24.04' }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:

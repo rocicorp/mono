@@ -1335,6 +1335,42 @@ importers:
         specifier: workspace:*
         version: link:../zql
 
+  packages/zero-conformance:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.19
+      oxfmt:
+        specifier: ^0.65.0
+        version: 0.65.0
+      replicache:
+        specifier: workspace:*
+        version: link:../replicache
+      shared:
+        specifier: workspace:*
+        version: link:../shared
+      typescript:
+        specifier: ~7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: ^5.0.0
+        version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@5.0.0)(@vitest/coverage-v8@5.0.0)(@vitest/ui@5.0.0)(vite@8.3.4(@types/node@22.19.19)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.1))
+      zero-client:
+        specifier: workspace:*
+        version: link:../zero-client
+      zero-protocol:
+        specifier: workspace:*
+        version: link:../zero-protocol
+      zero-schema:
+        specifier: workspace:*
+        version: link:../zero-schema
+      zero-types:
+        specifier: workspace:*
+        version: link:../zero-types
+      zql:
+        specifier: workspace:*
+        version: link:../zql
+
   packages/zero-events:
     devDependencies:
       esbuild:
@@ -1589,6 +1625,37 @@ importers:
       zero-client:
         specifier: workspace:*
         version: link:../zero-client
+      zql:
+        specifier: workspace:*
+        version: link:../zql
+
+  packages/zero-swift-cli:
+    dependencies:
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+    devDependencies:
+      '@rocicorp/zero':
+        specifier: workspace:*
+        version: link:../zero
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.19
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
+      oxfmt:
+        specifier: ^0.65.0
+        version: 0.65.0
+      vitest:
+        specifier: ^5.0.0
+        version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@5.0.0)(@vitest/coverage-v8@5.0.0)(@vitest/ui@5.0.0)(vite@8.3.4(@types/node@22.19.19)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.1))
+      zero-schema:
+        specifier: workspace:*
+        version: link:../zero-schema
+      zero-types:
+        specifier: workspace:*
+        version: link:../zero-types
       zql:
         specifier: workspace:*
         version: link:../zql
@@ -4838,6 +4905,7 @@ packages:
   '@opentelemetry/propagator-jaeger@2.12.0':
     resolution: {integrity: sha512-Kz2Vz+NILW7S1WtN4rV1wr76fMtT/RRWvAMFBc91uTIi2dDMXxrfBKNe2KH7yaCfFp1X0xfAuabzuFczvoPB6A==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Package no longer supported. See https://github.com/open-telemetry/opentelemetry-js/pull/7077
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
@@ -4902,12 +4970,14 @@ packages:
   '@opentelemetry/sdk-trace-base@2.12.0':
     resolution: {integrity: sha512-JOERgZCxRM06FEJ5kEWxlSRChah6MmXDx3KwCruqEv/iEyLkTokCSemf2y1w8oIHtfrr8EVTpzebq/31vn2Cpg==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-node@2.12.0':
     resolution: {integrity: sha512-9DufH1IlmQMoKAfot5y/FhTP1RnmhLb5K6eKmJO/bvzPjYwPAazoiAUbTZFdPbqxOXN0FEbhZx/e6SB1Og4jmg==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 

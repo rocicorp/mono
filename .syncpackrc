@@ -15,6 +15,29 @@
       "isIgnored": true
     },
     {
+      "label": "zero-swift's CLI (packages/zero-swift-cli) reads schemas with the TypeScript compiler API at runtime, which TypeScript 7 does not have",
+      "dependencies": [
+        "typescript"
+      ],
+      "packages": [
+        "zero-swift"
+      ],
+      "pinVersion": "6.0.3"
+    },
+    {
+      "label": "zero-swift's CLI takes the app's @rocicorp/zero, any release it supports, not the workspace's",
+      "dependencies": [
+        "@rocicorp/zero"
+      ],
+      "dependencyTypes": [
+        "peer"
+      ],
+      "packages": [
+        "zero-swift"
+      ],
+      "isIgnored": true
+    },
+    {
       "label": "replicache-doc stays on TypeScript 6 because typedoc does not support TypeScript 7",
       "dependencies": [
         "typescript"

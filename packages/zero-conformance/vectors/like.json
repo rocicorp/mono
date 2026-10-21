@@ -1,0 +1,6976 @@
+{
+  "formatVersion": 1,
+  "kind": "like",
+  "description": "LIKE / ILIKE (flags \"i\") predicate results; `throws` when the pattern is invalid.",
+  "cases": [
+    {
+      "pattern": "foo",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "foo",
+          "match": true
+        },
+        {
+          "input": "bar",
+          "match": false
+        },
+        {
+          "input": "Foo",
+          "match": false
+        },
+        {
+          "input": "FOO",
+          "match": false
+        },
+        {
+          "input": "fo",
+          "match": false
+        },
+        {
+          "input": "fooa",
+          "match": false
+        },
+        {
+          "input": "afoo",
+          "match": false
+        },
+        {
+          "input": "afoob",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "foo",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "foo",
+          "match": true
+        },
+        {
+          "input": "bar",
+          "match": false
+        },
+        {
+          "input": "Foo",
+          "match": true
+        },
+        {
+          "input": "FOO",
+          "match": true
+        },
+        {
+          "input": "fo",
+          "match": false
+        },
+        {
+          "input": "fooa",
+          "match": false
+        },
+        {
+          "input": "afoo",
+          "match": false
+        },
+        {
+          "input": "afoob",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "foo%",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "foo",
+          "match": true
+        },
+        {
+          "input": "foobar",
+          "match": true
+        },
+        {
+          "input": "bar",
+          "match": false
+        },
+        {
+          "input": "Foo",
+          "match": false
+        },
+        {
+          "input": "FOO",
+          "match": false
+        },
+        {
+          "input": "fo",
+          "match": false
+        },
+        {
+          "input": "fooa",
+          "match": true
+        },
+        {
+          "input": "afoo",
+          "match": false
+        },
+        {
+          "input": "afoob",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "foo%",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "foo",
+          "match": true
+        },
+        {
+          "input": "foobar",
+          "match": true
+        },
+        {
+          "input": "bar",
+          "match": false
+        },
+        {
+          "input": "Foo",
+          "match": true
+        },
+        {
+          "input": "FOO",
+          "match": true
+        },
+        {
+          "input": "fo",
+          "match": false
+        },
+        {
+          "input": "fooa",
+          "match": true
+        },
+        {
+          "input": "afoo",
+          "match": false
+        },
+        {
+          "input": "afoob",
+          "match": false
+        },
+        {
+          "input": "foo\nbar",
+          "match": true
+        },
+        {
+          "input": "foobar\nbaz",
+          "match": true
+        }
+      ]
+    },
+    {
+      "pattern": "foo_",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "foo",
+          "match": false
+        },
+        {
+          "input": "foobar",
+          "match": false
+        },
+        {
+          "input": "foob",
+          "match": true
+        },
+        {
+          "input": "bar",
+          "match": false
+        },
+        {
+          "input": "Foo",
+          "match": false
+        },
+        {
+          "input": "FOO",
+          "match": false
+        },
+        {
+          "input": "fo",
+          "match": false
+        },
+        {
+          "input": "afoo",
+          "match": false
+        },
+        {
+          "input": "afoob",
+          "match": false
+        },
+        {
+          "input": "fooa\nbar",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "a%b",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "a\nb",
+          "match": true
+        },
+        {
+          "input": "axb",
+          "match": true
+        },
+        {
+          "input": "ab",
+          "match": true
+        },
+        {
+          "input": "z\nab",
+          "match": false
+        },
+        {
+          "input": "a\nbz",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "a_b",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "a\nb",
+          "match": true
+        },
+        {
+          "input": "axb",
+          "match": true
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nbc",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "foo\\%",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "foo%",
+          "match": true
+        },
+        {
+          "input": "foobar",
+          "match": false
+        },
+        {
+          "input": "bar",
+          "match": false
+        },
+        {
+          "input": "Foo",
+          "match": false
+        },
+        {
+          "input": "FOO",
+          "match": false
+        },
+        {
+          "input": "fo",
+          "match": false
+        },
+        {
+          "input": "fooa",
+          "match": false
+        },
+        {
+          "input": "afoo",
+          "match": false
+        },
+        {
+          "input": "afoob",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "foo\\%",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "foo%",
+          "match": true
+        },
+        {
+          "input": "FOO%",
+          "match": true
+        },
+        {
+          "input": "foobar",
+          "match": false
+        },
+        {
+          "input": "bar",
+          "match": false
+        },
+        {
+          "input": "Foo",
+          "match": false
+        },
+        {
+          "input": "FOO",
+          "match": false
+        },
+        {
+          "input": "fo",
+          "match": false
+        },
+        {
+          "input": "fooa",
+          "match": false
+        },
+        {
+          "input": "afoo",
+          "match": false
+        },
+        {
+          "input": "afoob",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "foo\\_",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "foo_",
+          "match": true
+        },
+        {
+          "input": "FOO_",
+          "match": false
+        },
+        {
+          "input": "foobar",
+          "match": false
+        },
+        {
+          "input": "bar",
+          "match": false
+        },
+        {
+          "input": "Foo",
+          "match": false
+        },
+        {
+          "input": "FOO",
+          "match": false
+        },
+        {
+          "input": "fo",
+          "match": false
+        },
+        {
+          "input": "fooa",
+          "match": false
+        },
+        {
+          "input": "afoo",
+          "match": false
+        },
+        {
+          "input": "afoob",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "%foo",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "foo",
+          "match": true
+        },
+        {
+          "input": "foobar",
+          "match": false
+        },
+        {
+          "input": "bar",
+          "match": false
+        },
+        {
+          "input": "Foo",
+          "match": false
+        },
+        {
+          "input": "FOO",
+          "match": false
+        },
+        {
+          "input": "fo",
+          "match": false
+        },
+        {
+          "input": "fooa",
+          "match": false
+        },
+        {
+          "input": "afoo",
+          "match": true
+        },
+        {
+          "input": "afoob",
+          "match": false
+        },
+        {
+          "input": "monkey\nfoo",
+          "match": true
+        },
+        {
+          "input": "mon\nkeyfoo",
+          "match": true
+        }
+      ]
+    },
+    {
+      "pattern": "%foo%",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "foo",
+          "match": true
+        },
+        {
+          "input": "foobar",
+          "match": true
+        },
+        {
+          "input": "bar",
+          "match": false
+        },
+        {
+          "input": "Foo",
+          "match": false
+        },
+        {
+          "input": "FOO",
+          "match": false
+        },
+        {
+          "input": "fo",
+          "match": false
+        },
+        {
+          "input": "fooa",
+          "match": true
+        },
+        {
+          "input": "afoo",
+          "match": true
+        },
+        {
+          "input": "afoob",
+          "match": true
+        },
+        {
+          "input": "mon\nfoo\nkey",
+          "match": true
+        },
+        {
+          "input": "m\nonfooke\ny",
+          "match": true
+        }
+      ]
+    },
+    {
+      "pattern": "%foo\nbar%",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "foo\nbar",
+          "match": true
+        },
+        {
+          "input": "foo\nbar\n",
+          "match": true
+        },
+        {
+          "input": "foo\nbar\nbaz",
+          "match": true
+        },
+        {
+          "input": "monkey\nfoo\nbar",
+          "match": true
+        }
+      ]
+    },
+    {
+      "pattern": "",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": true
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": true
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "%",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": true
+        },
+        {
+          "input": "a",
+          "match": true
+        },
+        {
+          "input": "A",
+          "match": true
+        },
+        {
+          "input": "ab",
+          "match": true
+        },
+        {
+          "input": "a\nb",
+          "match": true
+        },
+        {
+          "input": "\n",
+          "match": true
+        },
+        {
+          "input": "😀",
+          "match": true
+        },
+        {
+          "input": "a😀b",
+          "match": true
+        },
+        {
+          "input": "é",
+          "match": true
+        },
+        {
+          "input": "É",
+          "match": true
+        },
+        {
+          "input": "İ",
+          "match": true
+        },
+        {
+          "input": "i",
+          "match": true
+        },
+        {
+          "input": "I",
+          "match": true
+        },
+        {
+          "input": "ı",
+          "match": true
+        },
+        {
+          "input": "ß",
+          "match": true
+        },
+        {
+          "input": "SS",
+          "match": true
+        },
+        {
+          "input": "ss",
+          "match": true
+        },
+        {
+          "input": "Σ",
+          "match": true
+        },
+        {
+          "input": "σ",
+          "match": true
+        },
+        {
+          "input": "ς",
+          "match": true
+        },
+        {
+          "input": "%",
+          "match": true
+        },
+        {
+          "input": "_",
+          "match": true
+        },
+        {
+          "input": "\\",
+          "match": true
+        },
+        {
+          "input": "a.b",
+          "match": true
+        },
+        {
+          "input": "a+b",
+          "match": true
+        },
+        {
+          "input": "(x)",
+          "match": true
+        },
+        {
+          "input": "[x]",
+          "match": true
+        },
+        {
+          "input": "^$",
+          "match": true
+        }
+      ]
+    },
+    {
+      "pattern": "%",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": true
+        },
+        {
+          "input": "a",
+          "match": true
+        },
+        {
+          "input": "A",
+          "match": true
+        },
+        {
+          "input": "ab",
+          "match": true
+        },
+        {
+          "input": "a\nb",
+          "match": true
+        },
+        {
+          "input": "\n",
+          "match": true
+        },
+        {
+          "input": "😀",
+          "match": true
+        },
+        {
+          "input": "a😀b",
+          "match": true
+        },
+        {
+          "input": "é",
+          "match": true
+        },
+        {
+          "input": "É",
+          "match": true
+        },
+        {
+          "input": "İ",
+          "match": true
+        },
+        {
+          "input": "i",
+          "match": true
+        },
+        {
+          "input": "I",
+          "match": true
+        },
+        {
+          "input": "ı",
+          "match": true
+        },
+        {
+          "input": "ß",
+          "match": true
+        },
+        {
+          "input": "SS",
+          "match": true
+        },
+        {
+          "input": "ss",
+          "match": true
+        },
+        {
+          "input": "Σ",
+          "match": true
+        },
+        {
+          "input": "σ",
+          "match": true
+        },
+        {
+          "input": "ς",
+          "match": true
+        },
+        {
+          "input": "%",
+          "match": true
+        },
+        {
+          "input": "_",
+          "match": true
+        },
+        {
+          "input": "\\",
+          "match": true
+        },
+        {
+          "input": "a.b",
+          "match": true
+        },
+        {
+          "input": "a+b",
+          "match": true
+        },
+        {
+          "input": "(x)",
+          "match": true
+        },
+        {
+          "input": "[x]",
+          "match": true
+        },
+        {
+          "input": "^$",
+          "match": true
+        }
+      ]
+    },
+    {
+      "pattern": "_",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": true
+        },
+        {
+          "input": "A",
+          "match": true
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": true
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": true
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": true
+        },
+        {
+          "input": "i",
+          "match": true
+        },
+        {
+          "input": "I",
+          "match": true
+        },
+        {
+          "input": "ı",
+          "match": true
+        },
+        {
+          "input": "ß",
+          "match": true
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": true
+        },
+        {
+          "input": "σ",
+          "match": true
+        },
+        {
+          "input": "ς",
+          "match": true
+        },
+        {
+          "input": "%",
+          "match": true
+        },
+        {
+          "input": "_",
+          "match": true
+        },
+        {
+          "input": "\\",
+          "match": true
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "_",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": true
+        },
+        {
+          "input": "A",
+          "match": true
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": true
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": true
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": true
+        },
+        {
+          "input": "i",
+          "match": true
+        },
+        {
+          "input": "I",
+          "match": true
+        },
+        {
+          "input": "ı",
+          "match": true
+        },
+        {
+          "input": "ß",
+          "match": true
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": true
+        },
+        {
+          "input": "σ",
+          "match": true
+        },
+        {
+          "input": "ς",
+          "match": true
+        },
+        {
+          "input": "%",
+          "match": true
+        },
+        {
+          "input": "_",
+          "match": true
+        },
+        {
+          "input": "\\",
+          "match": true
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "__",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": true
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": true
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": true
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": true
+        },
+        {
+          "input": "ss",
+          "match": true
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": true
+        }
+      ]
+    },
+    {
+      "pattern": "__",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": true
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": true
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": true
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": true
+        },
+        {
+          "input": "ss",
+          "match": true
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": true
+        }
+      ]
+    },
+    {
+      "pattern": "a_b",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": true
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": true
+        },
+        {
+          "input": "a+b",
+          "match": true
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "a_b",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": true
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": true
+        },
+        {
+          "input": "a+b",
+          "match": true
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "a%b",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": true
+        },
+        {
+          "input": "a\nb",
+          "match": true
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": true
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": true
+        },
+        {
+          "input": "a+b",
+          "match": true
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "a%b",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": true
+        },
+        {
+          "input": "a\nb",
+          "match": true
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": true
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": true
+        },
+        {
+          "input": "a+b",
+          "match": true
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "\\%",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": true
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "\\%",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": true
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "\\_",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": true
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "\\_",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": true
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "\\\\",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": true
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "\\\\",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": true
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "a\\b",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": true
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "a\\b",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": true
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "%😀%",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": true
+        },
+        {
+          "input": "a😀b",
+          "match": true
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "%😀%",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": true
+        },
+        {
+          "input": "a😀b",
+          "match": true
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "_😀",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "_😀",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "😀",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": true
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "😀",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": true
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "__b",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": true
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": true
+        },
+        {
+          "input": "a+b",
+          "match": true
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "__b",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": true
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": true
+        },
+        {
+          "input": "a+b",
+          "match": true
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "a.b",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": true
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "a.b",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": true
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "a+b",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": true
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "a+b",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": true
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "(x)",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": true
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "(x)",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": true
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "[x]",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": true
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "[x]",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": true
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "^$",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": true
+        }
+      ]
+    },
+    {
+      "pattern": "^$",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": true
+        }
+      ]
+    },
+    {
+      "pattern": "é",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": true
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "é",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": true
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "e%",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "e%",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": true
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "İ",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": true
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "İ",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": true
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "i",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": true
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "i",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": true
+        },
+        {
+          "input": "I",
+          "match": true
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "ß",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": true
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "ß",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": true
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "ss",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": true
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "ss",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": true
+        },
+        {
+          "input": "ss",
+          "match": true
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "σ",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": false
+        },
+        {
+          "input": "σ",
+          "match": true
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "σ",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": true
+        },
+        {
+          "input": "σ",
+          "match": true
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "%Σ%",
+      "flags": "",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": true
+        },
+        {
+          "input": "σ",
+          "match": false
+        },
+        {
+          "input": "ς",
+          "match": false
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "%Σ%",
+      "flags": "i",
+      "throws": false,
+      "results": [
+        {
+          "input": "",
+          "match": false
+        },
+        {
+          "input": "a",
+          "match": false
+        },
+        {
+          "input": "A",
+          "match": false
+        },
+        {
+          "input": "ab",
+          "match": false
+        },
+        {
+          "input": "a\nb",
+          "match": false
+        },
+        {
+          "input": "\n",
+          "match": false
+        },
+        {
+          "input": "😀",
+          "match": false
+        },
+        {
+          "input": "a😀b",
+          "match": false
+        },
+        {
+          "input": "é",
+          "match": false
+        },
+        {
+          "input": "É",
+          "match": false
+        },
+        {
+          "input": "İ",
+          "match": false
+        },
+        {
+          "input": "i",
+          "match": false
+        },
+        {
+          "input": "I",
+          "match": false
+        },
+        {
+          "input": "ı",
+          "match": false
+        },
+        {
+          "input": "ß",
+          "match": false
+        },
+        {
+          "input": "SS",
+          "match": false
+        },
+        {
+          "input": "ss",
+          "match": false
+        },
+        {
+          "input": "Σ",
+          "match": true
+        },
+        {
+          "input": "σ",
+          "match": true
+        },
+        {
+          "input": "ς",
+          "match": true
+        },
+        {
+          "input": "%",
+          "match": false
+        },
+        {
+          "input": "_",
+          "match": false
+        },
+        {
+          "input": "\\",
+          "match": false
+        },
+        {
+          "input": "a.b",
+          "match": false
+        },
+        {
+          "input": "a+b",
+          "match": false
+        },
+        {
+          "input": "(x)",
+          "match": false
+        },
+        {
+          "input": "[x]",
+          "match": false
+        },
+        {
+          "input": "^$",
+          "match": false
+        }
+      ]
+    },
+    {
+      "pattern": "a\\",
+      "flags": "",
+      "throws": true,
+      "results": []
+    },
+    {
+      "pattern": "a\\",
+      "flags": "i",
+      "throws": true,
+      "results": []
+    }
+  ]
+}

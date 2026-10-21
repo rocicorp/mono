@@ -1,0 +1,60 @@
+# A test app for ZeroVirtual's scroll view adapters: a chat that sticks to
+# the bottom, and a long list, on data from a LoopbackServer (no backend).
+# Generate the Xcode project with XcodeGen (`brew install xcodegen`):
+# `xcodegen generate`, then open TestHost.xcodeproj. The UI tests run in
+# .github/workflows/zbugs-screenshots.yml.
+name: TestHost
+options:
+  bundleIdPrefix: dev.rocicorp
+  deploymentTarget:
+    iOS: '26.0'
+    macOS: '26.0'
+packages:
+  Zero:
+    path: ..
+targets:
+  TestHost:
+    type: application
+    supportedDestinations: [iOS, macOS]
+    scheme:
+      testTargets: [TestHostUITests]
+    sources:
+      - path: App
+    # ProMotion: frames at up to 120 Hz, which the frame probe checks. Merged
+    # with the generated Info.plist.
+    info:
+      path: Info.plist
+      properties:
+        CADisableMinimumFrameDurationOnPhone: true
+    dependencies:
+      - package: Zero
+        product: ZeroVirtual
+      - package: Zero
+        product: ZeroUI
+      - package: Zero
+        product: ZeroTesting
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.rocicorp.zero.testhost
+        SWIFT_VERSION: '6.0'
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Zero Test Host
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        TARGETED_DEVICE_FAMILY: '1,2'
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+  TestHostUITests:
+    type: bundle.ui-testing
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - path: UITests
+    dependencies:
+      - target: TestHost
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.rocicorp.zero.testhost.uitests
+        SWIFT_VERSION: '6.0'
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: TestHost
+        CODE_SIGN_STYLE: Automatic

@@ -1,0 +1,237 @@
+{
+  "formatVersion": 1,
+  "kind": "json-parse",
+  "description": "JSON.parse acceptance; accepted inputs carry their JSON.stringify re-encoding.",
+  "cases": [
+    {
+      "input": "null",
+      "ok": true,
+      "stringify": "null"
+    },
+    {
+      "input": "true",
+      "ok": true,
+      "stringify": "true"
+    },
+    {
+      "input": "false",
+      "ok": true,
+      "stringify": "false"
+    },
+    {
+      "input": "0",
+      "ok": true,
+      "stringify": "0"
+    },
+    {
+      "input": "-0",
+      "ok": true,
+      "stringify": "0"
+    },
+    {
+      "input": "1",
+      "ok": true,
+      "stringify": "1"
+    },
+    {
+      "input": "-1.5e10",
+      "ok": true,
+      "stringify": "-15000000000"
+    },
+    {
+      "input": "1E400",
+      "ok": true,
+      "stringify": "null"
+    },
+    {
+      "input": "123456789012345678901234567890",
+      "ok": true,
+      "stringify": "1.2345678901234568e+29"
+    },
+    {
+      "input": "0.1",
+      "ok": true,
+      "stringify": "0.1"
+    },
+    {
+      "input": "\"abc\"",
+      "ok": true,
+      "stringify": "\"abc\""
+    },
+    {
+      "input": "\"\"",
+      "ok": true,
+      "stringify": "\"\""
+    },
+    {
+      "input": "\"\\u00e9\\n\\t\\\"\\\\\\/\"",
+      "ok": true,
+      "stringify": "\"é\\n\\t\\\"\\\\/\""
+    },
+    {
+      "input": "\"\\ud83d\\ude00\"",
+      "ok": true,
+      "stringify": "\"😀\""
+    },
+    {
+      "input": "\"😀\"",
+      "ok": true,
+      "stringify": "\"😀\""
+    },
+    {
+      "input": "\"\\u0000\"",
+      "ok": true,
+      "stringify": "\"\\u0000\""
+    },
+    {
+      "input": "[]",
+      "ok": true,
+      "stringify": "[]"
+    },
+    {
+      "input": "[1,2,3]",
+      "ok": true,
+      "stringify": "[1,2,3]"
+    },
+    {
+      "input": "{}",
+      "ok": true,
+      "stringify": "{}"
+    },
+    {
+      "input": "{\"a\":1,\"b\":[true,null,{\"c\":\"d\"}]}",
+      "ok": true,
+      "stringify": "{\"a\":1,\"b\":[true,null,{\"c\":\"d\"}]}"
+    },
+    {
+      "input": " \t\n\r{ \"a\" : 1 } ",
+      "ok": true,
+      "stringify": "{\"a\":1}"
+    },
+    {
+      "input": "{\"a\":1,\"a\":2}",
+      "ok": true,
+      "stringify": "{\"a\":2}"
+    },
+    {
+      "input": "{\"__proto__\":1}",
+      "ok": true,
+      "stringify": "{\"__proto__\":1}"
+    },
+    {
+      "input": "[[[[[]]]]]",
+      "ok": true,
+      "stringify": "[[[[[]]]]]"
+    },
+    {
+      "input": "{\"\":0}",
+      "ok": true,
+      "stringify": "{\"\":0}"
+    },
+    {
+      "input": "\"\\u2028\"",
+      "ok": true,
+      "stringify": "\" \""
+    },
+    {
+      "input": "",
+      "ok": false
+    },
+    {
+      "input": " ",
+      "ok": false
+    },
+    {
+      "input": "nul",
+      "ok": false
+    },
+    {
+      "input": "True",
+      "ok": false
+    },
+    {
+      "input": "01",
+      "ok": false
+    },
+    {
+      "input": "-",
+      "ok": false
+    },
+    {
+      "input": "+1",
+      "ok": false
+    },
+    {
+      "input": ".5",
+      "ok": false
+    },
+    {
+      "input": "1.",
+      "ok": false
+    },
+    {
+      "input": "1e",
+      "ok": false
+    },
+    {
+      "input": "0x10",
+      "ok": false
+    },
+    {
+      "input": "NaN",
+      "ok": false
+    },
+    {
+      "input": "Infinity",
+      "ok": false
+    },
+    {
+      "input": "\"abc",
+      "ok": false
+    },
+    {
+      "input": "\"\u0001\"",
+      "ok": false
+    },
+    {
+      "input": "\"\\x41\"",
+      "ok": false
+    },
+    {
+      "input": "\"\\u12\"",
+      "ok": false
+    },
+    {
+      "input": "'a'",
+      "ok": false
+    },
+    {
+      "input": "[1,]",
+      "ok": false
+    },
+    {
+      "input": "[1 2]",
+      "ok": false
+    },
+    {
+      "input": "{\"a\":1,}",
+      "ok": false
+    },
+    {
+      "input": "{a:1}",
+      "ok": false
+    },
+    {
+      "input": "{\"a\" 1}",
+      "ok": false
+    },
+    {
+      "input": "[1]x",
+      "ok": false
+    },
+    {
+      "input": "{\"a\":1}}",
+      "ok": false
+    }
+  ]
+}

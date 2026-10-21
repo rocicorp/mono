@@ -1,0 +1,10 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@4.0.1/schema.json",
+  "baseBranch": "main",
+  "access": "public",
+  "changelog": "@changesets/cli/changelog",
+  "commit": false,
+  "format": "oxfmt",
+  "ignore": ["@rocicorp/zero-events", "replicache", "otel-proxy"],
+  "privatePackages": {"version": false, "tag": false}
+}

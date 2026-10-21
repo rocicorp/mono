@@ -1,0 +1,275 @@
+{
+  "formatVersion": 1,
+  "kind": "json-stringify-strings",
+  "description": "JSON.stringify of strings (escaping rules).",
+  "cases": [
+    {
+      "input": "",
+      "stringify": "\"\""
+    },
+    {
+      "input": "a",
+      "stringify": "\"a\""
+    },
+    {
+      "input": "A",
+      "stringify": "\"A\""
+    },
+    {
+      "input": "abc",
+      "stringify": "\"abc\""
+    },
+    {
+      "input": "ab",
+      "stringify": "\"ab\""
+    },
+    {
+      "input": "b",
+      "stringify": "\"b\""
+    },
+    {
+      "input": "Z",
+      "stringify": "\"Z\""
+    },
+    {
+      "input": "z",
+      "stringify": "\"z\""
+    },
+    {
+      "input": " ",
+      "stringify": "\" \""
+    },
+    {
+      "input": "0",
+      "stringify": "\"0\""
+    },
+    {
+      "input": "9",
+      "stringify": "\"9\""
+    },
+    {
+      "input": "\u0000",
+      "stringify": "\"\\u0000\""
+    },
+    {
+      "input": "\u001f",
+      "stringify": "\"\\u001f\""
+    },
+    {
+      "input": "\"",
+      "stringify": "\"\\\"\""
+    },
+    {
+      "input": "\\",
+      "stringify": "\"\\\\\""
+    },
+    {
+      "input": "\n",
+      "stringify": "\"\\n\""
+    },
+    {
+      "input": "é",
+      "stringify": "\"é\""
+    },
+    {
+      "input": "é",
+      "stringify": "\"é\""
+    },
+    {
+      "input": "ß",
+      "stringify": "\"ß\""
+    },
+    {
+      "input": "İ",
+      "stringify": "\"İ\""
+    },
+    {
+      "input": "ı",
+      "stringify": "\"ı\""
+    },
+    {
+      "input": "ﬀ",
+      "stringify": "\"ﬀ\""
+    },
+    {
+      "input": " ",
+      "stringify": "\" \""
+    },
+    {
+      "input": "",
+      "stringify": "\"\""
+    },
+    {
+      "input": "�",
+      "stringify": "\"�\""
+    },
+    {
+      "input": "￿",
+      "stringify": "\"￿\""
+    },
+    {
+      "input": "😀",
+      "stringify": "\"😀\""
+    },
+    {
+      "input": "😀a",
+      "stringify": "\"😀a\""
+    },
+    {
+      "input": "a😀",
+      "stringify": "\"a😀\""
+    },
+    {
+      "input": "𝒜",
+      "stringify": "\"𝒜\""
+    },
+    {
+      "input": "中文",
+      "stringify": "\"中文\""
+    },
+    {
+      "input": "Ω",
+      "stringify": "\"Ω\""
+    },
+    {
+      "input": "ω",
+      "stringify": "\"ω\""
+    },
+    {
+      "input": "􏿿",
+      "stringify": "\"􏿿\""
+    },
+    {
+      "input": "\u0000",
+      "stringify": "\"\\u0000\""
+    },
+    {
+      "input": "\u0001",
+      "stringify": "\"\\u0001\""
+    },
+    {
+      "input": "\u0002",
+      "stringify": "\"\\u0002\""
+    },
+    {
+      "input": "\u0003",
+      "stringify": "\"\\u0003\""
+    },
+    {
+      "input": "\u0004",
+      "stringify": "\"\\u0004\""
+    },
+    {
+      "input": "\u0005",
+      "stringify": "\"\\u0005\""
+    },
+    {
+      "input": "\u0006",
+      "stringify": "\"\\u0006\""
+    },
+    {
+      "input": "\u0007",
+      "stringify": "\"\\u0007\""
+    },
+    {
+      "input": "\b",
+      "stringify": "\"\\b\""
+    },
+    {
+      "input": "\t",
+      "stringify": "\"\\t\""
+    },
+    {
+      "input": "\n",
+      "stringify": "\"\\n\""
+    },
+    {
+      "input": "\u000b",
+      "stringify": "\"\\u000b\""
+    },
+    {
+      "input": "\f",
+      "stringify": "\"\\f\""
+    },
+    {
+      "input": "\r",
+      "stringify": "\"\\r\""
+    },
+    {
+      "input": "\u000e",
+      "stringify": "\"\\u000e\""
+    },
+    {
+      "input": "\u000f",
+      "stringify": "\"\\u000f\""
+    },
+    {
+      "input": "\u0010",
+      "stringify": "\"\\u0010\""
+    },
+    {
+      "input": "\u0011",
+      "stringify": "\"\\u0011\""
+    },
+    {
+      "input": "\u0012",
+      "stringify": "\"\\u0012\""
+    },
+    {
+      "input": "\u0013",
+      "stringify": "\"\\u0013\""
+    },
+    {
+      "input": "\u0014",
+      "stringify": "\"\\u0014\""
+    },
+    {
+      "input": "\u0015",
+      "stringify": "\"\\u0015\""
+    },
+    {
+      "input": "\u0016",
+      "stringify": "\"\\u0016\""
+    },
+    {
+      "input": "\u0017",
+      "stringify": "\"\\u0017\""
+    },
+    {
+      "input": "\u0018",
+      "stringify": "\"\\u0018\""
+    },
+    {
+      "input": "\u0019",
+      "stringify": "\"\\u0019\""
+    },
+    {
+      "input": "\u001a",
+      "stringify": "\"\\u001a\""
+    },
+    {
+      "input": "\u001b",
+      "stringify": "\"\\u001b\""
+    },
+    {
+      "input": "\u001c",
+      "stringify": "\"\\u001c\""
+    },
+    {
+      "input": "\u001d",
+      "stringify": "\"\\u001d\""
+    },
+    {
+      "input": "\u001e",
+      "stringify": "\"\\u001e\""
+    },
+    {
+      "input": "\u001f",
+      "stringify": "\"\\u001f\""
+    },
+    {
+      "input": "a\"b\\c\u0007def",
+      "stringify": "\"a\\\"b\\\\c\\u0007def\""
+    }
+  ]
+}

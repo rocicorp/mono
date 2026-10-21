@@ -1,0 +1,5 @@
+.build/
+.swiftpm/
+*.xcodeproj/xcuserdata/
+Package.resolved
+TestHost/*.xcodeproj/

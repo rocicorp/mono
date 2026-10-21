@@ -1,0 +1,1741 @@
+{
+  "formatVersion": 1,
+  "kind": "compare-values",
+  "description": "zql compareValues (sign, or \"throws\" for mismatched types) and valuesEqual.",
+  "cases": [
+    {
+      "a": null,
+      "b": null,
+      "compare": 0,
+      "equal": false
+    },
+    {
+      "a": null,
+      "b": true,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": null,
+      "b": false,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": null,
+      "b": 0,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": null,
+      "b": 0,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": null,
+      "b": 1,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": null,
+      "b": -1,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": null,
+      "b": 0.5,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": null,
+      "b": 1e+21,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": null,
+      "b": -1e-7,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": null,
+      "b": 9007199254740992,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": null,
+      "b": "",
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": null,
+      "b": "a",
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": null,
+      "b": "B",
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": null,
+      "b": "é",
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": null,
+      "b": "😀",
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": null,
+      "b": "",
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": true,
+      "b": null,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": true,
+      "b": true,
+      "compare": 0,
+      "equal": true
+    },
+    {
+      "a": true,
+      "b": false,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": true,
+      "b": 0,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": true,
+      "b": 0,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": true,
+      "b": 1,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": true,
+      "b": -1,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": true,
+      "b": 0.5,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": true,
+      "b": 1e+21,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": true,
+      "b": -1e-7,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": true,
+      "b": 9007199254740992,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": true,
+      "b": "",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": true,
+      "b": "a",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": true,
+      "b": "B",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": true,
+      "b": "é",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": true,
+      "b": "😀",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": true,
+      "b": "",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": false,
+      "b": null,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": false,
+      "b": true,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": false,
+      "b": false,
+      "compare": 0,
+      "equal": true
+    },
+    {
+      "a": false,
+      "b": 0,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": false,
+      "b": 0,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": false,
+      "b": 1,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": false,
+      "b": -1,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": false,
+      "b": 0.5,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": false,
+      "b": 1e+21,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": false,
+      "b": -1e-7,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": false,
+      "b": 9007199254740992,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": false,
+      "b": "",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": false,
+      "b": "a",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": false,
+      "b": "B",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": false,
+      "b": "é",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": false,
+      "b": "😀",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": false,
+      "b": "",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": null,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": true,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": false,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": 0,
+      "compare": 0,
+      "equal": true
+    },
+    {
+      "a": 0,
+      "b": 0,
+      "compare": 0,
+      "equal": true
+    },
+    {
+      "a": 0,
+      "b": 1,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": -1,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": 0.5,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": 1e+21,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": -1e-7,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": 9007199254740992,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": "",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": "a",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": "B",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": "é",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": "😀",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": "",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": null,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": true,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": false,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": 0,
+      "compare": 0,
+      "equal": true
+    },
+    {
+      "a": 0,
+      "b": 0,
+      "compare": 0,
+      "equal": true
+    },
+    {
+      "a": 0,
+      "b": 1,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": -1,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": 0.5,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": 1e+21,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": -1e-7,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": 9007199254740992,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": "",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": "a",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": "B",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": "é",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": "😀",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0,
+      "b": "",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 1,
+      "b": null,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 1,
+      "b": true,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 1,
+      "b": false,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 1,
+      "b": 0,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 1,
+      "b": 0,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 1,
+      "b": 1,
+      "compare": 0,
+      "equal": true
+    },
+    {
+      "a": 1,
+      "b": -1,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 1,
+      "b": 0.5,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 1,
+      "b": 1e+21,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": 1,
+      "b": -1e-7,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 1,
+      "b": 9007199254740992,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": 1,
+      "b": "",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 1,
+      "b": "a",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 1,
+      "b": "B",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 1,
+      "b": "é",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 1,
+      "b": "😀",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 1,
+      "b": "",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": -1,
+      "b": null,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": -1,
+      "b": true,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": -1,
+      "b": false,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": -1,
+      "b": 0,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": -1,
+      "b": 0,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": -1,
+      "b": 1,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": -1,
+      "b": -1,
+      "compare": 0,
+      "equal": true
+    },
+    {
+      "a": -1,
+      "b": 0.5,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": -1,
+      "b": 1e+21,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": -1,
+      "b": -1e-7,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": -1,
+      "b": 9007199254740992,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": -1,
+      "b": "",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": -1,
+      "b": "a",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": -1,
+      "b": "B",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": -1,
+      "b": "é",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": -1,
+      "b": "😀",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": -1,
+      "b": "",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0.5,
+      "b": null,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 0.5,
+      "b": true,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0.5,
+      "b": false,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0.5,
+      "b": 0,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 0.5,
+      "b": 0,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 0.5,
+      "b": 1,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": 0.5,
+      "b": -1,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 0.5,
+      "b": 0.5,
+      "compare": 0,
+      "equal": true
+    },
+    {
+      "a": 0.5,
+      "b": 1e+21,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": 0.5,
+      "b": -1e-7,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 0.5,
+      "b": 9007199254740992,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": 0.5,
+      "b": "",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0.5,
+      "b": "a",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0.5,
+      "b": "B",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0.5,
+      "b": "é",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0.5,
+      "b": "😀",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 0.5,
+      "b": "",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 1e+21,
+      "b": null,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 1e+21,
+      "b": true,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 1e+21,
+      "b": false,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 1e+21,
+      "b": 0,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 1e+21,
+      "b": 0,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 1e+21,
+      "b": 1,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 1e+21,
+      "b": -1,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 1e+21,
+      "b": 0.5,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 1e+21,
+      "b": 1e+21,
+      "compare": 0,
+      "equal": true
+    },
+    {
+      "a": 1e+21,
+      "b": -1e-7,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 1e+21,
+      "b": 9007199254740992,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 1e+21,
+      "b": "",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 1e+21,
+      "b": "a",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 1e+21,
+      "b": "B",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 1e+21,
+      "b": "é",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 1e+21,
+      "b": "😀",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 1e+21,
+      "b": "",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": -1e-7,
+      "b": null,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": -1e-7,
+      "b": true,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": -1e-7,
+      "b": false,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": -1e-7,
+      "b": 0,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": -1e-7,
+      "b": 0,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": -1e-7,
+      "b": 1,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": -1e-7,
+      "b": -1,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": -1e-7,
+      "b": 0.5,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": -1e-7,
+      "b": 1e+21,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": -1e-7,
+      "b": -1e-7,
+      "compare": 0,
+      "equal": true
+    },
+    {
+      "a": -1e-7,
+      "b": 9007199254740992,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": -1e-7,
+      "b": "",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": -1e-7,
+      "b": "a",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": -1e-7,
+      "b": "B",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": -1e-7,
+      "b": "é",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": -1e-7,
+      "b": "😀",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": -1e-7,
+      "b": "",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 9007199254740992,
+      "b": null,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 9007199254740992,
+      "b": true,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 9007199254740992,
+      "b": false,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 9007199254740992,
+      "b": 0,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 9007199254740992,
+      "b": 0,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 9007199254740992,
+      "b": 1,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 9007199254740992,
+      "b": -1,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 9007199254740992,
+      "b": 0.5,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 9007199254740992,
+      "b": 1e+21,
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": 9007199254740992,
+      "b": -1e-7,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": 9007199254740992,
+      "b": 9007199254740992,
+      "compare": 0,
+      "equal": true
+    },
+    {
+      "a": 9007199254740992,
+      "b": "",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 9007199254740992,
+      "b": "a",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 9007199254740992,
+      "b": "B",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 9007199254740992,
+      "b": "é",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 9007199254740992,
+      "b": "😀",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": 9007199254740992,
+      "b": "",
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": null,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": true,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": false,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": 0,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": 0,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": 1,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": -1,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": 0.5,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": 1e+21,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": -1e-7,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": 9007199254740992,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": "",
+      "compare": 0,
+      "equal": true
+    },
+    {
+      "a": "",
+      "b": "a",
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": "B",
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": "é",
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": "😀",
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": "",
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": "a",
+      "b": null,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": "a",
+      "b": true,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "a",
+      "b": false,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "a",
+      "b": 0,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "a",
+      "b": 0,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "a",
+      "b": 1,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "a",
+      "b": -1,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "a",
+      "b": 0.5,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "a",
+      "b": 1e+21,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "a",
+      "b": -1e-7,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "a",
+      "b": 9007199254740992,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "a",
+      "b": "",
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": "a",
+      "b": "a",
+      "compare": 0,
+      "equal": true
+    },
+    {
+      "a": "a",
+      "b": "B",
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": "a",
+      "b": "é",
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": "a",
+      "b": "😀",
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": "a",
+      "b": "",
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": "B",
+      "b": null,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": "B",
+      "b": true,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "B",
+      "b": false,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "B",
+      "b": 0,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "B",
+      "b": 0,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "B",
+      "b": 1,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "B",
+      "b": -1,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "B",
+      "b": 0.5,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "B",
+      "b": 1e+21,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "B",
+      "b": -1e-7,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "B",
+      "b": 9007199254740992,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "B",
+      "b": "",
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": "B",
+      "b": "a",
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": "B",
+      "b": "B",
+      "compare": 0,
+      "equal": true
+    },
+    {
+      "a": "B",
+      "b": "é",
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": "B",
+      "b": "😀",
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": "B",
+      "b": "",
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": "é",
+      "b": null,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": "é",
+      "b": true,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "é",
+      "b": false,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "é",
+      "b": 0,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "é",
+      "b": 0,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "é",
+      "b": 1,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "é",
+      "b": -1,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "é",
+      "b": 0.5,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "é",
+      "b": 1e+21,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "é",
+      "b": -1e-7,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "é",
+      "b": 9007199254740992,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "é",
+      "b": "",
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": "é",
+      "b": "a",
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": "é",
+      "b": "B",
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": "é",
+      "b": "é",
+      "compare": 0,
+      "equal": true
+    },
+    {
+      "a": "é",
+      "b": "😀",
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": "é",
+      "b": "",
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": "😀",
+      "b": null,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": "😀",
+      "b": true,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "😀",
+      "b": false,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "😀",
+      "b": 0,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "😀",
+      "b": 0,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "😀",
+      "b": 1,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "😀",
+      "b": -1,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "😀",
+      "b": 0.5,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "😀",
+      "b": 1e+21,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "😀",
+      "b": -1e-7,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "😀",
+      "b": 9007199254740992,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "😀",
+      "b": "",
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": "😀",
+      "b": "a",
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": "😀",
+      "b": "B",
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": "😀",
+      "b": "é",
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": "😀",
+      "b": "😀",
+      "compare": 0,
+      "equal": true
+    },
+    {
+      "a": "😀",
+      "b": "",
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": null,
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": true,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": false,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": 0,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": 0,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": 1,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": -1,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": 0.5,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": 1e+21,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": -1e-7,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": 9007199254740992,
+      "compare": "throws",
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": "",
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": "a",
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": "B",
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": "é",
+      "compare": 1,
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": "😀",
+      "compare": -1,
+      "equal": false
+    },
+    {
+      "a": "",
+      "b": "",
+      "compare": 0,
+      "equal": true
+    }
+  ]
+}

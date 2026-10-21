@@ -1,0 +1,52 @@
+{
+  "name": "zero-swift",
+  "version": "0.1.0",
+  "description": "Generates the Swift row types and schema of a Zero app for the Zero Swift client.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wevm/zero.git",
+    "directory": "packages/zero-swift-cli"
+  },
+  "bin": {
+    "zero-swift": "./src/bin.ts"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "publishConfig": {
+    "bin": {
+      "zero-swift": "./dist/bin.js"
+    }
+  },
+  "scripts": {
+    "build": "esbuild src/bin.ts --bundle --platform=node --format=esm --target=node22 --splitting --outdir=dist --external:@rocicorp/zero --external:typescript",
+    "test": "vitest run",
+    "generate": "UPDATE_GENERATED=1 vitest run",
+    "check-types": "tsc",
+    "lint": "oxlint --quiet --config ../../oxlint.config.ts src/",
+    "format": "oxfmt .",
+    "check-format": "oxfmt --check .",
+    "version-packages": "cd ../.. && pnpm dlx @changesets/cli@3.0.3 version && jq -r .version packages/zero-swift-cli/package.json > swift/VERSION"
+  },
+  "dependencies": {
+    "typescript": "6.0.3"
+  },
+  "devDependencies": {
+    "@rocicorp/zero": "workspace:*",
+    "@types/node": "^22.10.5",
+    "esbuild": "0.28.2",
+    "oxfmt": "^0.65.0",
+    "vitest": "^5.0.0",
+    "zero-schema": "workspace:*",
+    "zero-types": "workspace:*",
+    "zql": "workspace:*"
+  },
+  "peerDependencies": {
+    "@rocicorp/zero": ">=1.11.0"
+  },
+  "engines": {
+    "node": ">=22.18"
+  }
+}

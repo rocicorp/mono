@@ -1,0 +1,174 @@
+name: Swift
+
+# CI for the Swift client in swift/ and the conformance vectors it replays
+# (packages/zero-conformance). Linux runs on every change because the vectors
+# can go stale from any JS change. The Apple-only layer runs in swift-macos.yml.
+
+on:
+  push:
+    # swift-client is the development branch until the client lands on main.
+    branches: [main, swift-client]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  vectors:
+    name: Conformance Vectors
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 11.11.0
+      # The vectors are JS's answers, so they come from the repo's pinned Node.
+      # Node 24.22's JSON.parse misreads some escaped keys (see
+      # assertSoundJSONParse in packages/zero-conformance/src/vectors.ts).
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      # Fails when the checked-in vectors no longer match the JS behavior. Also
+      # writes the seeded fuzz corpora (generated/), which aren't checked in.
+      - name: Check vectors are current
+        run: pnpm --filter zero-conformance run test
+      # The Swift tests compile the Swift that zero-swift generates, and check
+      # the Swift ports of apps against the drift vectors it records.
+      - name: Check generated Swift and drift vectors are current
+        run: pnpm --filter zero-swift run test
+      - name: Check types
+        run: pnpm --filter zero-conformance --filter zero-swift run check-types
+      # The published CLI is a bundle; this keeps it bundling.
+      - name: Build the zero-swift CLI
+        run: pnpm --filter zero-swift run build
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: generated-vectors
+          path: packages/zero-conformance/generated/
+          if-no-files-found: error
+
+  linux:
+    name: Swift (Linux)
+    needs: vectors
+    runs-on: ubuntu-latest
+    container: swift:6.2.4-bookworm
+    defaults:
+      run:
+        working-directory: swift
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: generated-vectors
+          path: packages/zero-conformance/generated/
+      - name: Install system libraries
+        run: apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev
+      - name: Format
+        run: swift format lint --strict --recursive Sources Tests Package.swift
+      - name: Build
+        run: swift build --build-tests
+      - name: Test
+        run: swift test --skip-build
+      # Broken symbol links and undocumented parameters fail. ZeroUI is
+      # Apple-only; swift-macos.yml checks it.
+      - name: Docs
+        run: scripts/docs.sh Zero ZeroTesting
+      # zbugs' Swift port, checked against zbugs' TS queries and mutators on
+      # the samples in drift-samples.ts (the vectors job checks the record is
+      # current).
+      - name: zbugs
+        working-directory: apps/zbugs-swift
+        run: |
+          swift format lint --strict --recursive Sources Tests Package.swift
+          swift build --build-tests
+          swift test --skip-build
+
+  e2e:
+    name: Swift end-to-end (Linux)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 11.11.0
+      # zero-cache runs from source, which needs Node 24 (`using`).
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.x
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - name: Start Postgres
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql -q -c "ALTER SYSTEM SET wal_level = logical" \
+            -c "ALTER USER postgres PASSWORD 'postgres'"
+          sudo systemctl restart postgresql.service
+          until pg_isready -q -h 127.0.0.1; do sleep 1; done
+      - name: Install Swift
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/swift.tar.gz" \
+            https://download.swift.org/swift-6.2.4-release/ubuntu2404/swift-6.2.4-RELEASE/swift-6.2.4-RELEASE-ubuntu24.04.tar.gz
+          mkdir -p "$RUNNER_TEMP/swift"
+          tar -xzf "$RUNNER_TEMP/swift.tar.gz" -C "$RUNNER_TEMP/swift" --strip-components=1
+          echo "$RUNNER_TEMP/swift/usr/bin" >> "$GITHUB_PATH"
+      - name: Install system libraries
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libsqlite3-dev
+      - name: Build
+        working-directory: swift
+        run: swift build --build-tests
+      - name: Start zero-cache
+        env:
+          ZERO_E2E_PG: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+        run: |
+          node packages/zero-conformance/src/e2e/server.ts > "$RUNNER_TEMP/server.log" 2>&1 &
+          for _ in $(seq 1 120); do
+            grep -q '^ready ' "$RUNNER_TEMP/server.log" && exit 0
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/server.log"
+          exit 1
+      - name: Test
+        working-directory: swift
+        env:
+          ZERO_E2E_URL: ws://127.0.0.1:4848
+        run: swift test --skip-build --filter E2ETests
+      # zbugs' Swift port against zbugs' backend: its migrations and seed
+      # data, its API server running the TS queries and mutators, and
+      # zero-cache.
+      - name: Start zbugs' backend
+        env:
+          ZBUGS_PG: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+          ZBUGS_PORT: '4858'
+          ZBUGS_API_PORT: '5183'
+        run: |
+          node apps/zbugs-swift/server/server.ts > "$RUNNER_TEMP/zbugs.log" 2>&1 &
+          for _ in $(seq 1 300); do
+            grep -q '^ready ' "$RUNNER_TEMP/zbugs.log" && exit 0
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/zbugs.log"
+          exit 1
+      - name: Test zbugs against its backend
+        working-directory: apps/zbugs-swift
+        run: |
+          ZBUGS_E2E_TOKEN="$(grep '^token ' "$RUNNER_TEMP/zbugs.log" | cut -d' ' -f2)" \
+          ZBUGS_E2E_URL=http://127.0.0.1:4858 ZBUGS_E2E_API=http://127.0.0.1:5183 \
+            swift test --filter BackendTests
+      - name: Server logs
+        if: failure()
+        run: |
+          cat "$RUNNER_TEMP/server.log"
+          cat "$RUNNER_TEMP/zbugs.log" || true

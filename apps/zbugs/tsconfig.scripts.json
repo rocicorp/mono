@@ -6,6 +6,7 @@
   "include": [
     "scripts/change-log-traffic.ts",
     "scripts/rmv2-soak.ts",
-    "scripts/rmv2-soak/**/*.ts"
+    "scripts/rmv2-soak/**/*.ts",
+    "scripts/dev-token.ts"
   ]
 }
