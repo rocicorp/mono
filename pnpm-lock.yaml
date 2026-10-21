@@ -423,10 +423,16 @@ importers:
       '@rocicorp/logger':
         specifier: ^6.1.0
         version: 6.1.0
+      oxc-parser:
+        specifier: ^0.129.0
+        version: 0.129.0
       ws:
         specifier: ^8.22.0
         version: 8.22.0
     devDependencies:
+      '@faker-js/faker':
+        specifier: ^10.6.0
+        version: 10.6.0
       '@types/ws':
         specifier: ^8.5.12
         version: 8.18.1
@@ -992,6 +998,9 @@ importers:
       nanoid:
         specifier: ^5.1.16
         version: 5.1.16
+      oxc-parser:
+        specifier: ^0.129.0
+        version: 0.129.0
       oxfmt:
         specifier: ^0.65.0
         version: 0.65.0
@@ -1032,9 +1041,6 @@ importers:
       expo-sqlite:
         specifier: '>=15'
         version: 58.0.13(expo@58.0.14)(react-native@0.88.0(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.1))(react@19.3.1)
-      oxc-parser:
-        specifier: ^0.129.0
-        version: 0.129.0
       react-native:
         specifier: ^0.88.0
         version: 0.88.0(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.1)

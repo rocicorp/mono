@@ -17,9 +17,11 @@
   "dependencies": {
     "@dotenvx/dotenvx": "^1.39.0",
     "@rocicorp/logger": "^6.1.0",
+    "oxc-parser": "^0.129.0",
     "ws": "^8.22.0"
   },
   "devDependencies": {
+    "@faker-js/faker": "^10.6.0",
     "@types/ws": "^8.5.12",
     "ast-to-zql": "workspace:*",
     "otel": "workspace:*",
