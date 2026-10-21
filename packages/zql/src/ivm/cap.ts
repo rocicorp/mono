@@ -111,6 +111,12 @@ export class Cap implements Operator {
     if (capState.size === 0) {
       return;
     }
+    if (req.countOnly) {
+      for (let i = 0; i < capState.size; i++) {
+        yield placeholderNode;
+      }
+      return;
+    }
     // PK-based point lookups: fetch each tracked row by its PK directly,
     // rather than scanning the partition and filtering.
     for (const pk of capState.pks) {
@@ -312,6 +318,12 @@ export class Cap implements Operator {
     }
   }
 }
+
+// Yielded for each tracked row of a countOnly fetch.
+const placeholderNode: Node = Object.freeze({
+  row: Object.freeze({}),
+  relationships: Object.freeze({}),
+});
 
 function getCapStateKey(
   partitionKey: PartitionKey | undefined,

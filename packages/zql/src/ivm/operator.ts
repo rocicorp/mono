@@ -84,6 +84,13 @@ export type FetchRequest = {
   readonly reverse?: boolean | undefined;
 
   /**
+   * The caller only counts the nodes. An operator that knows the count may
+   * then yield that many placeholder nodes instead of fetching the rows.
+   * `Cap` does this from its state.
+   */
+  readonly countOnly?: boolean | undefined;
+
+  /**
    * Additional predicate the consumer wants the source/intermediate operators
    * to apply to the fetched rows. The receiver must AND this with whatever
    * filtering it already applies. Sources may use this to drive index

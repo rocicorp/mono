@@ -261,8 +261,9 @@ export class Exists implements FilterOperator {
         `Exists: relationship "${this.#relationshipName}" not found on node`,
     );
     if (this.#inPush) {
+      // Only the size is needed, which Cap can answer from its state.
       let size = 0;
-      for (const n of relationship()) {
+      for (const n of relationship(true)) {
         if (n === 'yield') {
           yield 'yield';
         } else {

@@ -13,8 +13,14 @@ export type Node = {
    * Relationships are generated lazily as read.
    * The stream may contain 'yield' to indicate the operator has yielded control.
    * See {@link Operator.fetch} for more details about yields.
+   *
+   * A caller that only counts the nodes can pass `countOnly`, see
+   * `FetchRequest.countOnly`.
    */
-  relationships: Record<string, () => Stream<Node | 'yield'>>;
+  relationships: Record<
+    string,
+    (countOnly?: boolean | undefined) => Stream<Node | 'yield'>
+  >;
 };
 
 /**
