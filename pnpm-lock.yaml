@@ -814,9 +814,6 @@ importers:
       oxfmt:
         specifier: ^0.74.0
         version: 0.74.0
-      package-up:
-        specifier: ^5.0.0
-        version: 5.0.0
       playwright:
         specifier: ^1.60.0
         version: 1.60.0
@@ -8701,10 +8698,6 @@ packages:
       '@75lb/nature':
         optional: true
 
-  find-up-simple@1.0.1:
-    resolution: {integrity: sha512-afd4O7zpqHeRyg4PfDQsXmlDe2PfdHtJt6Akt8jOWaApLOZk5JXs6VMR29lz03pRe9mpykrRCYIYxaJYcfpncQ==}
-    engines: {node: '>=18'}
-
   find-up@6.3.0:
     resolution: {integrity: sha512-v2ZsoEuVHYy8ZIlYqwPe/39Cy+cFDzp4dXPaxNvkEuouymu+2Jbz0PxpKarJHYJTmv2HWT3O382qY8l4jMWthw==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
@@ -10480,10 +10473,6 @@ packages:
   package-json@8.1.1:
     resolution: {integrity: sha512-cbH9IAIJHNj9uXi196JVsRlt7cHKak6u/e6AkL/bkRelZ7rlL3X1YKxsZwa36xipOEKAsdtmaG6aAJoM1fx2zA==}
     engines: {node: '>=14.16'}
-
-  package-up@5.0.0:
-    resolution: {integrity: sha512-MQEgDUvXCa3sGvqHg3pzHO8e9gqTCMPVrWUko3vPQGntwegmFo52mZb2abIVTjFnUcW0BcPz0D93jV5Cas1DWA==}
-    engines: {node: '>=18'}
 
   param-case@3.0.4:
     resolution: {integrity: sha512-RXlj7zCYokReqWpOPH9oYivUzLYZ5vAPIfEmCTNViosC78F8F0H9y7T7gG2M39ymgutxF5gcFEsyZQSph9Bp3A==}
@@ -21617,8 +21606,6 @@ snapshots:
 
   find-replace@5.0.2: {}
 
-  find-up-simple@1.0.1: {}
-
   find-up@6.3.0:
     dependencies:
       locate-path: 7.2.0
@@ -23865,10 +23852,6 @@ snapshots:
       registry-auth-token: 5.1.1
       registry-url: 6.0.1
       semver: 7.8.5
-
-  package-up@5.0.0:
-    dependencies:
-      find-up-simple: 1.0.1
 
   param-case@3.0.4:
     dependencies:

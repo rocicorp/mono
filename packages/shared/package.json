@@ -49,7 +49,6 @@
     "js-xxhash": "^4.0.0",
     "mitata": "^1.0.34",
     "oxfmt": "^0.74.0",
-    "package-up": "^5.0.0",
     "playwright": "^1.60.0",
     "type-fest": "^4.30.0",
     "typescript": "~7.0.2",

@@ -1,7 +1,6 @@
 import {readFile} from 'node:fs/promises';
-import {resolve as resolvePath} from 'node:path';
+import {dirname, join, resolve as resolvePath} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {packageUp} from 'package-up';
 import {isInternalPackage} from './internal-packages.ts';
 
 export async function getExternalFromPackageJSON(
@@ -9,13 +8,7 @@ export async function getExternalFromPackageJSON(
   includePeerDeps = false,
 ): Promise<string[]> {
   const cwd = basePath.startsWith('file:') ? fileURLToPath(basePath) : basePath;
-  const path = await packageUp({cwd});
-
-  if (!path) {
-    throw new Error('Could not find package.json');
-  }
-  const x = await readFile(path, 'utf-8');
-  const pkg = JSON.parse(x);
+  const pkg = JSON.parse(await readClosestPackageJSON(cwd));
 
   const deps: Set<string> = new Set();
   for (const dep of Object.keys({
@@ -31,6 +24,23 @@ export async function getExternalFromPackageJSON(
     }
   }
   return [...deps];
+}
+
+async function readClosestPackageJSON(cwd: string): Promise<string> {
+  for (let dir = resolvePath(cwd); ; dir = dirname(dir)) {
+    try {
+      return await readFile(join(dir, 'package.json'), 'utf-8');
+    } catch (e) {
+      // ENOTDIR when the starting path is a file.
+      const {code} = e as NodeJS.ErrnoException;
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') {
+        throw e;
+      }
+      if (dir === dirname(dir)) {
+        throw new Error('Could not find package.json');
+      }
+    }
+  }
 }
 
 function getRecursiveExternals(
