@@ -1275,7 +1275,11 @@ export class Storer implements Service {
                 watermarkFound = true;
               } else if (watermarkFound) {
                 lastBatchConsumed = sub.catchup(
-                  reconstructWatermarkedChange(entry),
+                  reconstructWatermarkedChange(
+                    entry.watermark,
+                    entry.tag,
+                    entry.change,
+                  ),
                 );
                 count++;
               } else if (mode === 'backup') {

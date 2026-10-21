@@ -11,16 +11,13 @@ export function useElementSize(elm: React.RefObject<HTMLElement | null>) {
     }
 
     const observer = new ResizeObserver(entries => {
-      const entry = entries[0];
-      if (entry) {
-        setSize({
-          width: entry.contentRect.width,
-          height: entry.contentRect.height,
-        });
+      const box = entries[0]?.borderBoxSize[0];
+      if (box) {
+        setSize({width: box.inlineSize, height: box.blockSize});
       }
     });
 
-    observer.observe(elm.current);
+    observer.observe(elm.current, {box: 'border-box'});
 
     return () => {
       observer.disconnect();

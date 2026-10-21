@@ -1,10 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
 import SQLite3Database from '@rocicorp/zero-sqlite3';
 import type {LogConfig} from '../../otel/src/log-options.ts';
-import {timeSampled} from '../../otel/src/maybe-time.ts';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
 import {getOrInsertComputed} from '../../shared/src/map.ts';
 import {must} from '../../shared/src/must.ts';
+import {assignProperty} from '../../shared/src/objects.ts';
 import type {Writable} from '../../shared/src/writable.ts';
 import type {Condition, Ordering} from '../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../zero-protocol/src/data.ts';
@@ -43,7 +43,7 @@ import {
 } from '../../zql/src/ivm/source.ts';
 import type {Stream} from '../../zql/src/ivm/stream.ts';
 import {assertOrderingIncludesPK} from '../../zql/src/query/complete-ordering.ts';
-import type {Database, Statement} from './db.ts';
+import type {BatchCursor, Database, Statement} from './db.ts';
 import {FetchSQLCache, type FetchSQL} from './fetch-sql.ts';
 import {recordIndexUsage} from './index-usage.ts';
 import {compile, format, sql} from './internal/sql.ts';
@@ -64,6 +64,13 @@ type Statements = {
 };
 
 let eventCount = 0;
+
+// A fetch reads its rows in batches that start at one row and double up to the
+// maximum. Take, Cap and EXISTS often stop after a row or two, and the rows a
+// batch reads ahead are work SQLite does for nothing; doubling keeps them
+// fewer than the rows consumed.
+const FIRST_BATCH_ROWS = 1;
+const MAX_BATCH_ROWS = 128;
 
 export type TableSourceOptions = {
   /**
@@ -102,6 +109,7 @@ export type TableSourceOptions = {
  */
 export class TableSource implements Source {
   readonly #dbCache = new WeakMap<Database, Statements>();
+  readonly #rawColumns = new WeakMap<Statement, readonly RawColumn[]>();
   readonly #connections: Connection[] = [];
   readonly #table: string;
   readonly #columns: Record<string, SchemaValue>;
@@ -465,22 +473,21 @@ export class TableSource implements Source {
   ): Generator<Row, void, undefined> {
     const {cache} = this.#stmts;
     for (const sqlAndBindings of queries) {
-      const cachedStatement = cache.get(sqlAndBindings.text);
-      cachedStatement.statement.safeIntegers(true);
-      const rowIterator = cachedStatement.statement.iterate<SQLiteRow>(
-        ...sqlAndBindings.values,
-      );
+      // The text of a fetch shape is the same string every time, so it needs
+      // no normalizing.
+      const cachedStatement = cache.getExact(sqlAndBindings.text);
+      const cursor = cachedStatement.statement.batches(sqlAndBindings.values);
       try {
         debug?.initQuery(this.#table, sqlAndBindings.text);
-        yield* this.#mapFromSQLiteTypes(
-          this.#columns,
-          rowIterator,
+        yield* this.#readRows(
+          cursor,
+          this.#rawColumnsFor(cachedStatement.statement),
           sqlAndBindings.text,
           debug,
         );
       } finally {
-        // Ensure the SQLite iterate() is closed.
-        rowIterator.return?.();
+        // Ensure the SQLite cursor is closed.
+        cursor.close();
         recordIndexUsage(cachedStatement.statement, this.#table);
         if (debug) {
           let totalNvisit = 0;
@@ -551,31 +558,53 @@ export class TableSource implements Source {
       : generateWithPendingDeltaUnordered(baseRows, deltaRows, delta);
   }
 
-  *#mapFromSQLiteTypes(
-    valueTypes: Record<string, SchemaValue>,
-    rowIterator: IterableIterator<SQLiteRow>,
+  #rawColumnsFor(statement: Statement): readonly RawColumn[] {
+    return getOrInsertComputed(this.#rawColumns, statement, () =>
+      statement
+        .columns()
+        .map(({name}) => rawColumn(this.#columns, name, this.#table)),
+    );
+  }
+
+  *#readRows(
+    cursor: BatchCursor,
+    columns: readonly RawColumn[],
     query: string,
     debug: DebugDelegate | undefined,
   ): IterableIterator<Row> {
-    let result;
-    do {
-      result = timeSampled(
-        this.#lc,
-        ++eventCount,
-        this.#logConfig.ivmSampling,
-        () => rowIterator.next(),
-        this.#logConfig.slowRowThreshold,
-        () =>
-          `table-source.next took too long for ${query}. Are you missing an index?`,
-      );
-      if (result.done) {
-        break;
+    for (let capacity = FIRST_BATCH_ROWS; ;) {
+      const {ivmSampling, slowRowThreshold} = this.#logConfig;
+      const sampled = ivmSampling > 0 && ++eventCount % ivmSampling === 0;
+      const start = sampled ? performance.now() : 0;
+      const values = cursor.next(capacity);
+      const n = values.length / columns.length;
+      if (sampled) {
+        const duration = performance.now() - start;
+        // slowRowThreshold is per row: scale it by the rows actually read.
+        if (duration > slowRowThreshold * Math.max(n, 1)) {
+          this.#lc.warn?.(
+            `table-source.next took too long for ${query}. Are you missing an index? duration: ${duration}ms`,
+          );
+        }
       }
-      this.#rowsRead++;
-      const row = fromSQLiteTypes(valueTypes, result.value, this.#table);
-      debug?.rowVended(this.#table, query, row);
-      yield row;
-    } while (!result.done);
+      if (n === 0) {
+        return;
+      }
+      // Rows are converted only when they are consumed, so rows read ahead
+      // and never used cost no conversion and cannot fail the fetch.
+      for (let r = 0; r < n; r++) {
+        const row = fromSQLiteRawRow(
+          columns,
+          values,
+          this.#table,
+          r * columns.length,
+        );
+        this.#rowsRead++;
+        debug?.rowVended(this.#table, query, row);
+        yield row;
+      }
+      capacity = Math.min(capacity * 2, MAX_BATCH_ROWS);
+    }
   }
 
   *push(change: SourceChange): Stream<'yield'> {
@@ -886,14 +915,18 @@ export class TableSource implements Source {
     const keyCols = Object.keys(rowKey);
 
     const stmt = this.#getRowStmt(keyCols);
-    const raw = this.#stmts.cache.use(stmt, ({statement}) => {
-      const row = statement
+    const row = this.#stmts.cache.use(stmt, ({statement}) => {
+      const values = statement
         .safeIntegers(true)
-        .get<SQLiteRow>(...toSQLiteTypes(keyCols, rowKey, this.#columns));
+        .raw(true)
+        .get<SQLiteValue[] | undefined>(
+          ...toSQLiteTypes(keyCols, rowKey, this.#columns),
+        );
       recordIndexUsage(statement, this.#table);
-      return row;
+      return values === undefined
+        ? undefined
+        : fromSQLiteRawRow(this.#rawColumnsFor(statement), values, this.#table);
     });
-    const row = raw ? fromSQLiteTypes(this.#columns, raw, this.#table) : raw;
 
     const delta = this.#delta;
     if (delta === undefined || delta.isEmpty) {
@@ -1042,12 +1075,65 @@ export function fromSQLiteTypes(
   for (const key of Object.keys(row)) {
     const valueType = valueTypes[key];
     if (valueType === undefined) {
-      const columnList = Object.keys(valueTypes).sort().join(', ');
-      throw new Error(
-        `Invalid column "${key}" for table "${tableName}". Synced columns include ${columnList}`,
-      );
+      throw invalidColumnError(valueTypes, key, tableName);
     }
     newRow[key] = fromSQLiteType(valueType.type, row[key], key, tableName);
+  }
+  return newRow;
+}
+
+/** A result column of a raw row and the type it converts to. */
+export type RawColumn = {
+  readonly name: string;
+  readonly type: ValueType;
+};
+
+export function rawColumn(
+  valueTypes: Record<string, SchemaValue>,
+  name: string,
+  tableName: string,
+): RawColumn {
+  // Not a column that `valueTypes` merely inherits, e.g. `toString`.
+  const valueType = Object.hasOwn(valueTypes, name)
+    ? valueTypes[name]
+    : undefined;
+  if (valueType === undefined) {
+    throw invalidColumnError(valueTypes, name, tableName);
+  }
+  return {name, type: valueType.type};
+}
+
+function invalidColumnError(
+  valueTypes: Record<string, SchemaValue>,
+  name: string,
+  tableName: string,
+): Error {
+  const columnList = Object.keys(valueTypes).sort().join(', ');
+  return new Error(
+    `Invalid column "${name}" for table "${tableName}". Synced columns include ${columnList}`,
+  );
+}
+
+/**
+ * Like {@link fromSQLiteTypes}, for a row read with `raw(true)`: the row's
+ * values are `values[offset]` up to `values[offset + columns.length - 1]`.
+ */
+export function fromSQLiteRawRow(
+  columns: readonly RawColumn[],
+  values: readonly SQLiteValue[],
+  tableName: string,
+  offset = 0,
+): Row {
+  const newRow: Writable<Row> = {};
+  for (let i = 0; i < columns.length; i++) {
+    const {name, type} = columns[i];
+    const value = fromSQLiteType(type, values[offset + i], name, tableName);
+    if (name === '__proto__') {
+      // An own property, not the legacy setter.
+      assignProperty<string, Value>(newRow, name, value);
+    } else {
+      newRow[name] = value;
+    }
   }
   return newRow;
 }

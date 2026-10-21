@@ -780,7 +780,9 @@ async function* reconstructBatches(
   batches: AsyncIterable<ChangeLogEntry[]>,
 ): AsyncIterable<WatermarkedChange[]> {
   for await (const batch of batches) {
-    yield batch.map(reconstructWatermarkedChange);
+    yield batch.map(({watermark, tag, change}) =>
+      reconstructWatermarkedChange(watermark, tag, change),
+    );
   }
 }
 

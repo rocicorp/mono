@@ -351,6 +351,8 @@
 #root {
   display: flex;
   align-items: stretch;
+  flex: 1;
+  min-width: 0;
 }
 
 a {
@@ -404,8 +406,11 @@ textarea.autoResize {
   resize: none; /* Prevent manual resizing */
 }
 
+/* Fill the width without 100vw, which includes the window's vertical
+   scrollbar and so overflows horizontally. */
 .app-container {
-  width: 100vw;
+  flex: 1;
+  min-width: 0;
 }
 
 .modal-background {
@@ -647,7 +652,38 @@ textarea.autoResize {
   display: flex;
   flex-direction: column;
   width: 100%;
+  min-width: 0;
   padding-left: 16rem;
+}
+
+/* The list scrolls the window; the header and filter bar stay put above it.
+   --list-header-height is set from the measured header (see ListPage). */
+:root {
+  --list-header-top: 0px;
+}
+
+/* Keep rows the virtualizer scrolls to (permalinks, j/k) out from under the
+   sticky header. --list-header-height has no fallback on purpose: it is only
+   set while the list is mounted, and elsewhere the invalid value leaves
+   scroll-padding-top at its initial `auto`. */
+html {
+  scroll-padding-top: calc(var(--list-header-top) + var(--list-header-height));
+}
+
+.list-view-sticky-header {
+  position: sticky;
+  top: var(--list-header-top);
+  z-index: 1;
+  background-color: color-mix(
+    in srgb,
+    var(--color-background) 50%,
+    transparent
+  );
+  backdrop-filter: blur(16px);
+  /* Take over the app container's top padding so the stuck header keeps the
+     same gap above it. */
+  margin-top: -2rem;
+  padding-top: 2rem;
 }
 
 .list-view-header-container {
@@ -764,8 +800,9 @@ textarea.autoResize {
 }
 
 .issue-timestamp {
+  order: 1;
+  flex-shrink: 0;
   cursor: help;
-  margin-right: 2rem;
 }
 
 .list-view-header input {
@@ -833,7 +870,7 @@ textarea.autoResize {
   flex-wrap: wrap;
   gap: 0.5rem;
   box-shadow: 0px 1px 0px 0px var(--color-light-outline) inset;
-  padding: 1rem 2rem 1rem 0.5rem;
+  padding: 1rem 0 1rem 0.5rem;
 }
 
 .list-view-filter-container > .filter-icon,
@@ -971,16 +1008,15 @@ textarea.autoResize {
   padding-left: 2.5rem;
 }
 
+/* A flex item placed just before the timestamp (see .issue-timestamp's
+   order), so the timestamp stays flush with the row's right edge. */
 .row.unread::after {
   content: '';
+  flex-shrink: 0;
   height: 0.4rem;
   width: 0.4rem;
   background-color: var(--color-primary-cta);
-  position: absolute;
-  right: 0.8rem;
-  top: 50%;
   border-radius: 1rem;
-  transform: translateY(-50%);
 }
 
 .primary-content .row.permalink {
@@ -1113,6 +1149,10 @@ textarea.autoResize {
 .primary-content .issue-taglist {
   display: flex;
   padding: 0.5rem 0.5rem 0 0;
+  /* Clip a long label list rather than pushing the timestamp off the row. */
+  min-width: 0;
+  max-width: 40%;
+  overflow: hidden;
 }
 
 .primary-content .issue-taglist .pill {
@@ -1818,6 +1858,12 @@ textarea.autoResize {
     padding: 9rem 0 0 0;
   }
 
+  /* Stick where the header starts, at the content's top padding, so it
+     doesn't shift when it sticks. The fixed nav covers the top of it. */
+  :root {
+    --list-header-top: 9rem;
+  }
+
   .section-tabs {
     position: fixed;
     top: 6rem;
@@ -2001,6 +2047,11 @@ textarea.autoResize {
 
   .app-container {
     padding: 1.5rem;
+  }
+
+  .list-view-sticky-header {
+    margin-top: -1.5rem;
+    padding-top: 1.5rem;
   }
 
   .list-view-header .list-view-title-full {

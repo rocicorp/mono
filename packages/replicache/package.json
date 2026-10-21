@@ -80,18 +80,20 @@
   },
   "devDependencies": {
     "@op-engineering/op-sqlite": ">=15",
-    "@rocicorp/zero-sqlite3": "^1.1.5",
+    "@rocicorp/zero-sqlite3": "^1.1.7",
     "@types/command-line-args": "^5.2.3",
     "@types/command-line-usage": "^5.0.4",
     "command-line-args": "^6.0.1",
     "command-line-usage": "^7.0.3",
     "compare-utf8": "^0.2.3",
-    "esbuild": "0.27.7",
+    "esbuild": "0.28.2",
+    "expo": "^58.0.14",
     "expo-sqlite": ">=15",
     "hash-wasm": "^4.9.0",
     "idb": "^7.0.1",
     "oxfmt": "^0.65.0",
     "playwright": "^1.60.0",
+    "react-native": "^0.88.0",
     "shared": "workspace:*",
     "typescript": "~7.0.2",
     "vitest": "^5.0.0",
@@ -99,7 +101,7 @@
   },
   "peerDependencies": {
     "@op-engineering/op-sqlite": ">=15",
-    "@rocicorp/zero-sqlite3": "^1.1.5",
+    "@rocicorp/zero-sqlite3": "^1.1.7",
     "expo-sqlite": ">=15"
   },
   "peerDependenciesMeta": {

@@ -237,7 +237,7 @@ export function computeZqlSpecs(
   replica: Database,
   opts: ZqlSpecOptions,
   tableSpecs: Map<string, LiteAndZqlSpec> = new Map(),
-  fullTables?: Map<string, LiteTableSpec>,
+  fullTables?: Map<string, LiteTableSpecWithReplicationStatus>,
 ): Map<string, LiteAndZqlSpec> {
   return computeZqlSpecsFromLiteSpecs(
     listTables(replica),
@@ -261,7 +261,7 @@ export function computeZqlSpecsFromLiteSpecs(
   indexes: readonly (LiteIndexSpec | ReplicaIndexSpec)[],
   {includeBackfillingColumns}: ZqlSpecOptions,
   tableSpecs: Map<string, LiteAndZqlSpec> = new Map(),
-  fullTables?: Map<string, LiteTableSpec>,
+  fullTables?: Map<string, LiteTableSpecWithReplicationStatus>,
   lc?: LogContext,
 ): Map<string, LiteAndZqlSpec> {
   tableSpecs.clear();

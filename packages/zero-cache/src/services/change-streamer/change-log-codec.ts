@@ -77,10 +77,11 @@ export function extractChangeSubstring(
 
 /** Reconstructs the canonical downstream JSON around a stored change. */
 export function reconstructWatermarkedChange(
-  entry: ChangeLogEntry,
+  watermark: string,
+  entryTag: string,
+  change: string,
 ): WatermarkedChange {
-  const {watermark, change} = entry;
-  const tag = entry.tag as ChangeTag;
+  const tag = entryTag as ChangeTag;
   switch (tag) {
     case 'begin':
       return [

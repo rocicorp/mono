@@ -1,5 +1,5 @@
 import type {RunResult} from '@rocicorp/zero-sqlite3';
-import type {Database} from '../../../zqlite/src/db.ts';
+import type {Database, Statement} from '../../../zqlite/src/db.ts';
 import {StatementCache} from '../../../zqlite/src/internal/statement-cache.ts';
 
 /**
@@ -32,7 +32,7 @@ export class StatementRunner {
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   get(sql: string, ...args: unknown[]): any {
     return this.statementCache.use(sql, cached =>
-      cached.statement.get(...args),
+      objectRows(cached.statement).get(...args),
     );
   }
 
@@ -43,7 +43,7 @@ export class StatementRunner {
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   all(sql: string, ...args: unknown[]): any[] {
     return this.statementCache.use(sql, cached =>
-      cached.statement.all(...args),
+      objectRows(cached.statement).all(...args),
     );
   }
 
@@ -67,4 +67,12 @@ export class StatementRunner {
   rollback(): RunResult {
     return this.run('ROLLBACK');
   }
+}
+
+/**
+ * Cached statements are shared by SQL, so one may have been left in raw or
+ * pluck mode by another caller.
+ */
+function objectRows(statement: Statement): Statement {
+  return statement.raw(false).pluck(false);
 }

@@ -14,10 +14,26 @@ allowBuilds:
   prisma: true
   protobufjs: true
   ssh2: false
+# `pnpm audit` (run in CI by .github/workflows/audit.yml) fails on any advisory
+# not listed here. Only list advisories that have no fixed release to update or
+# override to, and remove them once one ships.
+auditConfig:
+  ignoreGhsas:
+    # braces <=3.0.3, via chokidar/micromatch (Docusaurus, metro, Tailwind 3).
+    # No 3.0.4 on npm yet.
+    - GHSA-vfj7-8cjw-p6xm
+    # node-forge <=1.4.0, via @expo/cli (Expo devDependencies). No 1.4.1 on npm
+    # yet.
+    - GHSA-86w9-cpqp-85rv
+    # sprintf-js 1.0.3, via argparse 1 (js-yaml 3 in Docusaurus,
+    # @tantaman/api-extractor in zql-viz). No 1.1.4 on npm yet.
+    - GHSA-hp3w-g68c-fv3c
+
 minimumReleaseAgeExclude:
   - '@rocicorp/zero-virtual@0.7.0'
   - '@badrap/valita@0.5.5'
   - '@rocicorp/zero-sqlite3@1.1.5'
+  - '@rocicorp/zero-sqlite3@1.1.7'
   - '@rocicorp/zero@1.11.0'
 
 # docusaurus-plugin-typedoc and typedoc-docusaurus-theme both import typedoc
@@ -36,18 +52,48 @@ packageExtensions:
       typedoc: 0.28.x
 
 overrides:
-  '@hono/node-server@<1.19.13': ^1.19.13
+  '@graphql-tools/utils@<12.0.1': ^12.0.1
+  '@hono/node-server@<1.19.15': ^1.19.15
+  '@opentelemetry/propagator-jaeger@<2.9.0': ^2.9.0
   '@types/node': '^22.10.5'
+  '@xmldom/xmldom@>=0.8.0 <0.8.15': ^0.8.15
+  '@xmldom/xmldom@>=0.9.0 <0.9.12': ^0.9.12
   ajv@>=7.0.0-alpha.0 <8.18.0: ^8.18.0
-  esbuild: '0.27.7'
+  basic-ftp@<6.2.1: ^6.2.1
+  browserslist@<4.28.7: ^4.28.7
+  compression@<1.8.2: ^1.8.2
+  deepmerge-ts@<8.0.0: ^8.0.0
+  esbuild: '0.28.2'
+  hono@<4.12.25: ^4.12.25
+  image-size@>=2.0.0 <2.0.3: ^2.0.3
+  js-yaml@>=4.0.0 <4.3.2: ^4.3.2
   lodash@>=4.0.0 <=4.17.23: ^4.17.24
   minimatch@>=10.0.0 <10.2.1: ^10.2.1
   minimatch@>=10.0.0 <10.2.3: ^10.2.3
+  mysql2@<3.22.0: ^3.22.0
+  nanoid@<3.3.18: ^3.3.18
   playwright@<1.55.1: ^1.55.1
-  postcss@<8.5.10: ^8.5.10
+  postcss-selector-parser@<7.1.6: ^7.1.6
+  postcss@<8.5.18: ^8.5.18
+  qs@<6.16.0: ^6.16.0
   serialize-javascript@<=7.0.2: ^7.0.3
+  shell-quote@<1.8.4: ^1.8.4
+  source-map-js@<1.2.2: ^1.2.2
+  tinypool@<2.1.2: ^2.2.0
   undici@<6.24.0: ^6.24.0
+  uuid@<11.1.1: ^11.1.1
+  valibot@<1.4.2: ^1.4.2
   webpackbar: ^7.0.0
+  # @rocicorp/zero-previous (npm:@rocicorp/zero@1.11.0) is only used for its
+  # client in zql-integration-tests; align its OpenTelemetry deps with the
+  # workspace so it doesn't drag in old, vulnerable instrumentations.
+  '@rocicorp/zero@1.11.0>@opentelemetry/api-logs': ^0.223.0
+  '@rocicorp/zero@1.11.0>@opentelemetry/auto-instrumentations-node': ^0.81.2
+  '@rocicorp/zero@1.11.0>@opentelemetry/exporter-metrics-otlp-http': ^0.223.0
+  '@rocicorp/zero@1.11.0>@opentelemetry/resources': ^2.12.0
+  '@rocicorp/zero@1.11.0>@opentelemetry/sdk-metrics': ^2.12.0
+  '@rocicorp/zero@1.11.0>@opentelemetry/sdk-node': ^0.223.0
+  '@rocicorp/zero@1.11.0>@opentelemetry/sdk-trace-node': ^2.12.0
 
 patchedDependencies:
   postgres@3.4.7: packages/zero/patches/postgres@3.4.7.patch

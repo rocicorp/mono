@@ -17,7 +17,7 @@
   "dependencies": {
     "@dotenvx/dotenvx": "^1.39.0",
     "@rocicorp/logger": "^6.1.0",
-    "ws": "^8.18.1"
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@types/ws": "^8.5.12",

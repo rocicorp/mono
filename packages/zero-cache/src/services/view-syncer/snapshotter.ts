@@ -2,7 +2,6 @@ import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {stringify, type JSONValue} from '../../../../shared/src/bigint-json.ts';
 import {getOrInsertComputed} from '../../../../shared/src/map.ts';
-import * as v from '../../../../shared/src/valita.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../../zero-types/src/schema.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
@@ -21,7 +20,7 @@ import type {AppID} from '../../types/shards.ts';
 import {id} from '../../types/sql.ts';
 import {
   RESET_OP,
-  changeLogEntrySchema as schema,
+  parseChangeLogEntry,
   SET_OP,
   TRUNCATE_OP,
 } from '../replicator/schema/change-log.ts';
@@ -390,6 +389,14 @@ export type Change = {
 };
 
 /** See `Snapshot.countChangesSince()`. */
+/** An entry of {@link Snapshot.changesSince}, in the order of its SELECT. */
+type RawChangeLogEntry = readonly [
+  stateVersion: string,
+  table: string,
+  rowKey: string,
+  op: string,
+];
+
 /** Where an entry is in the order that the change log is read in. */
 type ChangeLogPosition = {
   readonly stateVersion: string;
@@ -790,7 +797,7 @@ class Snapshot {
    */
   changesSince(prevVersion: string, tables?: string | undefined) {
     // Note: The queried fields are constrained to only those that are relevant
-    // to the snapshot diff, i.e. those defined in the changeLogEntrySchema.
+    // to the snapshot diff, i.e. those of a ChangeLogEntry.
     const cached = this.db.statementCache.get(
       tables === undefined
         ? `SELECT "stateVersion", "table", "rowKey", "op" FROM "_zero.changeLog2"
@@ -799,11 +806,13 @@ class Snapshot {
          WHERE "stateVersion" > ? AND ${CHANGE_LOG_TABLES_FILTER}
          ORDER BY "stateVersion" ASC, "pos" ASC`,
     );
+    // Raw rows skip building a row object per entry. See RawChangeLogEntry.
+    cached.statement.raw(true);
     return {
       changes:
         tables === undefined
-          ? cached.statement.iterate(prevVersion)
-          : cached.statement.iterate(
+          ? cached.statement.iterate<RawChangeLogEntry>(prevVersion)
+          : cached.statement.iterate<RawChangeLogEntry>(
               prevVersion,
               RESET_OP,
               TRUNCATE_OP,
@@ -1131,7 +1140,9 @@ class Diff implements SnapshotDiff {
 
             this.changesScanned++;
             const parseStart = performance.now();
-            const {table, rowKey, op, stateVersion} = v.parse(value, schema);
+            const {table, rowKey, op, stateVersion} = parseChangeLogEntry(
+              ...value,
+            );
             this.stats.parseMs += performance.now() - parseStart;
             this.changesScannedByTable.set(
               table,
