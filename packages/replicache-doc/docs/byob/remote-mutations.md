@@ -24,10 +24,10 @@ Create a file in the project at `server/src/push.ts` and copy the below code int
 This looks like a lot of code, but it's just implementing the description above. See the inline comments for additional details.
 
 ```ts
-import {serverID, tx, type Transaction} from './db';
-import type {MessageWithID} from 'shared';
-import type {MutationV1, PushRequestV1} from 'replicache';
 import type {Request, Response, NextFunction} from 'express';
+import type {MutationV1, PushRequestV1} from 'replicache';
+import type {MessageWithID} from 'shared';
+import {serverID, tx, type Transaction} from './db';
 
 export async function handlePush(
   req: Request,

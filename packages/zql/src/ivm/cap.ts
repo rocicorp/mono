@@ -6,7 +6,7 @@ import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import {makeAddChange, type Change, type EditChange} from './change.ts';
 import type {Constraint} from './constraint.ts';
-import type {Comparator, Node} from './data.ts';
+import {valueToKey, type Comparator, type Node} from './data.ts';
 import {
   throwOutput,
   type FetchRequest,
@@ -109,6 +109,12 @@ export class Cap implements Operator {
       return;
     }
     if (capState.size === 0) {
+      return;
+    }
+    if (req.countOnly) {
+      for (let i = 0; i < capState.size; i++) {
+        yield placeholderNode;
+      }
       return;
     }
     // PK-based point lookups: fetch each tracked row by its PK directly,
@@ -313,10 +319,19 @@ export class Cap implements Operator {
   }
 }
 
+// Yielded for each tracked row of a countOnly fetch.
+const placeholderNode: Node = Object.freeze({
+  row: Object.freeze({}),
+  relationships: Object.freeze({}),
+});
+
 function getCapStateKey(
   partitionKey: PartitionKey | undefined,
   rowOrConstraint: Row | Constraint | undefined,
 ): string {
+  if (partitionKey?.length === 1 && rowOrConstraint) {
+    return 'cap:' + valueToKey(rowOrConstraint[partitionKey[0]]);
+  }
   const partitionValues: Value[] = [];
 
   if (partitionKey && rowOrConstraint) {

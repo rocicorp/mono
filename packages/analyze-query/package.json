@@ -15,24 +15,24 @@
     "check-fmt": "oxfmt --check ."
   },
   "dependencies": {
-    "@dotenvx/dotenvx": "^1.39.0",
+    "@dotenvx/dotenvx": "^1.66.0",
     "@rocicorp/logger": "^6.1.0",
+    "oxc-parser": "^0.129.0",
     "ws": "^8.22.0"
   },
   "devDependencies": {
-    "@types/ws": "^8.5.12",
+    "@faker-js/faker": "^10.6.0",
+    "@types/ws": "^8.18.1",
     "ast-to-zql": "workspace:*",
     "otel": "workspace:*",
-    "oxfmt": "^0.65.0",
+    "oxfmt": "^0.74.0",
     "shared": "workspace:*",
     "vitest": "^5.0.0",
     "zero-cache": "workspace:*",
     "zero-client": "workspace:*",
     "zero-protocol": "workspace:*",
-    "zero-schema": "workspace:*",
     "zero-types": "workspace:*",
-    "zql": "workspace:*",
-    "zqlite": "workspace:*"
+    "zql": "workspace:*"
   },
   "packageManager": "pnpm@11.11.0"
 }

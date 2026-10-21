@@ -8,7 +8,7 @@ overrides:
   '@graphql-tools/utils@<12.0.1': ^12.0.1
   '@hono/node-server@<1.19.15': ^1.19.15
   '@opentelemetry/propagator-jaeger@<2.9.0': ^2.9.0
-  '@types/node': ^22.10.5
+  '@types/node': ^22.19.19
   '@xmldom/xmldom@>=0.8.0 <0.8.15': ^0.8.15
   '@xmldom/xmldom@>=0.9.0 <0.9.12': ^0.9.12
   ajv@>=7.0.0-alpha.0 <8.18.0: ^8.18.0
@@ -64,7 +64,7 @@ importers:
         specifier: 1.10.0
         version: 1.10.0
       '@types/node':
-        specifier: ^22.10.5
+        specifier: ^22.19.19
         version: 22.19.19
       '@vitest/browser':
         specifier: ^5.0.0
@@ -79,8 +79,8 @@ importers:
         specifier: ^2.11.29
         version: 2.11.29
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       oxlint:
         specifier: ^1.80.0
         version: 1.80.0(oxlint-tsgolint@7.0.2001)
@@ -91,13 +91,13 @@ importers:
         specifier: ^1.60.0
         version: 1.60.0
       syncpack:
-        specifier: ^14.3.0
+        specifier: ^14.3.1
         version: 14.3.1
       tsnapi:
-        specifier: ^0.3.2
+        specifier: ^0.3.3
         version: 0.3.3(vitest@5.0.0)
       turbo:
-        specifier: ^2.4.4
+        specifier: ^2.9.14
         version: 2.9.14
       typescript:
         specifier: ~7.0.2
@@ -112,14 +112,14 @@ importers:
   apps/otel-proxy:
     devDependencies:
       '@types/node':
-        specifier: ^22.10.5
+        specifier: ^22.19.19
         version: 22.19.19
       '@vitest/coverage-v8':
         specifier: ^5.0.0
         version: 5.0.0(@vitest/browser@5.0.0)(vitest@5.0.0)
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       typescript:
         specifier: ~7.0.2
         version: 7.0.2
@@ -130,31 +130,31 @@ importers:
   apps/zbugs:
     dependencies:
       '@aws-sdk/client-s3':
-        specifier: ^3.844.0
+        specifier: ^3.1048.0
         version: 3.1048.0
       '@aws-sdk/s3-request-presigner':
-        specifier: ^3.844.0
+        specifier: ^3.1048.0
         version: 3.1048.0
       '@dotenvx/dotenvx':
-        specifier: ^1.39.0
+        specifier: ^1.66.0
         version: 1.66.0
       '@faker-js/faker':
         specifier: ^10.6.0
         version: 10.6.0
       '@fastify/cookie':
-        specifier: ^10.0.0
+        specifier: ^10.0.1
         version: 10.0.1
       '@fastify/oauth2':
-        specifier: ^8.0.0
+        specifier: ^8.2.0
         version: 8.2.0
       '@floating-ui/react':
         specifier: ^0.26.28
         version: 0.26.28(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@headlessui/react':
-        specifier: ^2.1.8
+        specifier: ^2.2.10
         version: 2.2.10(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@octokit/core':
-        specifier: ^6.1.2
+        specifier: ^6.1.6
         version: 6.1.6
       '@rocicorp/zero':
         specifier: workspace:*
@@ -172,43 +172,43 @@ importers:
         specifier: ^0.2.3
         version: 0.2.3
       emoji-picker-element:
-        specifier: ^1.22.8
+        specifier: ^1.29.1
         version: 1.29.1
       emoji-picker-element-data:
-        specifier: ^1.6.1
+        specifier: ^1.8.0
         version: 1.8.0
       fastify:
         specifier: ^5.12.7
         version: 5.12.7
       jose:
-        specifier: ^5.9.3
+        specifier: ^5.10.0
         version: 5.10.0
       js-cookie:
-        specifier: ^3.0.5
+        specifier: ^3.0.7
         version: 3.0.7
       nanoid:
         specifier: ^5.1.16
         version: 5.1.16
       pg:
-        specifier: ^8.16.3
+        specifier: ^8.20.0
         version: 8.20.0
       postgres:
         specifier: 3.4.7
         version: 3.4.7(patch_hash=1ab70f82038a98cb34611424c35af68a1d87aa3bd8ed78a7f863c628ae3aeac7)
       react:
-        specifier: ^19.2.6
+        specifier: ^19.3.1
         version: 19.3.1
       react-dom:
-        specifier: ^19.2.6
+        specifier: ^19.3.1
         version: 19.3.1(react@19.3.1)
       react-dropzone:
-        specifier: ^14.3.8
+        specifier: ^14.4.1
         version: 14.4.1(react@19.3.1)
       react-markdown:
-        specifier: ^9.0.1
+        specifier: ^9.1.0
         version: 9.1.0(@types/react@19.3.0)(react@19.3.1)
       react-textarea-autosize:
-        specifier: ^8.5.3
+        specifier: ^8.5.9
         version: 8.5.9(@types/react@19.3.0)(react@19.3.1)
       react-toastify:
         specifier: ^10.0.6
@@ -220,7 +220,7 @@ importers:
         specifier: ^6.0.0
         version: 6.0.0
       remark-gfm:
-        specifier: ^4.0.0
+        specifier: ^4.0.1
         version: 4.0.1
       unified:
         specifier: ^11.0.5
@@ -229,23 +229,23 @@ importers:
         specifier: ^5.1.0
         version: 5.1.0
       use-debounce:
-        specifier: ^10.0.4
+        specifier: ^10.1.1
         version: 10.1.1(react@19.3.1)
       usehooks-ts:
-        specifier: ^3.1.0
+        specifier: ^3.1.1
         version: 3.1.1(react@19.3.1)
       wouter:
-        specifier: ^3.7.1
+        specifier: ^3.9.0
         version: 3.9.0(react@19.3.1)
       zod:
-        specifier: ^4.1.11
+        specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
       '@rocicorp/logger':
         specifier: ^6.1.0
         version: 6.1.0
       '@tailwindcss/forms':
-        specifier: ^0.5.0
+        specifier: ^0.5.11
         version: 0.5.11(tailwindcss@3.4.19(tsx@4.22.0)(yaml@2.9.0))
       '@types/hast':
         specifier: ^3.0.4
@@ -257,19 +257,19 @@ importers:
         specifier: ^0.53.2
         version: 0.53.2
       '@types/node':
-        specifier: ^22.10.5
+        specifier: ^22.19.19
         version: 22.19.19
       '@types/pg':
         specifier: ^8.20.0
         version: 8.20.0
       '@types/react':
-        specifier: ^19
+        specifier: ^19.3.0
         version: 19.3.0
       '@types/react-dom':
-        specifier: ^19
+        specifier: ^19.3.0
         version: 19.3.0(@types/react@19.3.0)
       '@vitejs/plugin-react':
-        specifier: ^6.0.1
+        specifier: ^6.0.2
         version: 6.0.2(babel-plugin-react-compiler@1.0.0)(vite@8.3.4(@types/node@22.19.19)(esbuild@0.28.2)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
       drizzle-kit:
         specifier: ^0.31.10
@@ -278,19 +278,19 @@ importers:
         specifier: ^0.45.2
         version: 0.45.2(@electric-sql/pglite@0.4.1)(@op-engineering/op-sqlite@18.2.5(react-native@0.88.0(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.1))(react@19.3.1))(@opentelemetry/api@1.9.1)(@prisma/client@7.8.0(prisma@7.8.0(@types/node@22.19.19)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(magicast@0.5.4)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2))(typescript@7.0.2))(@types/pg@8.20.0)(expo-sqlite@58.0.13(expo@58.0.14)(react-native@0.88.0(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.1))(react@19.3.1))(kysely@0.28.17)(mysql2@3.24.6(@types/node@22.19.19))(pg@8.20.0)(postgres@3.4.7(patch_hash=1ab70f82038a98cb34611424c35af68a1d87aa3bd8ed78a7f863c628ae3aeac7))(prisma@7.8.0(@types/node@22.19.19)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(magicast@0.5.4)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2))
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       postcss-preset-env:
-        specifier: ^7.4.3
+        specifier: ^7.8.3
         version: 7.8.3(postcss@8.5.30)
       rehype-video:
-        specifier: ^2.3.0
+        specifier: ^2.3.1
         version: 2.3.1
       shared:
         specifier: workspace:*
         version: link:../../packages/shared
       tailwindcss:
-        specifier: ^3.0.23
+        specifier: ^3.4.19
         version: 3.4.19(tsx@4.22.0)(yaml@2.9.0)
       typescript:
         specifier: ~7.0.2
@@ -317,7 +317,7 @@ importers:
   apps/zero-throughput:
     dependencies:
       '@dotenvx/dotenvx':
-        specifier: ^1.39.0
+        specifier: ^1.66.0
         version: 1.66.0
       '@rocicorp/zero':
         specifier: workspace:*
@@ -332,18 +332,18 @@ importers:
         specifier: ^8.22.0
         version: 8.22.0
       zod:
-        specifier: ^4.1.11
+        specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
       '@types/node':
-        specifier: ^22.10.5
+        specifier: ^22.19.19
         version: 22.19.19
       '@types/ws':
-        specifier: ^8.5.12
+        specifier: ^8.18.1
         version: 8.18.1
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../../packages/shared
@@ -366,7 +366,7 @@ importers:
         specifier: ^4.7.0
         version: 4.7.0(monaco-editor@0.52.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@xyflow/react':
-        specifier: ^12.8.2
+        specifier: ^12.10.2
         version: 12.10.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       lucide-react:
         specifier: ^0.539.0
@@ -375,29 +375,29 @@ importers:
         specifier: ^0.52.2
         version: 0.52.2
       react:
-        specifier: ^19.2.6
+        specifier: ^19.3.1
         version: 19.3.1
       react-dom:
-        specifier: ^19.2.6
+        specifier: ^19.3.1
         version: 19.3.1(react@19.3.1)
       react-resizable-panels:
-        specifier: ^3.0.4
+        specifier: ^3.0.6
         version: 3.0.6(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       typescript-6:
-        specifier: npm:typescript@~6.0.2
+        specifier: npm:typescript@~6.0.3
         version: typescript@6.0.3
     devDependencies:
       '@tantaman/api-extractor':
-        specifier: ^7.52.13
+        specifier: ^7.55.0
         version: 7.55.0(@types/node@22.19.19)
       '@types/react':
-        specifier: ^19
+        specifier: ^19.3.0
         version: 19.3.0
       '@types/react-dom':
-        specifier: ^19
+        specifier: ^19.3.0
         version: 19.3.0(@types/react@19.3.0)
       '@vitejs/plugin-react':
-        specifier: ^6.0.1
+        specifier: ^6.0.2
         version: 6.0.2(babel-plugin-react-compiler@1.0.0)(vite@8.3.4(@types/node@22.19.19)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
       shared:
         specifier: workspace:*
@@ -418,17 +418,23 @@ importers:
   packages/analyze-query:
     dependencies:
       '@dotenvx/dotenvx':
-        specifier: ^1.39.0
+        specifier: ^1.66.0
         version: 1.66.0
       '@rocicorp/logger':
         specifier: ^6.1.0
         version: 6.1.0
+      oxc-parser:
+        specifier: ^0.129.0
+        version: 0.129.0
       ws:
         specifier: ^8.22.0
         version: 8.22.0
     devDependencies:
+      '@faker-js/faker':
+        specifier: ^10.6.0
+        version: 10.6.0
       '@types/ws':
-        specifier: ^8.5.12
+        specifier: ^8.18.1
         version: 8.18.1
       ast-to-zql:
         specifier: workspace:*
@@ -437,8 +443,8 @@ importers:
         specifier: workspace:*
         version: link:../otel
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -454,24 +460,18 @@ importers:
       zero-protocol:
         specifier: workspace:*
         version: link:../zero-protocol
-      zero-schema:
-        specifier: workspace:*
-        version: link:../zero-schema
       zero-types:
         specifier: workspace:*
         version: link:../zero-types
       zql:
         specifier: workspace:*
         version: link:../zql
-      zqlite:
-        specifier: workspace:*
-        version: link:../zqlite
 
   packages/ast-to-zql:
     dependencies:
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
     devDependencies:
       '@faker-js/faker':
         specifier: ^10.6.0
@@ -507,8 +507,8 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -538,8 +538,8 @@ importers:
         version: 6.1.0
     devDependencies:
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -563,7 +563,7 @@ importers:
         version: 1.0.2
     devDependencies:
       '@op-engineering/op-sqlite':
-        specifier: '>=15'
+        specifier: ^18.2.5
         version: 18.2.5(react-native@0.88.0(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.1))(react@19.3.1)
       '@rocicorp/zero-sqlite3':
         specifier: ^1.1.7
@@ -575,10 +575,10 @@ importers:
         specifier: ^5.0.4
         version: 5.0.4
       command-line-args:
-        specifier: ^6.0.1
+        specifier: ^6.0.2
         version: 6.0.2
       command-line-usage:
-        specifier: ^7.0.3
+        specifier: ^7.0.4
         version: 7.0.4
       compare-utf8:
         specifier: ^0.2.3
@@ -590,17 +590,17 @@ importers:
         specifier: ^58.0.14
         version: 58.0.14(@babel/core@7.29.7)(@expo/dom-webview@58.0.2)(react-dom@19.3.1(react@19.3.1))(react-native@0.88.0(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.1))(react@19.3.1)(typescript@7.0.2)
       expo-sqlite:
-        specifier: '>=15'
+        specifier: ^58.0.13
         version: 58.0.13(expo@58.0.14)(react-native@0.88.0(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.1))(react@19.3.1)
       hash-wasm:
-        specifier: ^4.9.0
+        specifier: ^4.12.0
         version: 4.12.0
       idb:
-        specifier: ^7.0.1
+        specifier: ^7.1.1
         version: 7.1.1
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       playwright:
         specifier: ^1.60.0
         version: 1.60.0
@@ -617,7 +617,7 @@ importers:
         specifier: ^5.0.0
         version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@5.0.0)(@vitest/coverage-v8@5.0.0)(@vitest/ui@5.0.0)(vite@8.3.4(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.1))
       xbytes:
-        specifier: ^1.7.0
+        specifier: ^1.9.1
         version: 1.9.1
 
   packages/replicache-doc:
@@ -638,16 +638,16 @@ importers:
         specifier: ^2.1.1
         version: 2.1.1
       docusaurus-plugin-script-tags:
-        specifier: ^2.0.0-beta.6
+        specifier: 2.0.0-beta.6
         version: 2.0.0-beta.6
       prism-react-renderer:
         specifier: ^2.4.1
         version: 2.4.1(react@19.3.1)
       react:
-        specifier: ^19.2.6
+        specifier: ^19.3.1
         version: 19.3.1
       react-dom:
-        specifier: ^19.2.6
+        specifier: ^19.3.1
         version: 19.3.1(react@19.3.1)
     devDependencies:
       '@docusaurus/module-type-aliases':
@@ -666,10 +666,10 @@ importers:
         specifier: 15.2.1
         version: 15.2.1
       typedoc:
-        specifier: ^0.28.17
+        specifier: ^0.28.19
         version: 0.28.19(typescript@6.0.3)
       typedoc-plugin-markdown:
-        specifier: ^4.10.0
+        specifier: ^4.11.0
         version: 4.11.0(typedoc@0.28.19(typescript@6.0.3))
       typescript:
         specifier: ~6.0.2
@@ -687,10 +687,10 @@ importers:
         specifier: ^5.0.4
         version: 5.0.4
       command-line-args:
-        specifier: ^6.0.1
+        specifier: ^6.0.2
         version: 6.0.2
       command-line-usage:
-        specifier: ^7.0.3
+        specifier: ^7.0.4
         version: 7.0.4
       compare-utf8:
         specifier: ^0.2.3
@@ -699,13 +699,13 @@ importers:
         specifier: 0.28.2
         version: 0.28.2
       get-port:
-        specifier: ^7.0.0
+        specifier: ^7.2.0
         version: 7.2.0
       hash-wasm:
-        specifier: ^4.9.0
+        specifier: ^4.12.0
         version: 4.12.0
       idb:
-        specifier: ^7.0.1
+        specifier: ^7.1.1
         version: 7.1.1
       playwright:
         specifier: ^1.60.0
@@ -729,15 +729,15 @@ importers:
         specifier: ^8.3.4
         version: 8.3.4(@types/node@22.19.19)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0)
       xbytes:
-        specifier: ^1.7.0
+        specifier: ^1.9.1
         version: 1.9.1
     devDependencies:
       '@types/ws':
-        specifier: ^8.5.12
+        specifier: ^8.18.1
         version: 8.18.1
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       ws:
         specifier: ^8.22.0
         version: 8.22.0
@@ -748,7 +748,7 @@ importers:
         specifier: 0.5.5
         version: 0.5.5
       '@dotenvx/dotenvx':
-        specifier: ^1.39.0
+        specifier: ^1.66.0
         version: 1.66.0
       '@rocicorp/logger':
         specifier: ^6.1.0
@@ -757,25 +757,25 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2
       chalk-template:
-        specifier: ^1.1.0
+        specifier: ^1.1.2
         version: 1.1.2
       command-line-args:
-        specifier: ^6.0.1
+        specifier: ^6.0.2
         version: 6.0.2
       command-line-usage:
-        specifier: ^7.0.3
+        specifier: ^7.0.4
         version: 7.0.4
       defu:
-        specifier: ^6.1.4
+        specifier: ^6.1.7
         version: 6.1.7
       json-custom-numbers:
         specifier: ^3.1.1
         version: 3.1.1
       kasi:
-        specifier: ^1.1.0
+        specifier: ^1.1.2
         version: 1.1.2
       semver:
-        specifier: ^7.5.4
+        specifier: ^7.8.0
         version: 7.8.0
     devDependencies:
       '@faker-js/faker':
@@ -791,10 +791,10 @@ importers:
         specifier: ^5.0.4
         version: 5.0.4
       '@types/node':
-        specifier: ^22.10.5
+        specifier: ^22.19.19
         version: 22.19.19
       '@types/semver':
-        specifier: ^7.5.1
+        specifier: ^7.7.1
         version: 7.7.1
       '@types/strip-ansi':
         specifier: ^3.0.0
@@ -803,7 +803,7 @@ importers:
         specifier: ^0.2.3
         version: 0.2.3
       fast-check:
-        specifier: ^3.18.0
+        specifier: ^3.23.2
         version: 3.23.2
       js-xxhash:
         specifier: ^4.0.0
@@ -812,16 +812,13 @@ importers:
         specifier: ^1.0.34
         version: 1.0.34
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
-      package-up:
-        specifier: ^5.0.0
-        version: 5.0.0
+        specifier: ^0.74.0
+        version: 0.74.0
       playwright:
         specifier: ^1.60.0
         version: 1.60.0
       type-fest:
-        specifier: ^4.30.0
+        specifier: ^4.41.0
         version: 4.41.0
       typescript:
         specifier: ~7.0.2
@@ -846,10 +843,10 @@ importers:
         specifier: ^8.20.0
         version: 8.20.0
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       pg:
-        specifier: ^8.16.3
+        specifier: ^8.20.0
         version: 8.20.0
       postgres:
         specifier: 3.4.7
@@ -888,16 +885,16 @@ importers:
         specifier: ^3.3.0
         version: 3.3.0
       '@dotenvx/dotenvx':
-        specifier: ^1.39.0
+        specifier: ^1.66.0
         version: 1.66.0
       '@drdgvhbh/postgres-error-codes':
         specifier: ^0.0.6
         version: 0.0.6
       '@fastify/cors':
-        specifier: ^10.0.0
+        specifier: ^10.1.0
         version: 10.1.0
       '@fastify/websocket':
-        specifier: ^11.0.0
+        specifier: ^11.2.0
         version: 11.2.0
       '@google-cloud/precise-date':
         specifier: ^4.0.0
@@ -945,40 +942,40 @@ importers:
         specifier: ^1.1.7
         version: 1.1.7
       '@standard-schema/spec':
-        specifier: ^1.0.0
+        specifier: ^1.1.0
         version: 1.1.0
       '@types/basic-auth':
         specifier: ^1.1.8
         version: 1.1.8
       '@types/ws':
-        specifier: ^8.5.12
+        specifier: ^8.18.1
         version: 8.18.1
       basic-auth:
         specifier: ^2.0.1
         version: 2.0.1
       chalk-template:
-        specifier: ^1.1.0
+        specifier: ^1.1.2
         version: 1.1.2
       chokidar:
-        specifier: ^4.0.1
+        specifier: ^4.0.3
         version: 4.0.3
       cloudevents:
         specifier: ^10.0.0
         version: 10.0.0
       command-line-args:
-        specifier: ^6.0.1
+        specifier: ^6.0.2
         version: 6.0.2
       command-line-usage:
-        specifier: ^7.0.3
+        specifier: ^7.0.4
         version: 7.0.4
       compare-utf8:
         specifier: ^0.2.3
         version: 0.2.3
       defu:
-        specifier: ^6.1.4
+        specifier: ^6.1.7
         version: 6.1.7
       eventemitter3:
-        specifier: ^5.0.1
+        specifier: ^5.0.4
         version: 5.0.4
       fastify:
         specifier: ^5.12.7
@@ -987,20 +984,23 @@ importers:
         specifier: ^4.0.1
         version: 4.0.1
       jose:
-        specifier: ^5.9.3
+        specifier: ^5.10.0
         version: 5.10.0
       json-custom-numbers:
         specifier: ^3.1.1
         version: 3.1.1
       kasi:
-        specifier: ^1.1.0
+        specifier: ^1.1.2
         version: 1.1.2
       nanoid:
         specifier: ^5.1.16
         version: 5.1.16
+      oxc-parser:
+        specifier: ^0.129.0
+        version: 0.129.0
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       parse-prometheus-text-format:
         specifier: ^1.1.1
         version: 1.1.1
@@ -1011,7 +1011,7 @@ importers:
         specifier: 3.4.7
         version: 3.4.7(patch_hash=1ab70f82038a98cb34611424c35af68a1d87aa3bd8ed78a7f863c628ae3aeac7)
       semver:
-        specifier: ^7.5.4
+        specifier: ^7.8.0
         version: 7.8.0
       url-pattern:
         specifier: ^1.0.3
@@ -1024,7 +1024,7 @@ importers:
         version: 8.22.0
     devDependencies:
       '@op-engineering/op-sqlite':
-        specifier: '>=15'
+        specifier: ^18.2.5
         version: 18.2.5(react-native@0.88.0(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.1))(react@19.3.1)
       analyze-query:
         specifier: workspace:*
@@ -1036,11 +1036,8 @@ importers:
         specifier: ^58.0.14
         version: 58.0.14(@babel/core@7.29.7)(@expo/dom-webview@58.0.2)(react-dom@19.3.1(react@19.3.1))(react-native@0.88.0(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.1))(react@19.3.1)(typescript@7.0.2)
       expo-sqlite:
-        specifier: '>=15'
+        specifier: ^58.0.13
         version: 58.0.13(expo@58.0.14)(react-native@0.88.0(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.1))(react@19.3.1)
-      oxc-parser:
-        specifier: ^0.129.0
-        version: 0.129.0
       react-native:
         specifier: ^0.88.0
         version: 0.88.0(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.1)
@@ -1051,10 +1048,10 @@ importers:
         specifier: workspace:*
         version: link:../shared
       syncpack:
-        specifier: ^14.3.0
+        specifier: ^14.3.1
         version: 14.3.1
       typedoc:
-        specifier: ^0.28.17
+        specifier: ^0.28.19
         version: 0.28.19(typescript@7.0.2)
       typescript:
         specifier: ~7.0.2
@@ -1099,10 +1096,10 @@ importers:
         specifier: ^0.0.6
         version: 0.0.6
       '@fastify/cors':
-        specifier: ^10.0.0
+        specifier: ^10.1.0
         version: 10.1.0
       '@fastify/websocket':
-        specifier: ^11.0.0
+        specifier: ^11.2.0
         version: 11.2.0
       '@google-cloud/precise-date':
         specifier: ^4.0.0
@@ -1165,10 +1162,10 @@ importers:
         specifier: ^0.2.3
         version: 0.2.3
       defu:
-        specifier: ^6.1.4
+        specifier: ^6.1.7
         version: 6.1.7
       eventemitter3:
-        specifier: ^5.0.1
+        specifier: ^5.0.4
         version: 5.0.4
       fastify:
         specifier: ^5.12.7
@@ -1177,7 +1174,7 @@ importers:
         specifier: ^4.0.1
         version: 4.0.1
       jose:
-        specifier: ^5.9.3
+        specifier: ^5.10.0
         version: 5.10.0
       json-custom-numbers:
         specifier: ^3.1.1
@@ -1220,10 +1217,10 @@ importers:
         specifier: workspace:*
         version: link:../zero-events
       '@testcontainers/postgresql':
-        specifier: ^10.9.0
+        specifier: ^10.28.0
         version: 10.28.0
       '@types/node':
-        specifier: ^22.10.5
+        specifier: ^22.19.19
         version: 22.19.19
       '@types/pg-format':
         specifier: ^1.0.5
@@ -1232,26 +1229,26 @@ importers:
         specifier: ^3.0.0
         version: 3.0.0
       '@types/ws':
-        specifier: ^8.5.12
+        specifier: ^8.18.1
         version: 8.18.1
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
       fast-check:
-        specifier: ^3.18.0
+        specifier: ^3.23.2
         version: 3.23.2
       mockttp:
-        specifier: ^4.2.1
+        specifier: ^4.4.1
         version: 4.4.1
       nock:
-        specifier: ^14.0.4
+        specifier: ^14.0.15
         version: 14.0.15
       otel:
         specifier: workspace:*
         version: link:../otel
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -1287,7 +1284,7 @@ importers:
         specifier: ^10.6.0
         version: 10.6.0
       '@standard-schema/spec':
-        specifier: ^1.0.0
+        specifier: ^1.1.0
         version: 1.1.0
       ast-to-zql:
         specifier: workspace:*
@@ -1299,11 +1296,11 @@ importers:
         specifier: 0.28.2
         version: 0.28.2
       fast-check:
-        specifier: ^3.18.0
+        specifier: ^3.23.2
         version: 3.23.2
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       playwright:
         specifier: ^1.60.0
         version: 1.60.0
@@ -1377,8 +1374,8 @@ importers:
         specifier: 0.28.2
         version: 0.28.2
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -1408,8 +1405,8 @@ importers:
         version: link:../zql
     devDependencies:
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       typescript:
         specifier: ~7.0.2
         version: 7.0.2
@@ -1424,8 +1421,8 @@ importers:
         version: 6.1.0
     devDependencies:
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       vitest:
         specifier: ^5.0.0
         version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@5.0.0)(@vitest/coverage-v8@5.0.0)(@vitest/ui@5.0.0)(vite@8.3.4(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.1))
@@ -1446,11 +1443,11 @@ importers:
         version: 0.2.3
     devDependencies:
       fast-check:
-        specifier: ^3.18.0
+        specifier: ^3.23.2
         version: 3.23.2
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -1470,23 +1467,23 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2
       react-dom:
-        specifier: ^19.2.6
+        specifier: ^19.3.1
         version: 19.3.1(react@19.3.1)
     devDependencies:
       '@testing-library/react':
         specifier: ^16.3.2
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@types/react':
-        specifier: ^19
+        specifier: ^19.3.0
         version: 19.3.0
       '@types/react-dom':
-        specifier: ^19
+        specifier: ^19.3.0
         version: 19.3.0(@types/react@19.3.0)
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       react:
-        specifier: ^19.2.6
+        specifier: ^19.3.1
         version: 19.3.1
       shared:
         specifier: workspace:*
@@ -1511,8 +1508,8 @@ importers:
         version: 1.0.2
     devDependencies:
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       replicache:
         specifier: workspace:*
         version: link:../replicache
@@ -1523,8 +1520,8 @@ importers:
   packages/zero-schema:
     devDependencies:
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -1545,13 +1542,13 @@ importers:
         version: 6.1.0
     devDependencies:
       '@prisma/adapter-pg':
-        specifier: ^7.7.0
+        specifier: ^7.8.0
         version: 7.8.0
       '@prisma/client':
-        specifier: ^7.7.0
+        specifier: ^7.8.0
         version: 7.8.0(prisma@7.8.0(@types/node@22.20.5)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(magicast@0.5.4)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
       '@standard-schema/spec':
-        specifier: ^1.0.0
+        specifier: ^1.1.0
         version: 1.1.0
       '@types/pg':
         specifier: ^8.20.0
@@ -1563,16 +1560,16 @@ importers:
         specifier: ^0.28.17
         version: 0.28.17
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       pg:
-        specifier: ^8.16.3
+        specifier: ^8.20.0
         version: 8.20.0
       postgres:
         specifier: 3.4.7
         version: 3.4.7(patch_hash=1ab70f82038a98cb34611424c35af68a1d87aa3bd8ed78a7f863c628ae3aeac7)
       prisma:
-        specifier: ^7.7.0
+        specifier: ^7.8.0
         version: 7.8.0(@types/node@22.20.5)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(magicast@0.5.4)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3)
       shared:
         specifier: workspace:*
@@ -1608,16 +1605,16 @@ importers:
         specifier: ^0.8.10
         version: 0.8.10(solid-js@1.9.17)
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
       solid-js:
-        specifier: ^1.9.4
+        specifier: ^1.9.17
         version: 1.9.17
       vite-plugin-solid:
-        specifier: ^2.11.11
+        specifier: ^2.11.12
         version: 2.11.12(solid-js@1.9.17)(vite@8.3.4(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.1))
       vitest:
         specifier: ^5.0.0
@@ -1663,8 +1660,8 @@ importers:
   packages/zero-types:
     devDependencies:
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -1691,10 +1688,10 @@ importers:
         specifier: ^6.1.0
         version: 6.1.0
       '@standard-schema/spec':
-        specifier: ^1.0.0
+        specifier: ^1.1.0
         version: 1.1.0
       fast-check:
-        specifier: ^3.18.0
+        specifier: ^3.23.2
         version: 3.23.2
       nanoid:
         specifier: ^5.1.16
@@ -1703,8 +1700,8 @@ importers:
         specifier: workspace:*
         version: link:../otel
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -1739,8 +1736,8 @@ importers:
         specifier: workspace:*
         version: link:../otel
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       rn-bench:
         specifier: workspace:*
         version: link:../../tools/rn-bench
@@ -1802,10 +1799,10 @@ importers:
         specifier: workspace:*
         version: link:../otel
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       pg:
-        specifier: ^8.16.3
+        specifier: ^8.20.0
         version: 8.20.0
       shared:
         specifier: workspace:*
@@ -1863,7 +1860,7 @@ importers:
         version: link:../zql
     devDependencies:
       fast-check:
-        specifier: ^3.18.0
+        specifier: ^3.23.2
         version: 3.23.2
       nanoid:
         specifier: ^5.1.16
@@ -1872,8 +1869,8 @@ importers:
         specifier: workspace:*
         version: link:../otel
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -1903,8 +1900,8 @@ importers:
         specifier: ^6.1.0
         version: 6.1.0
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -1918,7 +1915,7 @@ importers:
   prod/sst:
     dependencies:
       '@dotenvx/dotenvx':
-        specifier: ^1.39.0
+        specifier: ^1.66.0
         version: 1.66.0
       sst:
         specifier: 3.8.9
@@ -1928,17 +1925,17 @@ importers:
         specifier: 8.10.147
         version: 8.10.147
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
 
   scripts:
     devDependencies:
       '@types/node':
-        specifier: ^22.10.5
+        specifier: ^22.19.19
         version: 22.19.19
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       typescript:
         specifier: ~7.0.2
         version: 7.0.2
@@ -1949,7 +1946,7 @@ importers:
   tools/client-simulator:
     dependencies:
       '@dotenvx/dotenvx':
-        specifier: ^1.39.0
+        specifier: ^1.66.0
         version: 1.66.0
       '@rocicorp/logger':
         specifier: ^6.1.0
@@ -1962,11 +1959,11 @@ importers:
         version: 8.22.0
     devDependencies:
       '@types/ws':
-        specifier: ^8.5.12
+        specifier: ^8.18.1
         version: 8.18.1
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../../packages/shared
@@ -1977,7 +1974,7 @@ importers:
   tools/load-generator:
     dependencies:
       '@dotenvx/dotenvx':
-        specifier: ^1.39.0
+        specifier: ^1.66.0
         version: 1.66.0
       '@rocicorp/logger':
         specifier: ^6.1.0
@@ -1996,8 +1993,8 @@ importers:
         specifier: ^1.0.5
         version: 1.0.5
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../../packages/shared
@@ -2005,8 +2002,8 @@ importers:
   tools/oxlint-plugin-zero:
     devDependencies:
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       oxlint:
         specifier: ^1.80.0
         version: 1.80.0(oxlint-tsgolint@7.0.2001)
@@ -2023,18 +2020,18 @@ importers:
         specifier: ^6.1.0
         version: 6.1.0
       find-process:
-        specifier: ^1.4.10
+        specifier: ^1.4.11
         version: 1.4.11
       pidusage:
-        specifier: ^4.0.0
+        specifier: ^4.0.1
         version: 4.0.1
     devDependencies:
       '@types/pidusage':
         specifier: ^2.0.5
         version: 2.0.5
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../../packages/shared
@@ -2048,16 +2045,16 @@ importers:
         specifier: ^5.0.4
         version: 5.0.4
       '@types/node':
-        specifier: ^22.10.5
+        specifier: ^22.19.19
         version: 22.19.19
       '@types/ws':
-        specifier: ^8.5.12
+        specifier: ^8.18.1
         version: 8.18.1
       command-line-args:
-        specifier: ^6.0.1
+        specifier: ^6.0.2
         version: 6.0.2
       command-line-usage:
-        specifier: ^7.0.3
+        specifier: ^7.0.4
         version: 7.0.4
       typescript:
         specifier: ~7.0.2
@@ -2067,8 +2064,8 @@ importers:
         version: 8.22.0
     devDependencies:
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
 
   tools/sqlite-io-yield-simulator:
     dependencies:
@@ -2086,11 +2083,11 @@ importers:
         version: link:../../packages/zqlite
     devDependencies:
       '@types/ws':
-        specifier: ^8.5.12
+        specifier: ^8.18.1
         version: 8.18.1
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       shared:
         specifier: workspace:*
         version: link:../../packages/shared
@@ -2102,11 +2099,11 @@ importers:
         version: 0.129.0
     devDependencies:
       '@types/node':
-        specifier: ^22.10.5
+        specifier: ^22.19.19
         version: 22.19.19
       oxfmt:
-        specifier: ^0.65.0
-        version: 0.65.0
+        specifier: ^0.74.0
+        version: 0.74.0
       typescript:
         specifier: ~7.0.2
         version: 7.0.2
@@ -5140,8 +5137,20 @@ packages:
     cpu: [arm]
     os: [android]
 
+  '@oxfmt/binding-android-arm-eabi@0.74.0':
+    resolution: {integrity: sha512-xxQwrf5EPI5zxvuCTW8r6tzCTjPQ+h6+HqJ0iRKRy2zS1yBllt/xLVjoIyUc+FnR7g0a5g1SZv2yyDYhTItLbA==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm]
+    os: [android]
+
   '@oxfmt/binding-android-arm64@0.65.0':
     resolution: {integrity: sha512-6DXH5sftNlaHpWJG50hFMF+Qxtq5D2TmahvcDPxWNcGIf8qrC9Y0YgHYcYZ2hlWzaccKXh/f3GcssH8vtkl4JA==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [android]
+
+  '@oxfmt/binding-android-arm64@0.74.0':
+    resolution: {integrity: sha512-FJW3sATVvrWbV64al8xofCPZj4500Z/1W0ad7Tg1rcCUyh0EMbuSrsf3jsZS7CEbwQ5fQ0mRhmkc129GFgofSQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [android]
@@ -5152,8 +5161,20 @@ packages:
     cpu: [arm64]
     os: [darwin]
 
+  '@oxfmt/binding-darwin-arm64@0.74.0':
+    resolution: {integrity: sha512-TfmNKBD30dGyMu9GCLiaw2rt/z7fms9LS+5cKcNOyWst0QgAs8oZs6wPxMbVaaDVE0/PCdCosgWM1vbu6f5NUg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [darwin]
+
   '@oxfmt/binding-darwin-x64@0.65.0':
     resolution: {integrity: sha512-sTNwIx1gre3MyiHOPLu7IGW4UyMScYL4DTmJT01p4vzB0En+OJUQz6KuH8t0PpsClRSaMuY3b0QmtoPItfO8Lg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [x64]
+    os: [darwin]
+
+  '@oxfmt/binding-darwin-x64@0.74.0':
+    resolution: {integrity: sha512-5Usf8+DfC4Q3o/MD8FkN47GrI6y0KbhQ4KhZ2HGzMZcXjcW1AeldwbUn51aKih+1TVuJFF9qkNm6X1nzm6NYng==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [darwin]
@@ -5164,8 +5185,20 @@ packages:
     cpu: [x64]
     os: [freebsd]
 
+  '@oxfmt/binding-freebsd-x64@0.74.0':
+    resolution: {integrity: sha512-eL+1O3gykw1XihbZh2MRAciQvU2988LByrnjhyo/dmNG74X4oZ7XzigRoWPRFLfJCp8hzRkp/LbEhwe7uuT2eA==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [x64]
+    os: [freebsd]
+
   '@oxfmt/binding-linux-arm-gnueabihf@0.65.0':
     resolution: {integrity: sha512-gIdXFAt/bURnjxuoedDEWdZ0PEWEmdDcm8qdpoFYYvW3QMk/5D4vUaH4mlMeRpeTdST4izUgHVO6RawQ4QulJw==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm]
+    os: [linux]
+
+  '@oxfmt/binding-linux-arm-gnueabihf@0.74.0':
+    resolution: {integrity: sha512-Xt0QtO2hJ4stnul8IL4LJGVLyp0xnc6ccN9fZ30yuubv8FWSRYxWwd1Za62KsEqAfmPSazoS/cLSUUJpja6npA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm]
     os: [linux]
@@ -5176,8 +5209,21 @@ packages:
     cpu: [arm]
     os: [linux]
 
+  '@oxfmt/binding-linux-arm-musleabihf@0.74.0':
+    resolution: {integrity: sha512-/4wYQ0gZl4vUR0QoBTGaay73FmQ1GAjUa9z9101TR2xbGNrg4a+grazlR0yzEOe3/E+PJr5BGfj66MMzm/54vg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm]
+    os: [linux]
+
   '@oxfmt/binding-linux-arm64-gnu@0.65.0':
     resolution: {integrity: sha512-p3RFkB+u7u+8up99b/NEcI1hdpLDiGgJYNwDorB60n7eH+eKposAKuMBxx+NqB3b+sJP4CZmYDh9G7X62tUsKg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@oxfmt/binding-linux-arm64-gnu@0.74.0':
+    resolution: {integrity: sha512-846bKzF+HJd+JkOFh3rxzmYvSq4Cm+GMT+p+mW7S13ZYo6GAAGv8bL8cAOi/XcdeMqxEJDCIMTVQLVBXHMCdig==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [linux]
@@ -5190,8 +5236,22 @@ packages:
     os: [linux]
     libc: [musl]
 
+  '@oxfmt/binding-linux-arm64-musl@0.74.0':
+    resolution: {integrity: sha512-nI5FJwZ4Flo6CBdscpwxymZXxO3m3IErQJX55ZS6h+ObfGXu8FostL85L/RWPFaCLnIVE4/WfLw+2q8XvVEeUA==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
   '@oxfmt/binding-linux-ppc64-gnu@0.65.0':
     resolution: {integrity: sha512-S8svxTp81obnF3admN9yd+u2rOYXtyzThLGBTg1PY6TPtGcC09BaaXLQD+TBSMa7yvqhCDZ8DFri+S/yG60qCg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [ppc64]
+    os: [linux]
+    libc: [glibc]
+
+  '@oxfmt/binding-linux-ppc64-gnu@0.74.0':
+    resolution: {integrity: sha512-BoQYKuqUdsKAFAkK6DLBvkdv4+t0hppSm79sB0wIcE2o/eOwNj+6Z3OlKY4q3Eta/tlssP65FaS9vHn8TeF7vQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [ppc64]
     os: [linux]
@@ -5204,8 +5264,22 @@ packages:
     os: [linux]
     libc: [glibc]
 
+  '@oxfmt/binding-linux-riscv64-gnu@0.74.0':
+    resolution: {integrity: sha512-FSroRrM12+jCdSQklF9aOxsKpI6wFs4ZCo/1cSYG80RWZS6z4LV+l9tXRMT8lDGu+yohIZBwi9M76FzGPFDE2A==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [riscv64]
+    os: [linux]
+    libc: [glibc]
+
   '@oxfmt/binding-linux-riscv64-musl@0.65.0':
     resolution: {integrity: sha512-YwSLVvpaz4o/nv/miiPEBJz+eJ+VmbgNIrao6RccK9ce+L5EA8wP+ZD0uFeq6wKOza6zoWv/dR0sj6lip6R3EA==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [riscv64]
+    os: [linux]
+    libc: [musl]
+
+  '@oxfmt/binding-linux-riscv64-musl@0.74.0':
+    resolution: {integrity: sha512-0VLQD0dhGBLY9Ik/w+otMvD81D0YXi4VDwql65macV+O9UzmSWmUr6CKf+dMtysDeC0PnG3y6kBkRO08BJx52g==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [riscv64]
     os: [linux]
@@ -5218,8 +5292,22 @@ packages:
     os: [linux]
     libc: [glibc]
 
+  '@oxfmt/binding-linux-s390x-gnu@0.74.0':
+    resolution: {integrity: sha512-6X7BbZNz34+OHM6Oqjf6TRcUyRn6aRcB4VtIDZAF/uQRyeVhg+G2hv6MlMvmnRekVSyTJ/8rG/u8W2dRFW6glg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [s390x]
+    os: [linux]
+    libc: [glibc]
+
   '@oxfmt/binding-linux-x64-gnu@0.65.0':
     resolution: {integrity: sha512-cjZlx6S/VkeCNWCbwZriTnLnZeTcV3DEyeRGSw/2wwLP9viq+C0bJ4bC1k/ZLkFxDcB1lUgSasPkYGP1bdraOg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@oxfmt/binding-linux-x64-gnu@0.74.0':
+    resolution: {integrity: sha512-4kYIQK53yJXrxwxSzx8H2bojlf6/KezLGYLRXzV9QCCkoiCsvBTCid9Bg83dUPTLPa3g9K0730f6MKDbck1+OA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [linux]
@@ -5232,8 +5320,21 @@ packages:
     os: [linux]
     libc: [musl]
 
+  '@oxfmt/binding-linux-x64-musl@0.74.0':
+    resolution: {integrity: sha512-MfWz4wDREjp/JQDmuxtKieix4FHGa1z5rBvB3betdcPwZvf5fqeQrlCm1mmoyuUVQOh9Pt3M61HwN94kJCxw7Q==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
   '@oxfmt/binding-openharmony-arm64@0.65.0':
     resolution: {integrity: sha512-KXQ7xi1e/voP0IQaw6fG6XY4Z5+Llf1XmRSZS1t7pVFCecFJ0iXaboKmVwjFtp5MLlT5iWQrJ2U1C3GJdZ2u+Q==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [openharmony]
+
+  '@oxfmt/binding-openharmony-arm64@0.74.0':
+    resolution: {integrity: sha512-6rmAApkq5s1kbDjvNI6Nl5A+JqQkLORb2sR941pf5HWsrd01WGKyagK/B4vX9+kh1FfvRkNgEu59FHvVk4H8cQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [openharmony]
@@ -5244,14 +5345,32 @@ packages:
     cpu: [arm64]
     os: [win32]
 
+  '@oxfmt/binding-win32-arm64-msvc@0.74.0':
+    resolution: {integrity: sha512-+5SpRUnZNGeXTyumHnpHa791tQtt04qZs076WT8eTcGF2OJ631VLnf7S0kQSPuDG+PtJM0phadEB2WAr5n1w9g==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [win32]
+
   '@oxfmt/binding-win32-ia32-msvc@0.65.0':
     resolution: {integrity: sha512-LJ+ZacAPSjegDOnSLyA1TMWAhdDrsK4el3REdr1oL2UtVBCMhO2II/Sb3cEW6mF2MfLhl8hDNCSvc7KSbgk3LQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [ia32]
     os: [win32]
 
+  '@oxfmt/binding-win32-ia32-msvc@0.74.0':
+    resolution: {integrity: sha512-1Fg+wYBO3Dsti1QX+/6EYHjeQzLC84tLOAqPu/r7ah3UJlUs9C/DB703Ay9Vcg+8VMzqZA2P5VGhzJraVUD4OQ==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [ia32]
+    os: [win32]
+
   '@oxfmt/binding-win32-x64-msvc@0.65.0':
     resolution: {integrity: sha512-higu9cWEO6XXFzATD1jf0mCK34rNfN2H9JrJie7QB1IhleVpTh0QlLH9Ip2C1H/Nd5n0v5pvRtC+5R0uE4HpVg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [x64]
+    os: [win32]
+
+  '@oxfmt/binding-win32-x64-msvc@0.74.0':
+    resolution: {integrity: sha512-y9jXUgPBm2TZIWbQhMYRRYAQM57+r4fbykgc+j24ICIIZl+pcuoNhnq1CRGm3oFiHnEUnZO00qOtSPGQdJ2ziQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [win32]
@@ -5902,7 +6021,7 @@ packages:
   '@rushstack/node-core-library@5.18.0':
     resolution: {integrity: sha512-XDebtBdw5S3SuZIt+Ra2NieT8kQ3D2Ow1HxhDQ/2soinswnOu9e7S69VSwTOLlQnx5mpWbONu+5JJjDxMAb6Fw==}
     peerDependencies:
-      '@types/node': ^22.10.5
+      '@types/node': ^22.19.19
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -5910,7 +6029,7 @@ packages:
   '@rushstack/problem-matcher@0.1.1':
     resolution: {integrity: sha512-Fm5XtS7+G8HLcJHCWpES5VmeMyjAKaWeyZU5qPzZC+22mPlJzAsOxymHiWIfuirtPckX3aptWws+K2d0BzniJA==}
     peerDependencies:
-      '@types/node': ^22.10.5
+      '@types/node': ^22.19.19
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -5921,7 +6040,7 @@ packages:
   '@rushstack/terminal@0.19.3':
     resolution: {integrity: sha512-0P8G18gK9STyO+CNBvkKPnWGMxESxecTYqOcikHOVIHXa9uAuTK+Fw8TJq2Gng1w7W6wTC9uPX6hGNvrMll2wA==}
     peerDependencies:
-      '@types/node': ^22.10.5
+      '@types/node': ^22.19.19
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -8646,10 +8765,6 @@ packages:
       '@75lb/nature':
         optional: true
 
-  find-up-simple@1.0.1:
-    resolution: {integrity: sha512-afd4O7zpqHeRyg4PfDQsXmlDe2PfdHtJt6Akt8jOWaApLOZk5JXs6VMR29lz03pRe9mpykrRCYIYxaJYcfpncQ==}
-    engines: {node: '>=18'}
-
   find-up@6.3.0:
     resolution: {integrity: sha512-v2ZsoEuVHYy8ZIlYqwPe/39Cy+cFDzp4dXPaxNvkEuouymu+2Jbz0PxpKarJHYJTmv2HWT3O382qY8l4jMWthw==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
@@ -8680,8 +8795,8 @@ packages:
     resolution: {integrity: sha512-vEZcHIlnKeN8JSVtYFczj8sWJfHIJOkz+YG00O/oul/Bete+t1ZhTi+O6JRRLFYvGW+yJkZ0YgL16iStnbkUqQ==}
     engines: {node: '>=0.4.0'}
 
-  follow-redirects@1.16.0:
-    resolution: {integrity: sha512-y5rN/uOsadFT/JfYwhxRS5R7Qce+g3zG97+JrtFZlC9klX/W5hD7iiLzScI4nZqUS7DNUdhPgw4xI8W2LuXlUw==}
+  follow-redirects@1.16.1:
+    resolution: {integrity: sha512-FNvFGzoMLWmE6Yj9spb/zjd7yiNCHiAW9/Tg9CXrQ8wuu32HtlJOwWO11OJafl5FfY3DxTdQ0vj42zU1kvv5jg==}
     engines: {node: '>=4.0'}
     peerDependencies:
       debug: '*'
@@ -10117,7 +10232,7 @@ packages:
     resolution: {integrity: sha512-enu73KhbAua2L3dIxjc6qg6ZJ7H3pt1BImZASWNWY5xSsmJ1ZuUPULTDGXgmJbI61vb+nJAG19IZclIq19UidQ==}
     engines: {node: '>= 8.0'}
     peerDependencies:
-      '@types/node': ^22.10.5
+      '@types/node': ^22.19.19
 
   mz@2.7.0:
     resolution: {integrity: sha512-z81GNO7nnYMEhrGh9LeymoE4+Yr0Wn5McHIZMK5cfQCl+NDX08sCZgUc9/6MHni9IWuFLm1Z3HTCXu2z9fN62Q==}
@@ -10346,6 +10461,22 @@ packages:
       vite-plus:
         optional: true
 
+  oxfmt@0.74.0:
+    resolution: {integrity: sha512-G4OP7FgwGYZR5ttRpCOOfJdyRsSyvtn34vSXnjDq6Oqed5Dufg5mB44mank+51nAdHOKuTJ0lj0mksY7L+N61A==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    hasBin: true
+    peerDependencies:
+      '@astrojs/compiler-rs': ^0.4.0 || ^0.5.0
+      svelte: ^5.0.0
+      vite-plus: '*'
+    peerDependenciesMeta:
+      '@astrojs/compiler-rs':
+        optional: true
+      svelte:
+        optional: true
+      vite-plus:
+        optional: true
+
   oxlint-tsgolint@7.0.2001:
     resolution: {integrity: sha512-KjK/XLcXr1DSyonKhsuFqJRiuKqcyG9j3LJ8nkOsrLzGvodBPqzHOKauy10asLMDI0sUpvb+1sxlzff3udZvfg==}
     hasBin: true
@@ -10409,10 +10540,6 @@ packages:
   package-json@8.1.1:
     resolution: {integrity: sha512-cbH9IAIJHNj9uXi196JVsRlt7cHKak6u/e6AkL/bkRelZ7rlL3X1YKxsZwa36xipOEKAsdtmaG6aAJoM1fx2zA==}
     engines: {node: '>=14.16'}
-
-  package-up@5.0.0:
-    resolution: {integrity: sha512-MQEgDUvXCa3sGvqHg3pzHO8e9gqTCMPVrWUko3vPQGntwegmFo52mZb2abIVTjFnUcW0BcPz0D93jV5Cas1DWA==}
-    engines: {node: '>=18'}
 
   param-case@3.0.4:
     resolution: {integrity: sha512-RXlj7zCYokReqWpOPH9oYivUzLYZ5vAPIfEmCTNViosC78F8F0H9y7T7gG2M39ymgutxF5gcFEsyZQSph9Bp3A==}
@@ -12768,7 +12895,7 @@ packages:
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
     peerDependencies:
-      '@types/node': ^22.10.5
+      '@types/node': ^22.19.19
       '@vitejs/devtools': ^0.7.1
       esbuild: 0.28.2
       jiti: '>=1.21.0'
@@ -12821,7 +12948,7 @@ packages:
     peerDependencies:
       '@edge-runtime/vm': '*'
       '@opentelemetry/api': ^1.9.0
-      '@types/node': ^22.10.5
+      '@types/node': ^22.19.19
       '@vitest/browser-playwright': 5.0.0
       '@vitest/browser-preview': 5.0.0
       '@vitest/browser-webdriverio': ^5.0.0-beta.5 || >=5.0.0
@@ -17607,58 +17734,115 @@ snapshots:
   '@oxfmt/binding-android-arm-eabi@0.65.0':
     optional: true
 
+  '@oxfmt/binding-android-arm-eabi@0.74.0':
+    optional: true
+
   '@oxfmt/binding-android-arm64@0.65.0':
+    optional: true
+
+  '@oxfmt/binding-android-arm64@0.74.0':
     optional: true
 
   '@oxfmt/binding-darwin-arm64@0.65.0':
     optional: true
 
+  '@oxfmt/binding-darwin-arm64@0.74.0':
+    optional: true
+
   '@oxfmt/binding-darwin-x64@0.65.0':
+    optional: true
+
+  '@oxfmt/binding-darwin-x64@0.74.0':
     optional: true
 
   '@oxfmt/binding-freebsd-x64@0.65.0':
     optional: true
 
+  '@oxfmt/binding-freebsd-x64@0.74.0':
+    optional: true
+
   '@oxfmt/binding-linux-arm-gnueabihf@0.65.0':
+    optional: true
+
+  '@oxfmt/binding-linux-arm-gnueabihf@0.74.0':
     optional: true
 
   '@oxfmt/binding-linux-arm-musleabihf@0.65.0':
     optional: true
 
+  '@oxfmt/binding-linux-arm-musleabihf@0.74.0':
+    optional: true
+
   '@oxfmt/binding-linux-arm64-gnu@0.65.0':
+    optional: true
+
+  '@oxfmt/binding-linux-arm64-gnu@0.74.0':
     optional: true
 
   '@oxfmt/binding-linux-arm64-musl@0.65.0':
     optional: true
 
+  '@oxfmt/binding-linux-arm64-musl@0.74.0':
+    optional: true
+
   '@oxfmt/binding-linux-ppc64-gnu@0.65.0':
+    optional: true
+
+  '@oxfmt/binding-linux-ppc64-gnu@0.74.0':
     optional: true
 
   '@oxfmt/binding-linux-riscv64-gnu@0.65.0':
     optional: true
 
+  '@oxfmt/binding-linux-riscv64-gnu@0.74.0':
+    optional: true
+
   '@oxfmt/binding-linux-riscv64-musl@0.65.0':
+    optional: true
+
+  '@oxfmt/binding-linux-riscv64-musl@0.74.0':
     optional: true
 
   '@oxfmt/binding-linux-s390x-gnu@0.65.0':
     optional: true
 
+  '@oxfmt/binding-linux-s390x-gnu@0.74.0':
+    optional: true
+
   '@oxfmt/binding-linux-x64-gnu@0.65.0':
+    optional: true
+
+  '@oxfmt/binding-linux-x64-gnu@0.74.0':
     optional: true
 
   '@oxfmt/binding-linux-x64-musl@0.65.0':
     optional: true
 
+  '@oxfmt/binding-linux-x64-musl@0.74.0':
+    optional: true
+
   '@oxfmt/binding-openharmony-arm64@0.65.0':
+    optional: true
+
+  '@oxfmt/binding-openharmony-arm64@0.74.0':
     optional: true
 
   '@oxfmt/binding-win32-arm64-msvc@0.65.0':
     optional: true
 
+  '@oxfmt/binding-win32-arm64-msvc@0.74.0':
+    optional: true
+
   '@oxfmt/binding-win32-ia32-msvc@0.65.0':
     optional: true
 
+  '@oxfmt/binding-win32-ia32-msvc@0.74.0':
+    optional: true
+
   '@oxfmt/binding-win32-x64-msvc@0.65.0':
+    optional: true
+
+  '@oxfmt/binding-win32-x64-msvc@0.74.0':
     optional: true
 
   '@oxlint-tsgolint/darwin-arm64@7.0.2001':
@@ -21489,8 +21673,6 @@ snapshots:
 
   find-replace@5.0.2: {}
 
-  find-up-simple@1.0.1: {}
-
   find-up@6.3.0:
     dependencies:
       locate-path: 7.2.0
@@ -21514,7 +21696,7 @@ snapshots:
     dependencies:
       flow-estree: 0.331.0
 
-  follow-redirects@1.16.0: {}
+  follow-redirects@1.16.1: {}
 
   for-each@0.3.5:
     dependencies:
@@ -21990,7 +22172,7 @@ snapshots:
   http-proxy@1.18.1:
     dependencies:
       eventemitter3: 4.0.7
-      follow-redirects: 1.16.0
+      follow-redirects: 1.16.1
       requires-port: 1.0.0
     transitivePeerDependencies:
       - debug
@@ -23624,6 +23806,30 @@ snapshots:
       '@oxfmt/binding-win32-ia32-msvc': 0.65.0
       '@oxfmt/binding-win32-x64-msvc': 0.65.0
 
+  oxfmt@0.74.0:
+    dependencies:
+      tinypool: 2.2.0
+    optionalDependencies:
+      '@oxfmt/binding-android-arm-eabi': 0.74.0
+      '@oxfmt/binding-android-arm64': 0.74.0
+      '@oxfmt/binding-darwin-arm64': 0.74.0
+      '@oxfmt/binding-darwin-x64': 0.74.0
+      '@oxfmt/binding-freebsd-x64': 0.74.0
+      '@oxfmt/binding-linux-arm-gnueabihf': 0.74.0
+      '@oxfmt/binding-linux-arm-musleabihf': 0.74.0
+      '@oxfmt/binding-linux-arm64-gnu': 0.74.0
+      '@oxfmt/binding-linux-arm64-musl': 0.74.0
+      '@oxfmt/binding-linux-ppc64-gnu': 0.74.0
+      '@oxfmt/binding-linux-riscv64-gnu': 0.74.0
+      '@oxfmt/binding-linux-riscv64-musl': 0.74.0
+      '@oxfmt/binding-linux-s390x-gnu': 0.74.0
+      '@oxfmt/binding-linux-x64-gnu': 0.74.0
+      '@oxfmt/binding-linux-x64-musl': 0.74.0
+      '@oxfmt/binding-openharmony-arm64': 0.74.0
+      '@oxfmt/binding-win32-arm64-msvc': 0.74.0
+      '@oxfmt/binding-win32-ia32-msvc': 0.74.0
+      '@oxfmt/binding-win32-x64-msvc': 0.74.0
+
   oxlint-tsgolint@7.0.2001:
     optionalDependencies:
       '@oxlint-tsgolint/darwin-arm64': 7.0.2001
@@ -23713,10 +23919,6 @@ snapshots:
       registry-auth-token: 5.1.1
       registry-url: 6.0.1
       semver: 7.8.5
-
-  package-up@5.0.0:
-    dependencies:
-      find-up-simple: 1.0.1
 
   param-case@3.0.4:
     dependencies:

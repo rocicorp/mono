@@ -19,8 +19,8 @@
     "compare-utf8": "^0.2.3"
   },
   "devDependencies": {
-    "fast-check": "^3.18.0",
-    "oxfmt": "^0.65.0",
+    "fast-check": "^3.23.2",
+    "oxfmt": "^0.74.0",
     "shared": "workspace:*",
     "typescript": "~7.0.2",
     "vitest": "^5.0.0",

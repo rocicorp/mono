@@ -12,7 +12,7 @@ import {
   type EditChange,
 } from './change.ts';
 import type {Constraint} from './constraint.ts';
-import {compareValues, type Comparator, type Node} from './data.ts';
+import {compareValues, valueToKey, type Comparator, type Node} from './data.ts';
 import {
   throwOutput,
   type FetchRequest,
@@ -78,8 +78,8 @@ export class Take implements Operator, TakeBoundProvider {
   /**
    * Partitions that incurred removals in Phase 1 and require deficit refills in
    * Phase 2 (reconcile). Keyed by `takeStateKey` (see `getTakeStateKey`), matching
-   * `#storage` keys: `'["take"]'` when unpartitioned, or `'["take", ...partitionValues]'`
-   * when partitioned.
+   * `#storage` keys: `'["take"]'` when unpartitioned, `'take:' + valueToKey(value)` for one
+   * partition column, or `'["take", ...partitionValues]'` for more.
    */
   readonly #dirtyPartitions = new Map<string, DirtyPartitionState>();
 
@@ -745,6 +745,9 @@ function getTakeStateKey(
   partitionKey: PartitionKey | undefined,
   rowOrConstraint: Row | Constraint | undefined,
 ): string {
+  if (partitionKey?.length === 1 && rowOrConstraint) {
+    return 'take:' + valueToKey(rowOrConstraint[partitionKey[0]]);
+  }
   // The order must be consistent. We always use the order as defined by the
   // partition key.
   const partitionValues: Value[] = [];

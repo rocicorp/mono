@@ -13,8 +13,14 @@ export type Node = {
    * Relationships are generated lazily as read.
    * The stream may contain 'yield' to indicate the operator has yielded control.
    * See {@link Operator.fetch} for more details about yields.
+   *
+   * A caller that only counts the nodes can pass `countOnly`, see
+   * `FetchRequest.countOnly`.
    */
-  relationships: Record<string, () => Stream<Node | 'yield'>>;
+  relationships: Record<
+    string,
+    (countOnly?: boolean | undefined) => Stream<Node | 'yield'>
+  >;
 };
 
 /**
@@ -85,6 +91,24 @@ export type NormalizedValue = Exclude<Value, undefined>;
 export function normalizeUndefined(v: Value): NormalizedValue {
   return v ?? null;
 }
+
+/**
+ * Encodes a single value for use in a string key, more cheaply than
+ * `JSON.stringify` for strings. Distinct values get distinct keys because
+ * `JSON.stringify` of a value that is not a string never starts with `s`.
+ * `undefined` is encoded like `null`.
+ *
+ * Strings with surrogates also use `JSON.stringify`, which escapes lone
+ * surrogates. Encoded as UTF-8 (e.g. by SQLite), distinct lone surrogates
+ * would otherwise become the same key.
+ */
+export function valueToKey(v: Value): string {
+  return typeof v === 'string' && !surrogateRe.test(v)
+    ? 's' + v
+    : JSON.stringify(v ?? null);
+}
+
+const surrogateRe = /[\ud800-\udfff]/;
 
 export type Comparator = (r1: Row, r2: Row) => number;
 

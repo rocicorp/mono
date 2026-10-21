@@ -20,6 +20,11 @@ import {type Stream} from './stream.ts';
  * `Node` `row`s or `relationship`s, but they shouldn't, they should just
  * filter.
  *
+ * One exception: during a fetch, `Exists` replaces the relationship it read
+ * with a function returning the children it read, so that the consumer does
+ * not fetch them again. The relationship yields the same nodes, so other
+ * branches of a `FanOut`, which see the same node object, are not affected.
+ *
  * This `FilterOperator` abstraction enables much more efficient processing of
  * `fetch` for `where` clauses containing OR conditions.
  *

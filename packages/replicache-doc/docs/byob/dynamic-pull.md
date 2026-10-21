@@ -22,9 +22,9 @@ The implementation of pull will depend on the backend strategy you are using. Fo
 Replace the contents of `server/src/pull.ts` with this code:
 
 ```ts
-import {serverID, tx, type Transaction} from './db';
-import type {PatchOperation, PullResponse} from 'replicache';
 import type {Request, Response, NextFunction} from 'express';
+import type {PatchOperation, PullResponse} from 'replicache';
+import {serverID, tx, type Transaction} from './db';
 
 export async function handlePull(
   req: Request,

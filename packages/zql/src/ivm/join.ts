@@ -412,13 +412,12 @@ export class Join implements Input {
     parentNodeRow: Row,
     parentNodeRelations: Record<string, () => Stream<Node | 'yield'>>,
   ): Node {
-    const childStream = () => {
+    const childStream = (countOnly?: boolean | undefined) => {
       const constraint = buildJoinConstraint(
         parentNodeRow,
         this.#parentKey,
         this.#childKey,
       );
-      const stream = constraint ? this.#child.fetch({constraint}) : [];
 
       // The parent has yet to get the in-progress child change if it comes
       // after the current position and a parent fetch of the push yields it.
@@ -443,6 +442,8 @@ export class Join implements Input {
         ) &&
         inPushQueue
       ) {
+        // The overlay needs the child rows, so countOnly is not forwarded.
+        const stream = constraint ? this.#child.fetch({constraint}) : [];
         const childSchema = this.#child.getSchema();
         if (childSchema.sort === undefined) {
           return generateWithOverlayUnordered(
@@ -457,7 +458,9 @@ export class Join implements Input {
           childSchema,
         );
       }
-      return stream;
+      return constraint
+        ? this.#child.fetch(countOnly ? {constraint, countOnly} : {constraint})
+        : [];
     };
 
     return {

@@ -4,7 +4,12 @@ import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import {makeAddChange, makeRemoveChange, type Change} from './change.ts';
-import {normalizeUndefined, type Node, type NormalizedValue} from './data.ts';
+import {
+  normalizeUndefined,
+  valueToKey,
+  type Node,
+  type NormalizedValue,
+} from './data.ts';
 import {
   throwFilterOutput,
   type FilterInput,
@@ -230,6 +235,9 @@ export class Exists implements FilterOperator {
   }
 
   #getCacheKey(node: Node, def: CompoundKey): string {
+    if (def.length === 1) {
+      return valueToKey(node.row[def[0]]);
+    }
     const values: NormalizedValue[] = [];
     for (const key of def) {
       values.push(normalizeUndefined(node.row[key]));
@@ -260,14 +268,31 @@ export class Exists implements FilterOperator {
       () =>
         `Exists: relationship "${this.#relationshipName}" not found on node`,
     );
-    let size = 0;
+    if (this.#inPush) {
+      // Only the size is needed, which Cap can answer from its state.
+      let size = 0;
+      for (const n of relationship(true)) {
+        if (n === 'yield') {
+          yield 'yield';
+        } else {
+          size++;
+        }
+      }
+      return size;
+    }
+    // During a fetch, keep the children read to count them and make the
+    // node's relationship return them, so that the consumer of the node does
+    // not fetch them again. The exists subquery is limited, so this holds at
+    // most a few nodes. `node.relationships` is created per node by the Join.
+    const children: Node[] = [];
     for (const n of relationship()) {
       if (n === 'yield') {
         yield 'yield';
       } else {
-        size++;
+        children.push(n);
       }
     }
-    return size;
+    node.relationships[this.#relationshipName] = () => children;
+    return children.length;
   }
 }

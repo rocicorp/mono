@@ -17,6 +17,7 @@ import {formatPlannerEvents} from '../../zql/src/planner/planner-debug.ts';
 import {createBuilder} from '../../zql/src/query/create-builder.ts';
 import type {AnyQuery} from '../../zql/src/query/query.ts';
 import type {SchemaQuery} from '../../zql/src/query/schema-query.ts';
+import {evaluateZQLChain} from './zql-chain.ts';
 
 export type AnalyzeCLIOptions = {
   schema: Schema;
@@ -295,8 +296,7 @@ function buildZqlQuery(
   queryString: string,
   builder: SchemaQuery<Schema>,
 ): AnyQuery {
-  const f = new Function('builder', `return builder.${queryString};`);
-  return f(builder) as AnyQuery;
+  return evaluateZQLChain(queryString, builder) as AnyQuery;
 }
 
 function resolveHandshakeHeaders(config: {
