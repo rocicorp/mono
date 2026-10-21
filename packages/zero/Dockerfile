@@ -38,7 +38,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 # supportedArchitectures below makes pnpm fetch the target's platform-specific
 # optional deps (e.g. @oxfmt/binding-linux-arm64-musl) alongside the host's,
 # which postinstall scripts like esbuild's need to validate themselves.
-FROM --platform=$BUILDPLATFORM node:22.23.1-alpine3.23@sha256:8516dce0483394d5708d4b2ee6cacb79fb1d617ea4e2787c2120bcca92ce372e AS deps
+FROM --platform=$BUILDPLATFORM node:22.23.4-alpine3.23@sha256:206878a60dc7014193f418ab9259b6110c15fbd514b3044a267be706509944e4 AS deps
 
 ARG ZERO_VERSION
 ARG ZERO_PACKAGE
@@ -105,7 +105,7 @@ RUN ZERO_INSTALL_SOURCE="${ZERO_PACKAGE:-$ZERO_VERSION}" && \
     pnpm add @rocicorp/zero@${ZERO_INSTALL_SOURCE}; \
   fi
 
-FROM node:22.23.1-alpine3.23@sha256:8516dce0483394d5708d4b2ee6cacb79fb1d617ea4e2787c2120bcca92ce372e
+FROM node:22.23.4-alpine3.23@sha256:206878a60dc7014193f418ab9259b6110c15fbd514b3044a267be706509944e4
 
 ARG ZERO_VERSION
 
