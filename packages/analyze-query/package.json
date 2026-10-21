@@ -29,10 +29,8 @@
     "zero-cache": "workspace:*",
     "zero-client": "workspace:*",
     "zero-protocol": "workspace:*",
-    "zero-schema": "workspace:*",
     "zero-types": "workspace:*",
-    "zql": "workspace:*",
-    "zqlite": "workspace:*"
+    "zql": "workspace:*"
   },
   "packageManager": "pnpm@11.11.0"
 }
