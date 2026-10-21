@@ -6,7 +6,7 @@ import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import {makeAddChange, type Change, type EditChange} from './change.ts';
 import type {Constraint} from './constraint.ts';
-import type {Comparator, Node} from './data.ts';
+import {valueToKey, type Comparator, type Node} from './data.ts';
 import {
   throwOutput,
   type FetchRequest,
@@ -329,6 +329,9 @@ function getCapStateKey(
   partitionKey: PartitionKey | undefined,
   rowOrConstraint: Row | Constraint | undefined,
 ): string {
+  if (partitionKey?.length === 1 && rowOrConstraint) {
+    return 'cap:' + valueToKey(rowOrConstraint[partitionKey[0]]);
+  }
   const partitionValues: Value[] = [];
 
   if (partitionKey && rowOrConstraint) {

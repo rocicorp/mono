@@ -92,6 +92,24 @@ export function normalizeUndefined(v: Value): NormalizedValue {
   return v ?? null;
 }
 
+/**
+ * Encodes a single value for use in a string key, more cheaply than
+ * `JSON.stringify` for strings. Distinct values get distinct keys because
+ * `JSON.stringify` of a value that is not a string never starts with `s`.
+ * `undefined` is encoded like `null`.
+ *
+ * Strings with surrogates also use `JSON.stringify`, which escapes lone
+ * surrogates. Encoded as UTF-8 (e.g. by SQLite), distinct lone surrogates
+ * would otherwise become the same key.
+ */
+export function valueToKey(v: Value): string {
+  return typeof v === 'string' && !surrogateRe.test(v)
+    ? 's' + v
+    : JSON.stringify(v ?? null);
+}
+
+const surrogateRe = /[\ud800-\udfff]/;
+
 export type Comparator = (r1: Row, r2: Row) => number;
 
 export function makeComparator(order: Ordering, reverse?: boolean): Comparator {

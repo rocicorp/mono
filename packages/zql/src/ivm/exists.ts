@@ -4,7 +4,12 @@ import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import {makeAddChange, makeRemoveChange, type Change} from './change.ts';
-import {normalizeUndefined, type Node, type NormalizedValue} from './data.ts';
+import {
+  normalizeUndefined,
+  valueToKey,
+  type Node,
+  type NormalizedValue,
+} from './data.ts';
 import {
   throwFilterOutput,
   type FilterInput,
@@ -230,6 +235,9 @@ export class Exists implements FilterOperator {
   }
 
   #getCacheKey(node: Node, def: CompoundKey): string {
+    if (def.length === 1) {
+      return valueToKey(node.row[def[0]]);
+    }
     const values: NormalizedValue[] = [];
     for (const key of def) {
       values.push(normalizeUndefined(node.row[key]));
