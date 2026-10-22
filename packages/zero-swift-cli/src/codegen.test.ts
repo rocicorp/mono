@@ -1,4 +1,6 @@
-import {readFileSync, writeFileSync} from 'node:fs';
+import {mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {expect, test} from 'vitest';
 import {cli, codegenFile, legacyArgv} from './cli.ts';
@@ -111,4 +113,30 @@ test('a missing schema is a usage error, not a crash', async () => {
     code: 'SCHEMA_NOT_FOUND',
     message: `Schema no-such-schema.ts doesn't exist. Pass --schema-file, or set "schema" in zero-swift.json.`,
   });
+});
+
+test('camelCase options from before 0.4.3 still work', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'zero-swift-cli-'));
+  const out = join(dir, 'Schema.swift');
+  try {
+    let code: number | undefined;
+    await cli.serve(
+      legacyArgv([
+        'codegen',
+        `--schemaFile=${fileURLToPath(new URL('../test/fixture-schema.ts', import.meta.url))}`,
+        '--typePrefix',
+        'Kx',
+        '--schemaName=kx',
+        '--out',
+        out,
+      ]),
+      {stdout: () => {}, exit: c => (code = c)},
+    );
+    expect(code ?? 0).toBe(0);
+    const swift = readFileSync(out, 'utf8');
+    expect(swift).toContain('public struct KxProject');
+    expect(swift).toContain('static let kx');
+  } finally {
+    rmSync(dir, {recursive: true, force: true});
+  }
 });

@@ -117,10 +117,15 @@ function writeOutput(
   return {path, written: current !== contents};
 }
 
+const camelOption = /^--(schemaFile|schemaName|typePrefix)(=|$)/;
+const upperCase = /[A-Z]/g;
+
 /**
  * incur reserves `--schema` (it prints a command's JSON Schema), so codegen's
  * schema module is `--schema-file`. This keeps 0.1.0's `codegen --schema
- * <path>` working; a bare `--schema` still prints the JSON Schema.
+ * <path>` working; a bare `--schema` still prints the JSON Schema. The
+ * options are kebab-case keys, so help examples print as typed; this also
+ * keeps the camelCase spellings that worked before 0.4.3.
  */
 export function legacyArgv(argv: readonly string[]): string[] {
   if (argv[0] !== 'codegen') return [...argv];
@@ -133,6 +138,10 @@ export function legacyArgv(argv: readonly string[]): string[] {
       i++;
     } else if (token.startsWith('--schema=')) {
       out.push('--schema-file', token.slice('--schema='.length));
+    } else if (camelOption.test(token)) {
+      const [name, ...value] = token.split('=');
+      const kebab = name!.replace(upperCase, c => `-${c.toLowerCase()}`);
+      out.push([kebab, ...value].join('='));
     } else {
       out.push(token);
     }
@@ -153,50 +162,61 @@ export const cli = Cli.create('zero-swift', {
   description:
     "Generate the Swift row types, schema, and query builder from the app's TypeScript schema. Options override zero-swift.json, which is read when present. See swift/Sources/Zero/Zero.docc/GettingStarted.md in github.com/wevm/zero.",
   options: z.object({
-    config: z
+    'config': z
       .string()
       .optional()
       .describe('Config file (default zero-swift.json, when present)'),
-    schemaFile: z
+    'schema-file': z
       .string()
       .optional()
       .describe('TS schema module (default schema.ts)'),
-    export: z
+    'export': z
       .string()
       .optional()
       .describe('Export of the module that holds the schema (default schema)'),
-    out: z
+    'out': z
       .string()
       .optional()
       .describe('Swift file to write (default Schema.swift)'),
-    schemaName: z
+    'schema-name': z
       .string()
       .optional()
       .describe('Name of the generated ZeroSchema static (default app)'),
-    zql: z
+    'zql': z
       .string()
       .optional()
       .describe('Name of the generated query builder global (default zql)'),
-    typePrefix: z
+    'type-prefix': z
       .string()
       .optional()
       .describe('Prefix for every generated type name (default none)'),
-    access: z
+    'access': z
       .enum(['public', 'internal'])
       .optional()
       .describe('Access level of the generated code (default public)'),
     check,
   }),
-  // incur 0.7.1 prints example options as `--camelKey value`, so the hint
-  // shows `--schema-file` and a bare `--check` instead.
-  examples: [{description: 'Generate from zero-swift.json'}],
-  hint: 'Without a config file: zero-swift codegen --schema-file shared/schema.ts --out Sources/App/Schema.swift. In CI, zero-swift codegen --check fails when the output is stale.',
+  // incur 0.7.1 prints a boolean example option as `--check true`, so the
+  // hint shows a bare `--check` instead.
+  examples: [
+    {description: 'Generate from zero-swift.json'},
+    {
+      options: {
+        'schema-file': 'shared/schema.ts',
+        'out': 'Sources/App/Schema.swift',
+      },
+      description: 'Generate without a config file',
+    },
+  ],
+  hint: 'In CI, zero-swift codegen --check fails when the output is stale.',
   run: c =>
     reporting(c.error, async () => {
       const cwd = process.cwd();
       const {
-        config: configOption,
-        schemaFile,
+        'config': configOption,
+        'schema-file': schemaFile,
+        'schema-name': schemaName,
+        'type-prefix': typePrefix,
         out,
         check,
         ...overrides
@@ -219,7 +239,9 @@ export const cli = Cli.create('zero-swift', {
       const config: Config = {
         ...fileConfig,
         ...Object.fromEntries(
-          Object.entries(overrides).filter(([, v]) => v !== undefined),
+          Object.entries({...overrides, schemaName, typePrefix}).filter(
+            ([, v]) => v !== undefined,
+          ),
         ),
         ...(schemaFile ? {schema: schemaFile} : {}),
         ...(out ? {output: out} : {}),
