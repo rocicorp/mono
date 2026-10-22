@@ -88,6 +88,30 @@ describe('normalizeDeletedClients', () => {
 
     expect(result).toEqual(input);
   });
+
+  test('does not need Array.prototype.toSorted', () => {
+    // Hermes, the React Native JS engine, does not implement it.
+    const toSorted = Object.getOwnPropertyDescriptor(
+      Array.prototype,
+      'toSorted',
+    );
+    Reflect.deleteProperty(Array.prototype, 'toSorted');
+    try {
+      const input: DeletedClients = [
+        {clientGroupID: 'group-b', clientID: 'client-1'},
+        {clientGroupID: 'group-a', clientID: 'client-2'},
+        {clientGroupID: 'group-b', clientID: 'client-1'},
+      ];
+      expect(normalizeDeletedClients(input)).toEqual([
+        {clientGroupID: 'group-a', clientID: 'client-2'},
+        {clientGroupID: 'group-b', clientID: 'client-1'},
+      ]);
+    } finally {
+      if (toSorted) {
+        Object.defineProperty(Array.prototype, 'toSorted', toSorted);
+      }
+    }
+  });
 });
 
 describe('mergeDeletedClients', () => {

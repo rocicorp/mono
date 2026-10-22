@@ -1,3 +1,4 @@
+import {toSorted} from '../../shared/src/iterables.ts';
 import {stringCompare} from '../../shared/src/string-compare.ts';
 import * as v from '../../shared/src/valita.ts';
 import type {Read, Write} from './dag/store.ts';
@@ -43,9 +44,10 @@ function compare(a: ClientIDPair, b: ClientIDPair): number {
 export function normalizeDeletedClients(
   deletedClients: DeletedClients,
 ): DeletedClients {
-  return deletedClients
-    .toSorted(compare)
-    .filter((item, i, arr) => i === 0 || compare(item, arr[i - 1]) !== 0);
+  // Not Array.prototype.toSorted: Hermes (React Native) does not implement it.
+  return toSorted(deletedClients, compare).filter(
+    (item, i, arr) => i === 0 || compare(item, arr[i - 1]) !== 0,
+  );
 }
 
 export function mergeDeletedClients(
