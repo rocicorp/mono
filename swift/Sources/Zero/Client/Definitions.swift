@@ -268,10 +268,12 @@ public enum MutationOutcome: Sendable, Hashable {
   /// The mutator or the API server threw an `ApplicationError`.
   case appError(message: String, details: JSONValue?)
   /// Zero couldn't run the mutation or learn its result, such as while
-  /// offline or when the connection closed. On the server side this doesn't
-  /// mean the mutation wasn't applied: it may have been pushed before the
-  /// connection closed, and the client sends pending mutations again when
-  /// it reconnects. Don't retry it as if it had failed.
+  /// offline, when the connection closed, or when the mutator isn't
+  /// registered with the `Zero` (then nothing ran or was sent). Otherwise,
+  /// on the server side this doesn't mean the mutation wasn't applied: it
+  /// may have been pushed before the connection closed, and the client
+  /// sends pending mutations again when it reconnects. Don't retry it as if
+  /// it had failed.
   case zeroError(message: String)
 
   /// The JS result object.

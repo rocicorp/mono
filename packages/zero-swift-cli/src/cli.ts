@@ -151,7 +151,7 @@ export const cli = Cli.create('zero-swift', {
     "Generates what the Zero Swift client needs from a Zero app's TypeScript schema, queries, and mutators.",
 }).command('codegen', {
   description:
-    "Generate the Swift row types, schema, and query builder from the app's TypeScript schema. Options override zero-swift.json, which is read when present.",
+    "Generate the Swift row types, schema, and query builder from the app's TypeScript schema. Options override zero-swift.json, which is read when present. See swift/Sources/Zero/Zero.docc/GettingStarted.md in github.com/wevm/zero.",
   options: z.object({
     config: z
       .string()
@@ -187,20 +187,10 @@ export const cli = Cli.create('zero-swift', {
       .describe('Access level of the generated code (default public)'),
     check,
   }),
-  examples: [
-    {description: 'Generate from zero-swift.json'},
-    {
-      options: {
-        schemaFile: 'shared/schema.ts',
-        out: 'Sources/App/Schema.swift',
-      },
-      description: 'Generate without a config file',
-    },
-    {
-      options: {check: true},
-      description: 'Fail in CI when the output is stale',
-    },
-  ],
+  // incur 0.7.1 prints example options as `--camelKey value`, so the hint
+  // shows `--schema-file` and a bare `--check` instead.
+  examples: [{description: 'Generate from zero-swift.json'}],
+  hint: 'Without a config file: zero-swift codegen --schema-file shared/schema.ts --out Sources/App/Schema.swift. In CI, zero-swift codegen --check fails when the output is stale.',
   run: c =>
     reporting(c.error, async () => {
       const cwd = process.cwd();

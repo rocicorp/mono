@@ -146,6 +146,19 @@ public final class Zero<Context: Sendable> {
   /// As in JS, `.complete` and `.cached` wait through connection errors for
   /// a later connection to confirm the rows. Cancel the task to stop
   /// waiting: the run throws `CancellationError` and releases its query.
+  ///
+  /// When the client closes, with `close()` or when `Zero` replaces it
+  /// (see `ZeroOptions.onClientStateNotFound`), a run still waiting throws
+  /// a `QueryError` saying Zero was closed, as in JS. Unlike views and
+  /// preloads, it doesn't move to the new client: run it again. Don't run
+  /// queries on a closed `Zero` (in JS a closed instance can no longer
+  /// query): here a run waiting for `.complete` or `.cached` never returns.
+  ///
+  /// An unnamed query (a `Query` rather than a `QueryRequest`) only sees
+  /// local data, as in JS without `enableLegacyQueries`: the server never
+  /// confirms it, so waiting for `.complete` or `.cached` never returns
+  /// unless the task is cancelled. The client logs a warning the first time
+  /// for each such query. Use a named query (`defineQuery`) to sync it.
   public func run<R: ZeroRow, S: QueryResult>(
     _ request: QueryRequest<R, S, Context>, type: RunType = .unknown, ttl: TTL? = nil
   ) async throws -> S {
@@ -180,6 +193,17 @@ public final class Zero<Context: Sendable> {
   }
 
   /// Keeps the query's rows synced without a view, until `cleanup`.
+  ///
+  /// When `Zero` replaces its client, the preload moves to the new one, but
+  /// its `cached` and `complete` are the old client's: if still pending,
+  /// they throw a `QueryError` saying Zero was closed, as they do on
+  /// `close()`. On a closed `Zero` they never settle.
+  ///
+  /// Preloading an unnamed query (a `Query` rather than a `QueryRequest`)
+  /// does nothing, as in JS without `enableLegacyQueries`: it only sees
+  /// local data, and `cached` and `complete` never settle. The client logs a
+  /// warning the first time for each such query. Use a named query
+  /// (`defineQuery`) to sync it.
   public func preload<R: ZeroRow, S: QueryResult>(
     _ request: QueryRequest<R, S, Context>, ttl: TTL = .defaultPreloadTTL
   ) -> Preload {
@@ -196,6 +220,10 @@ public final class Zero<Context: Sendable> {
   }
 
   /// Runs a mutator on the client now and sends it to the server.
+  ///
+  /// A mutator not registered with this `Zero` doesn't run: both outcomes
+  /// are a `.zeroError` saying so, and it is logged as an error. JS throws
+  /// that error instead.
   @discardableResult
   public func mutate(_ request: MutateRequest<Context>) -> MutatorResult {
     engine.loop.call { engine.mutate(name: request.name, args: request.args) }

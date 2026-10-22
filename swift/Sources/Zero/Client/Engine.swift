@@ -223,7 +223,7 @@ final class Engine {
         self?.queryManager.updateCustom(name: id.name, args: id.args, ttl: ttl)
       },
       batchViewUpdates: { $0() },
-      microtask: { loop.microtask($0) })
+      microtask: { loop.microtask($0) }, log: log)
     _ = connectionManager.subscribe { [weak self] state in self?.onConnectionStateChange(state) }
     onConnectionStateChange(connectionManager.state)
     queryManager = QueryManager(
@@ -1149,6 +1149,17 @@ final class Engine {
   func mutate(name: String, args: JSONValue?) -> MutatorResult {
     let client = Deferred<MutationOutcome>()
     let server = Deferred<MutationOutcome>()
+    // JS throws this before it looks at the connection; here both outcomes
+    // carry it, and nothing is written or pushed.
+    guard let mutator = mutators[name] else {
+      let message =
+        "Mutator \"\(name)\" is not registered. "
+        + "Mutators must be registered with the Zero constructor before use."
+      log.error(message)
+      client.resolve(.zeroError(message: message))
+      server.resolve(.zeroError(message: message))
+      return MutatorResult(client: client, server: server)
+    }
     if let rejection = mutationRejection {
       log.warn(
         "Mutation \"\(name)\" rejected because Zero is \(rejection.stateDescription). "
@@ -1156,11 +1167,6 @@ final class Engine {
       client.resolve(.zeroError(message: rejection.message))
       server.resolve(.zeroError(message: rejection.message))
       return MutatorResult(client: client, server: server)
-    }
-    guard let mutator = mutators[name] else {
-      preconditionFailure(
-        "Mutator \"\(name)\" is not registered. Mutators must be registered with the Zero constructor before use."
-      )
     }
     let (ephemeralID, tracked) = mutationTracker.trackMutation()
     let log = self.log

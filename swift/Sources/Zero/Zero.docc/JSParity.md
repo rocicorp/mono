@@ -56,6 +56,13 @@ When the server no longer has the client's state, JS asks the app to
 reload. Swift replaces the client inside the same `Zero` instead: views,
 live queries, and preloads move to the new client and keep their identity.
 
+A pending `run`, and a preload's pending `cached` and `complete`, belong to
+the client that started them. When that client closes, by `close()` or by
+being replaced, they throw a ``QueryError`` saying Zero was closed, as they
+reject in JS. After a replacement, run it again: the same `Zero` now uses
+the new client. As in JS, don't query a closed `Zero`: a `run` that waits
+for `.complete` or `.cached` there never returns.
+
 ## Queries
 
 | JS                                                                   | Swift                                                                                          |
@@ -78,6 +85,14 @@ Comparing with nil differs by form. The two-argument
 three-argument form compares as JS compares `undefined`, so
 `where(\.ownerID, .eq, nil)` matches no row.
 
+An unnamed query, a `Query` such as `zql.issue` rather than a
+``QueryRequest`` from `defineQuery`, only sees local data, as in JS without
+`enableLegacyQueries`. It is for `tx.run` in mutators and for local reads.
+The server never confirms it, so `run(query, type: .complete)` (or
+`.cached`) never returns unless its task is cancelled, and `preload` of it
+does nothing. The client logs a warning the first time it sees each such
+query.
+
 ## Mutators
 
 | JS                                                                                 | Swift                                                                                                |
@@ -87,6 +102,11 @@ three-argument form compares as JS compares `undefined`, so
 | `await tx.run(query)`                                                              | `try tx.run(query)`                                                                                  |
 | `tx.location`, `tx.reason`, `tx.clientID`, `tx.mutationID`                         | the same                                                                                             |
 | `throw new ApplicationError(message, {details})`                                   | `throw ApplicationError(message, details:)`                                                          |
+
+Calling a mutator that isn't registered with the `Zero` throws in JS. In
+Swift `mutate` returns a ``MutatorResult`` whose `client` and `server` are
+both `.zeroError` with the same message, and logs it as an error. Nothing
+is written or sent.
 
 ## React and SolidJS
 

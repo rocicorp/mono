@@ -29,13 +29,17 @@ final class QueryContext {
   /// later, together (`markPipelinesReady`).
   private(set) var pipelinesReady = false
   private var pendingPipelines: [(id: Int, attach: AttachPipeline)] = []
+  private let log: Log?
+  /// The hashes of the unnamed queries already warned about.
+  private var warnedLocalOnly = Set<String>()
 
   init(
     branch: IVMBranch,
     addCustomQuery: @escaping (AST, CustomQueryID, TTL, @escaping GotCallback) -> () -> Void,
     updateCustomQuery: @escaping (CustomQueryID, TTL) -> Void,
     batchViewUpdates: @escaping (() -> Void) -> Void,
-    microtask: @escaping (@escaping () -> Void) -> Void
+    microtask: @escaping (@escaping () -> Void) -> Void,
+    log: Log? = nil
   ) {
     self.branch = branch
     self.delegate = BranchDelegate(branch)
@@ -43,6 +47,21 @@ final class QueryContext {
     self.updateCustomQuery = updateCustomQuery
     self.batchViewUpdatesImpl = batchViewUpdates
     self.microtask = microtask
+    self.log = log
+  }
+
+  /// Warns, once per query, that an unnamed query is waited for or
+  /// preloaded: it only sees local data, so the server never confirms it.
+  /// As in JS, where an unnamed query isn't sent to the server either
+  /// (without `enableLegacyQueries`), it isn't an error.
+  private func warnLocalOnly(_ query: AnyQuery, _ consequence: String) {
+    guard query.customQueryID == nil, let log else { return }
+    let hash = QueryHash.hashOfAST(query.ast)
+    guard warnedLocalOnly.insert(hash).inserted else { return }
+    log.warn(
+      "The unnamed query of \"\(query.ast.table)\" (hash \(hash)) only sees local data and is "
+        + "never complete: \(consequence). To sync it from the server, use a named query "
+        + "(defineQuery, passed as a QueryRequest).")
   }
 
   /// A context for the queries a mutator runs: nothing is registered with
@@ -277,6 +296,8 @@ final class QueryContext {
       result.resolve(data)
       return result
     }
+    warnLocalOnly(
+      query, "a run waiting for .\(type.rawValue) never returns unless its task is cancelled")
     // Settling releases the view, also when `Zero.run` rejects it because
     // its task was cancelled.
     result.onSettle { _ in v.destroy() }
@@ -303,6 +324,7 @@ final class QueryContext {
     let cached = Deferred<Void>()
     let complete = Deferred<Void>()
     guard let id = query.customQueryID else {
+      warnLocalOnly(query, "preloading it does nothing, and its cached and complete never settle")
       return Preload(cleanup: {}, cached: cached, complete: complete)
     }
     let cleanup = addCustomQuery(query.ast, id, ttl) { got, error in

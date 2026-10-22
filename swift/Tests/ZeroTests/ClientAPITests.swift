@@ -122,6 +122,31 @@ import ZeroTesting
     #expect(try await zero.run(zql.issue).map(\.title) == ["t"])
   }
 
+  @Test func anUnregisteredMutatorFailsWithoutWritingOrPushing() async throws {
+    let zero = try makeZero()
+    scheduler.runDueTimers()
+    let socket = try #require(sockets.sockets.first)
+    socket.receive(text: #"["connected",{"wsid":"w1"}]"#)
+    scheduler.runDueTimers()
+    let unregistered = defineMutator("issue.unregistered") { (tx, args: CreateIssue, _: Auth) in
+      try tx.mutate.issue.insert([
+        "id": .string(args.id), "title": .string(args.title), "description": "",
+        "closed": false, "ownerId": .null, "createdAt": 1,
+      ])
+    }
+
+    let result = zero.mutate(unregistered(CreateIssue(id: "i4", title: "t")))
+    scheduler.runDueTimers()
+
+    let error = MutationOutcome.zeroError(
+      message: "Mutator \"issue.unregistered\" is not registered. "
+        + "Mutators must be registered with the Zero constructor before use.")
+    #expect(try await result.client.value == error)
+    #expect(try await result.server.value == error)
+    #expect(try await zero.run(zql.issue).isEmpty)
+    #expect(sent("push").isEmpty)
+  }
+
   @Test func dropsTheQueryOfAViewThatIsNoLongerReferenced() throws {
     var zero: Zero<Auth>? = try makeZero()
     var dropped: MaterializedView? = try zero!.materialize(Self.mine())
