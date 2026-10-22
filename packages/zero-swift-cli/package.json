@@ -1,6 +1,6 @@
 {
   "name": "zero-swift",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Generates the Swift row types and schema of a Zero app for the Zero Swift client.",
   "license": "Apache-2.0",
   "repository": {
