@@ -30,6 +30,8 @@ final class QueryContext {
   private(set) var pipelinesReady = false
   private var pendingPipelines: [(id: Int, attach: AttachPipeline)] = []
   private let log: Log?
+  /// Why the client closed, once it has.
+  private let closedReason: () -> ConnectionError?
   /// The hashes of the unnamed queries already warned about.
   private var warnedLocalOnly = Set<String>()
 
@@ -39,7 +41,8 @@ final class QueryContext {
     updateCustomQuery: @escaping (CustomQueryID, TTL) -> Void,
     batchViewUpdates: @escaping (() -> Void) -> Void,
     microtask: @escaping (@escaping () -> Void) -> Void,
-    log: Log? = nil
+    log: Log? = nil,
+    closedReason: @escaping () -> ConnectionError? = { nil }
   ) {
     self.branch = branch
     self.delegate = BranchDelegate(branch)
@@ -48,6 +51,19 @@ final class QueryContext {
     self.batchViewUpdatesImpl = batchViewUpdates
     self.microtask = microtask
     self.log = log
+    self.closedReason = closedReason
+  }
+
+  /// The error of a query waiting for the server on a closed client: the
+  /// one a query pending at close gets (`QueryManager.handleClosed`). JS
+  /// only rejects the pending ones, so new ones never settle there.
+  private func closedError(_ query: AnyQuery) -> QueryError? {
+    guard let reason = closedReason() else { return nil }
+    let id =
+      query.customQueryID.map { QueryHash.hashOfNameAndArgs($0.name, $0.args) }
+      ?? QueryHash.hashOfAST(query.ast)
+    return QueryError(
+      QueryManager.closedError(id: id, name: query.customQueryID?.name, reason))
   }
 
   /// Warns, once per query, that an unnamed query is waited for or
@@ -286,8 +302,14 @@ final class QueryContext {
   ) throws -> Deferred<
     ViewValue
   > {
-    let v = try materialize(query, ttl: ttl ?? .defaultTTL)
     let result = Deferred<ViewValue>()
+    // Swift only: on a closed client, waiting for the server fails at once
+    // rather than never settling, without materializing anything.
+    if type != .unknown, let error = closedError(query) {
+      result.reject(error)
+      return result
+    }
+    let v = try materialize(query, ttl: ttl ?? .defaultTTL)
     if type == .unknown {
       // While the pipelines are not ready the view is deferred and this is
       // empty: `unknown` does not wait for local data either.
@@ -323,6 +345,13 @@ final class QueryContext {
   func preload(_ query: AnyQuery, ttl: TTL = .defaultPreloadTTL) -> Preload {
     let cached = Deferred<Void>()
     let complete = Deferred<Void>()
+    // Swift only: on a closed client, both fail at once and nothing is
+    // registered.
+    if let error = closedError(query) {
+      cached.reject(error)
+      complete.reject(error)
+      return Preload(cleanup: {}, cached: cached, complete: complete)
+    }
     guard let id = query.customQueryID else {
       warnLocalOnly(query, "preloading it does nothing, and its cached and complete never settle")
       return Preload(cleanup: {}, cached: cached, complete: complete)

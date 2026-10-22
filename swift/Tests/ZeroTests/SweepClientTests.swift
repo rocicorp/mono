@@ -502,4 +502,36 @@ import ZeroTesting
     await #expect(throws: (any Error).self) { try await run.value }
     view.destroy()
   }
+
+  /// Swift only (JS rejects only the calls pending at close, so new ones
+  /// never settle): on a closed `Zero`, a new run waiting for the server
+  /// and a new preload fail at once with the close error, while `.unknown`
+  /// still reads the local rows.
+  @Test(.timeLimit(.minutes(1)))
+  func newCallsOnAClosedZeroFailAtOnce() async throws {
+    let zero = try makeZero()
+    zero.mutate(Self.create("a"))
+    zero.close()
+    let message = "Zero was explicitly closed by calling zero.close()"
+    func expectClosed(_ body: () async throws -> Void) async {
+      do {
+        try await body()
+        Testing.Issue.record("not rejected")
+      } catch let error as QueryError {
+        #expect(error.description == message)
+      } catch {
+        Testing.Issue.record("unexpected \(error)")
+      }
+    }
+    for type in [RunType.complete, .cached] {
+      #expect(try zero.run(Self.all().query(()), type: type).isSettled)
+      await expectClosed { _ = try await zero.run(Self.all(), type: type) }
+    }
+    let preload = zero.preload(Self.all())
+    #expect(preload.cached.isSettled && preload.complete.isSettled)
+    await expectClosed { try await preload.cached.value }
+    await expectClosed { try await preload.complete.value }
+    preload.cleanup()
+    #expect(try await zero.run(Self.all()).map(\.id) == ["a"])
+  }
 }

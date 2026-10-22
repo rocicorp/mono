@@ -223,7 +223,11 @@ final class Engine {
         self?.queryManager.updateCustom(name: id.name, args: id.args, ttl: ttl)
       },
       batchViewUpdates: { $0() },
-      microtask: { loop.microtask($0) }, log: log)
+      microtask: { loop.microtask($0) }, log: log,
+      closedReason: { [weak self] in
+        guard case .closed(let reason) = self?.connectionManager.state else { return nil }
+        return reason
+      })
     _ = connectionManager.subscribe { [weak self] state in self?.onConnectionStateChange(state) }
     onConnectionStateChange(connectionManager.state)
     queryManager = QueryManager(

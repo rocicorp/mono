@@ -60,8 +60,11 @@ A pending `run`, and a preload's pending `cached` and `complete`, belong to
 the client that started them. When that client closes, by `close()` or by
 being replaced, they throw a ``QueryError`` saying Zero was closed, as they
 reject in JS. After a replacement, run it again: the same `Zero` now uses
-the new client. As in JS, don't query a closed `Zero`: a `run` that waits
-for `.complete` or `.cached` there never returns.
+the new client. Unlike JS, where only the calls pending at close reject and
+a new one never settles, a new `run` that waits for `.complete` or `.cached`
+on a closed `Zero`, and a new preload's `cached` and `complete`, throw that
+same error at once; such a preload registers nothing. A `run` with
+`.unknown` still returns the local rows.
 
 ## Queries
 

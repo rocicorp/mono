@@ -204,11 +204,17 @@ final class QueryManager {
     guard closedError == nil else { return }
     closedError = reason
     for (hash, entry) in queries.entries {
-      let error = ErroredQuery.app(
-        id: hash.string, name: entry.name ?? "legacy", message: reason.message,
-        details: ["kind": .string(reason.kindName)])
+      let error = Self.closedError(id: hash.string, name: entry.name, reason)
       for (_, cb) in entry.gotCallbacks { cb(.no, error) }
     }
+  }
+
+  /// The error of a query that waited for the server when the client
+  /// closed (or, in Swift only, that waits for it once closed).
+  static func closedError(id: String, name: String?, _ reason: ConnectionError) -> ErroredQuery {
+    .app(
+      id: id, name: name ?? "legacy", message: reason.message,
+      details: ["kind": .string(reason.kindName)])
   }
 
   /// Registers a named query. Returns the function that unregisters it.

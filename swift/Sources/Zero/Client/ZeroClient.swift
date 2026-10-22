@@ -150,9 +150,11 @@ public final class Zero<Context: Sendable> {
   /// When the client closes, with `close()` or when `Zero` replaces it
   /// (see `ZeroOptions.onClientStateNotFound`), a run still waiting throws
   /// a `QueryError` saying Zero was closed, as in JS. Unlike views and
-  /// preloads, it doesn't move to the new client: run it again. Don't run
-  /// queries on a closed `Zero` (in JS a closed instance can no longer
-  /// query): here a run waiting for `.complete` or `.cached` never returns.
+  /// preloads, it doesn't move to the new client: run it again. On a closed
+  /// `Zero`, a new run waiting for `.complete` or `.cached` throws that
+  /// same error at once, while `.unknown` still returns the local rows.
+  /// This differs from JS, where only the runs pending at close are
+  /// rejected and a new one never settles.
   ///
   /// An unnamed query (a `Query` rather than a `QueryRequest`) only sees
   /// local data, as in JS without `enableLegacyQueries`: the server never
@@ -197,7 +199,10 @@ public final class Zero<Context: Sendable> {
   /// When `Zero` replaces its client, the preload moves to the new one, but
   /// its `cached` and `complete` are the old client's: if still pending,
   /// they throw a `QueryError` saying Zero was closed, as they do on
-  /// `close()`. On a closed `Zero` they never settle.
+  /// `close()`. A new preload on a closed `Zero` registers nothing, and its
+  /// `cached` and `complete` throw that same error at once. This differs
+  /// from JS, where only the preloads pending at close are rejected and a
+  /// new one never settles.
   ///
   /// Preloading an unnamed query (a `Query` rather than a `QueryRequest`)
   /// does nothing, as in JS without `enableLegacyQueries`: it only sees
@@ -212,7 +217,7 @@ public final class Zero<Context: Sendable> {
 
   public func preload(_ query: AnyQuery, ttl: TTL = .defaultPreloadTTL) -> Preload {
     let preload = engine.loop.call { engine.context.preload(query, ttl: ttl) }
-    guard query.customQueryID != nil else { return preload }
+    guard query.customQueryID != nil, !engine.closed else { return preload }
     let record = PreloadRecord(query: query, ttl: ttl, cleanup: preload.cleanup)
     preloads.removeAll { !$0.active }
     preloads.append(record)
