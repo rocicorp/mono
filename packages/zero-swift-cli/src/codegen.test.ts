@@ -1,7 +1,7 @@
 import {readFileSync, writeFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {expect, test} from 'vitest';
-import {codegenFile} from './cli.ts';
+import {codegenFile, main, UsageError} from './cli.ts';
 import type {Config} from './generate.ts';
 
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
@@ -94,3 +94,11 @@ for (const {name, dir = '', config} of fixtures) {
     expect(swift).toBe(readFileSync(path, 'utf8'));
   });
 }
+
+test('a missing schema is a usage error, not a crash', async () => {
+  await expect(main(['--schema', 'no-such-schema.ts'])).rejects.toThrow(
+    new UsageError(
+      `Schema no-such-schema.ts doesn't exist. Pass --schema, or set "schema" in zero-swift.json.`,
+    ),
+  );
+});

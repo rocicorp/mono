@@ -26,8 +26,36 @@ import type {Schema} from '../../zero-types/src/schema.ts';
 import {generate, type Config} from './generate.ts';
 import {readCustomTypes} from './types.ts';
 
+const usage = `Usage:
+  zero-swift codegen [--schema schema.ts] [--out Schema.swift]
+                     [--config zero-swift.json] [--check]
+  zero-swift drift record [--samples drift-samples.ts]
+                          [--out drift-vectors.json] [--check]
+
+codegen generates Swift from the app's TypeScript schema. Options override
+zero-swift.json, which is read when present.
+drift record runs the app's TS queries and mutators on samples and records
+what they did, for the Swift drift test.
+--check fails when the output is out of date instead of writing it.
+
+Docs: https://github.com/wevm/zero/tree/main/packages/zero-swift-cli
+`;
+
+/** A mistake in how the CLI was run: printed without a stack. */
+export class UsageError extends Error {}
+
+function mustExist(path: string, message: string) {
+  if (!existsSync(path)) {
+    throw new UsageError(message);
+  }
+}
+
 export async function codegenFile(config: Config, cwd: string) {
   const schemaPath = resolve(cwd, config.schema ?? 'schema.ts');
+  mustExist(
+    schemaPath,
+    `Schema ${relative(cwd, schemaPath)} doesn't exist. Pass --schema, or set "schema" in zero-swift.json.`,
+  );
   const exportName = config.export ?? 'schema';
   const module = (await import(pathToFileURL(schemaPath).href)) as Record<
     string,
@@ -35,7 +63,7 @@ export async function codegenFile(config: Config, cwd: string) {
   >;
   const schema = module[exportName] as Schema | undefined;
   if (!schema || typeof schema !== 'object' || !('tables' in schema)) {
-    throw new Error(
+    throw new UsageError(
       `${schemaPath} does not export a schema as "${exportName}"`,
     );
   }
@@ -49,26 +77,41 @@ export async function codegenFile(config: Config, cwd: string) {
 }
 
 export async function main(argv: string[]): Promise<number> {
-  const {values, positionals} = parseArgs({
-    args: argv,
-    allowPositionals: true,
-    options: {
-      schema: {type: 'string'},
-      out: {type: 'string'},
-      config: {type: 'string'},
-      samples: {type: 'string'},
-      check: {type: 'boolean'},
-    },
-  });
+  let parsed;
+  try {
+    parsed = parseArgs({
+      args: argv,
+      allowPositionals: true,
+      options: {
+        schema: {type: 'string'},
+        out: {type: 'string'},
+        config: {type: 'string'},
+        samples: {type: 'string'},
+        check: {type: 'boolean'},
+        help: {type: 'boolean', short: 'h'},
+      },
+    });
+  } catch (e) {
+    process.stderr.write(`${(e as Error).message}\n\n${usage}`);
+    return 2;
+  }
+  const {values, positionals} = parsed;
   const [command = 'codegen', subcommand] = positionals;
+  if (values.help || command === 'help') {
+    process.stdout.write(usage);
+    return 0;
+  }
   const cwd = process.cwd();
   if (command === 'drift' && subcommand === 'record') {
+    const samples = resolve(cwd, values.samples ?? 'drift-samples.ts');
+    mustExist(
+      samples,
+      `Samples file ${relative(cwd, samples)} doesn't exist. Pass --samples.`,
+    );
     // Loaded here: the recorder runs the app's `@rocicorp/zero`, which
     // codegen does not need.
     const {recordDriftFile} = await import('./drift.ts');
-    const vectors = await recordDriftFile(
-      resolve(cwd, values.samples ?? 'drift-samples.ts'),
-    );
+    const vectors = await recordDriftFile(samples);
     return writeOutput(
       resolve(cwd, values.out ?? 'drift-vectors.json'),
       vectors,
@@ -77,7 +120,9 @@ export async function main(argv: string[]): Promise<number> {
     );
   }
   if (command !== 'codegen') {
-    process.stderr.write(`Unknown command "${positionals.join(' ')}"\n`);
+    process.stderr.write(
+      `Unknown command "${positionals.join(' ')}"\n\n${usage}`,
+    );
     return 2;
   }
   const configPath =
@@ -85,6 +130,9 @@ export async function main(argv: string[]): Promise<number> {
     (existsSync(resolve(cwd, 'zero-swift.json'))
       ? 'zero-swift.json'
       : undefined);
+  if (configPath) {
+    mustExist(resolve(cwd, configPath), `Config ${configPath} doesn't exist.`);
+  }
   const fileConfig = configPath
     ? (JSON.parse(readFileSync(resolve(cwd, configPath), 'utf8')) as Config)
     : {};

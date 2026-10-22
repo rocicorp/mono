@@ -17,7 +17,7 @@ import Zero
 ///   rowQuery: { row, filter in Queries.issueByID(filter, row.id) })
 /// ```
 ///
-/// A scroll view adapter (`VirtualList`, `VirtualTableAdapter`) attaches
+/// A scroll view adapter (`VirtualList`, `VirtualListView`) attaches
 /// itself and renders `snapshot`.
 @Observable
 @MainActor

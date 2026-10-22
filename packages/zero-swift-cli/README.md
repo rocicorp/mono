@@ -6,6 +6,7 @@ truth, and this tool generates what the Swift client needs from them.
 
 ```sh
 npm install --save-dev zero-swift
+npx zero-swift --help
 ```
 
 It needs Node 22.18 or later, which loads TypeScript files directly. It also

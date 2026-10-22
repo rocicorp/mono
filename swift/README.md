@@ -30,6 +30,7 @@ targets: [
   .target(name: "App", dependencies: [
     .product(name: "Zero", package: "zero-swift"),
     .product(name: "ZeroUI", package: "zero-swift"),  // SwiftUI, UIKit, AppKit
+    .product(name: "ZeroVirtual", package: "zero-swift"),  // long lists
   ]),
   .testTarget(name: "AppTests", dependencies: [
     .product(name: "ZeroTesting", package: "zero-swift"),
@@ -67,6 +68,43 @@ struct IssueList: View {
 
 zero.mutate(IssueMutators.create(.init(id: newID(), title: "Crash on launch", created: now)))
 ```
+
+## Long lists
+
+`ZeroVirtual` is `@rocicorp/zero-virtual` for Swift. A `ZeroVirtualizer`
+pages a list's rows in from your queries as it scrolls, runs at most three
+queries, and drops rows far from the screen. It can open at a row
+(`permalinkID`) or where the list was (`scrollState`). What's on screen stays
+put as pages load, rows go, and rows change height.
+
+```swift
+import ZeroVirtual
+
+let issues = ZeroVirtualizer(
+  zero: zero, listContext: filter, estimatedRowHeight: 56,
+  rowKey: \.id, toStartRow: { IssueStart(id: $0.id, modified: $0.modified) },
+  pageQuery: { page, filter in IssueQueries.page(filter, page) },
+  rowQuery: { row, filter in IssueQueries.byID(filter, row.id) })
+
+// SwiftUI
+VirtualList(issues, selection: $selected) { item, isSelected in
+  IssueRow(issue: item.row, highlighted: isSelected)
+} header: {
+  FilterBar()  // header and footer are optional
+}
+
+// UIKit or AppKit: rows are your own views, reused as they scroll.
+let list = VirtualListView(issues) { item, isSelected, reusing in
+  let row = reusing as? IssueRowView ?? IssueRowView()
+  row.show(item.row, selected: isSelected)
+  return row
+}
+list.onSelect = { id in open(id) }
+```
+
+A tap selects a row, and on macOS so do the arrow keys and j and k. The doc
+comments on `ZeroVirtualizer`, `VirtualList`, and `VirtualListView` cover the
+rest, and `apps/zbugs-swift` uses all three.
 
 ## Documentation
 

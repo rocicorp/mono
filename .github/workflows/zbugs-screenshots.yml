@@ -8,6 +8,8 @@ name: zbugs screenshots
 # UI tests run the ZeroVirtual test app (swift/TestHost), which needs no
 # backend.
 # Path-filtered to the app and the UI layer: macOS runners are slow to start.
+# Within that, the changes job picks the jobs a change needs: the screenshots
+# for zbugs, the virtual list suites for the test app (swift/TestHost).
 
 on:
   push:
@@ -38,8 +40,49 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      zbugs: ${{ steps.paths.outputs.zbugs }}
+      testhost: ${{ steps.paths.outputs.testhost }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: paths
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          case "$EVENT" in
+            pull_request) base="$(git merge-base "$PR_BASE" HEAD || true)" ;;
+            push) base="$BEFORE" ;;
+            *) base='' ;;
+          esac
+          # A manual run, a new branch, or a force push runs everything.
+          if [ -n "$base" ] && git cat-file -e "$base^{commit}" 2>/dev/null; then
+            files="$(git diff --name-only "$base" HEAD)"
+          else
+            files=all
+          fi
+          shared='^(swift/Sources/(ZeroUI|ZeroVirtual|ZeroTesting)/|\.github/workflows/zbugs-screenshots\.yml$)'
+          needs() {
+            if [ "$files" = all ] || grep -qE "$1|$shared" <<<"$files"; then
+              echo true
+            else
+              echo false
+            fi
+          }
+          echo "zbugs=$(needs '^apps/zbugs-swift/')" >> "$GITHUB_OUTPUT"
+          echo "testhost=$(needs '^swift/TestHost/')" >> "$GITHUB_OUTPUT"
+
   screenshots:
     name: zbugs screenshots (iPhone, iPad, and macOS)
+    needs: changes
+    if: needs.changes.outputs.zbugs == 'true'
     runs-on: macos-26
     timeout-minutes: 60
     steps:
@@ -153,6 +196,8 @@ jobs:
     # Each platform and suite in its own job: together they outrun a job's
     # timeout (the frame probe's scripts drive minutes of scrolling).
     name: Virtual list UI tests (${{ matrix.platform }}, ${{ matrix.suite }})
+    needs: changes
+    if: needs.changes.outputs.testhost == 'true'
     runs-on: macos-26
     timeout-minutes: 45
     strategy:

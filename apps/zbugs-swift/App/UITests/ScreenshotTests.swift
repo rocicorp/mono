@@ -37,9 +37,15 @@ final class ScreenshotTests: XCTestCase {
     settle()
     snapshot(app, "1 Issues")
 
-    // An issue with its comments.
+    // An issue with its comments. A tap while the list is still taking in
+    // the sync can land on a row as it's replaced, so tap again if the issue
+    // hasn't opened.
     press(firstIssue)
-    if expect(app, app.buttons["Comment"], "the issue's comment button") {
+    let comment = app.buttons["Comment"]
+    if !comment.waitForExistence(timeout: 10), firstIssue.isHittable {
+      press(firstIssue)
+    }
+    if expect(app, comment, "the issue's comment button") {
       settle()
       snapshot(app, "2 Issue")
     }
