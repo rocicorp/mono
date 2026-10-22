@@ -92,7 +92,10 @@ final class Engine {
   isolated deinit {
     loop.stop()
     for t in lifecycleTimers { t.cancel() }
-    if !repClosed { database.release() }
+    if !repClosed {
+      database.removeWriteFailureListener(clientID)
+      database.release()
+    }
   }
   private let socketFactory: (any SocketFactory)?
   private let socketOrigin: String?
@@ -169,10 +172,22 @@ final class Engine {
       userID: options.userID, storageKey: options.storageKey ?? "",
       mutateURL: options.mutateURL, queryURL: options.queryURL,
       schemaHash: clientSchema.hash)
-    let (database, openFailure) = ReplicaDatabase.open(options.storage, name: name)
+    var (database, openFailure) = ReplicaDatabase.open(options.storage, name: name)
+    var joined: (clientGroupID: String, group: StoredGroup)
+    do {
+      joined = try database.initClient(
+        clientID, mutatorNames: mutators.keys.sorted(), now: base.now)
+    } catch {
+      // The client group can't be read: run on memory, as when the open
+      // fails.
+      database.release()
+      database = ReplicaDatabase.memory(name: name)
+      openFailure = error
+      joined = try database.initClient(
+        clientID, mutatorNames: mutators.keys.sorted(), now: base.now)
+    }
+    let (clientGroupID, group) = joined
     self.database = database
-    let (clientGroupID, group) = database.initClient(
-      clientID, mutatorNames: mutators.keys.sorted(), now: base.now)
     self.clientGroupID = clientGroupID
     self.profileID = database.profileID
     self.store = ReplicaStore(
@@ -235,7 +250,9 @@ final class Engine {
       ivmMain.apply(
         store.advance(to: store.snapshot, main: main, pending: replayed, touched: touched))
     }
-    database.onWriteFailure = { [weak self] failure in self?.storageFailed(failure) }
+    database.addWriteFailureListener(clientID) { [weak self] failure in
+      self?.storageFailed(failure)
+    }
     if let openFailure {
       log.warn(
         "Local store storage failed (\(openFailure.kind.rawValue)) opening \(name); "
@@ -1012,6 +1029,7 @@ final class Engine {
     pushTimer = nil
     for t in lifecycleTimers { t.cancel() }
     lifecycleTimers = []
+    database.removeWriteFailureListener(clientID)
     database.release()
     connectionManager.closed()
   }
@@ -1286,7 +1304,12 @@ final class Engine {
         Self.badOrderMessage(
           "cookie", JSONSerializer.stringify(poke.cookie), JSONSerializer.stringify(base.cookie)))
     }
-    if poke.cookie == base.cookie { return }
+    if poke.cookie == base.cookie {
+      // `zero.ts` trusts the got queries once `rep.poke` returns, even for a
+      // poke that changes nothing.
+      markGotQueriesAuthoritative(ifStillOn: socketAtStart)
+      return
+    }
 
     var snapshot = base
     snapshot.lastMutationIDs.merge(poke.lastMutationIDChanges) { $1 }
@@ -1327,6 +1350,13 @@ final class Engine {
     ])
     context.processChanges(diff)
     fireWatchers(diff)
+    markGotQueriesAuthoritative(ifStillOn: socketAtStart)
+  }
+
+  /// The server has caught the client up, unless the connection the poke
+  /// came on went away while it was applied: the disconnect already
+  /// re-gated trust, and the next connection's first poke restores it.
+  private func markGotQueriesAuthoritative(ifStillOn socketAtStart: SocketHandle?) {
     if socketAtStart != nil, socket === socketAtStart {
       queryManager.markGotQueriesAuthoritative()
     }

@@ -96,9 +96,11 @@ func createPredicateImpl(
   case .ne: return { !ValueCompare.identical($0, rhs) }
   // compareValues orders strings by UTF-8, matching ORDER BY and SQLite.
   case .lt: return { ValueCompare.compare($0, rhs) < 0 }
-  case .le: return { ValueCompare.compare($0, rhs) <= 0 }
+  // `compare` orders NaN as equal to every number; JS's `a - b` is NaN,
+  // and NaN <= 0 and NaN >= 0 are false.
+  case .le: return { !isNaN($0) && !isNaN(rhs) && ValueCompare.compare($0, rhs) <= 0 }
   case .gt: return { ValueCompare.compare($0, rhs) > 0 }
-  case .ge: return { ValueCompare.compare($0, rhs) >= 0 }
+  case .ge: return { !isNaN($0) && !isNaN(rhs) && ValueCompare.compare($0, rhs) >= 0 }
   case .like: return try likePredicate(rhs, caseInsensitive: false)
   case .notLike:
     let p = try likePredicate(rhs, caseInsensitive: false)
@@ -116,6 +118,10 @@ func createPredicateImpl(
   case .is, .isNot:
     preconditionFailure("handled by createPredicate")
   }
+}
+
+private func isNaN(_ value: Value) -> Bool {
+  if case .number(let n) = value { n.isNaN } else { false }
 }
 
 /// `new Set(values).has(lhs)`: SameValueZero, arrays and objects by

@@ -159,8 +159,9 @@ final class ReplicaDatabase {
   private var dropped = false
   /// Set once a write failed; nothing more is written.
   private(set) var failure: StorageFailure?
-  /// Hears about the first write failure.
-  var onWriteFailure: ((StorageFailure) -> Void)?
+  /// The clients that hear about the first write failure, by client ID.
+  private var writeFailureListeners: [(clientID: String, listener: (StorageFailure) -> Void)] =
+    []
 
   private static var open: [String: ReplicaDatabase] = [:]
   /// The profile ID of memory databases, one per process as in JS.
@@ -174,12 +175,12 @@ final class ReplicaDatabase {
   }
 
   /// Opens the database named `name` in `storage`, or the one already open
-  /// in this process. A database that can't be opened is replaced by an
-  /// unshared memory one, and the failure returned.
+  /// in this process. A database that can't be opened is replaced by the
+  /// memory one of its name, and the failure returned.
   static func open(_ storage: ZeroStorage, name: String) -> (ReplicaDatabase, StorageFailure?) {
     switch storage {
     case .memory:
-      return (shared(key: "memory:" + name, name: name, sqlite: nil), nil)
+      return (memory(name: name), nil)
     case .sqlite(let directory):
       do {
         let dir = try directory ?? defaultDirectory()
@@ -201,12 +202,16 @@ final class ReplicaDatabase {
         open[path] = db
         return (db, nil)
       } catch {
-        let db = ReplicaDatabase(name: name, key: "", sqlite: nil)
-        db.profileID = "p" + randomID()
-        db.users = 1
-        return (db, StorageFailure(error))
+        return (memory(name: name), StorageFailure(error))
       }
     }
+  }
+
+  /// The memory database named `name`, which lives for the process and is
+  /// shared by name: `.memory` and the fallback of a database that fails
+  /// (`fallbackStoreProvider`, `MemStore`).
+  static func memory(name: String) -> ReplicaDatabase {
+    shared(key: "memory:" + name, name: name, sqlite: nil)
   }
 
   private static func shared(key: String, name: String, sqlite: SQLiteStore?) -> ReplicaDatabase {
@@ -254,14 +259,15 @@ final class ReplicaDatabase {
   }
 
   /// The snapshot and pending mutations of group `id`.
-  func loadGroup(_ id: String) -> StoredGroup {
+  private func loadGroup(_ id: String) throws(StorageFailure) -> StoredGroup {
     if let memoryGroups { return memoryGroups[id] ?? StoredGroup() }
-    guard let sqlite, failure == nil else { return StoredGroup() }
+    guard let sqlite else { return StoredGroup() }
     do {
       return try sqlite.sync { try SQLiteStore.loadGroup(id, from: $0) }
     } catch {
-      fail(StorageFailure(error))
-      return StoredGroup()
+      let failure = StorageFailure(error)
+      fail(failure)
+      throw failure
     }
   }
 
@@ -276,10 +282,22 @@ final class ReplicaDatabase {
     }
   }
 
+  /// Tells client `clientID` about the first write failure, until it is
+  /// removed.
+  func addWriteFailureListener(
+    _ clientID: String, _ listener: @escaping (StorageFailure) -> Void
+  ) {
+    writeFailureListeners.append((clientID, listener))
+  }
+
+  func removeWriteFailureListener(_ clientID: String) {
+    writeFailureListeners.removeAll { $0.clientID == clientID }
+  }
+
   private func fail(_ f: StorageFailure) {
     guard failure == nil else { return }
     failure = f
-    onWriteFailure?(f)
+    for (_, listener) in writeFailureListeners { listener(f) }
   }
 
   private func applyToMirror(_ op: StorageOp) {
@@ -338,12 +356,14 @@ final class ReplicaDatabase {
   /// Adds client `clientID` to the newest client group that registers the
   /// same mutators and isn't disabled, or to a new empty one
   /// (`initClientV6` with client group forking off). Returns the group and
-  /// what it holds.
+  /// what it holds. Throws, adding nothing, when the database failed or
+  /// the group can't be read.
   func initClient(
     _ clientID: String, mutatorNames: [String], now: Double
-  ) -> (
+  ) throws(StorageFailure) -> (
     clientGroupID: String, group: StoredGroup
   ) {
+    if let failure { throw failure }
     let names = Set(mutatorNames)
     var ops: [StorageOp] = []
     let groupID: String
@@ -352,7 +372,7 @@ final class ReplicaDatabase {
       !$0.disabled && $0.mutatorNames.count == names.count && names.isSuperset(of: $0.mutatorNames)
     }) {
       groupID = match.id
-      group = loadGroup(groupID)
+      group = try loadGroup(groupID)
     } else {
       groupID = randomID()
       ops.append(
@@ -508,6 +528,10 @@ final class SQLiteStore: @unchecked Sendable {
   private let queue = DispatchQueue(label: "zero.storage")
   // Only used on `queue`.
   private var db: SQLiteDatabase?
+  /// Set once a write failed: the writes queued after it are dropped.
+  private var failed = false
+  /// The writes that found the database busy, written with the next.
+  private var retrying: [StorageOp] = []
   let path: String
   let directory: String
 
@@ -571,15 +595,24 @@ final class SQLiteStore: @unchecked Sendable {
 
   func flush() { queue.sync {} }
 
-  /// Applies `ops` in one transaction, after the writes queued before.
+  /// Applies `ops` in one transaction, after the writes queued before. A
+  /// database busy past the busy timeout is not a failure
+  /// (`classifySQLiteError`): the ops are kept and written with the next
+  /// write, as the next persist writes what a failed one had. After any
+  /// other error nothing more is written.
   func write(_ ops: [StorageOp], onError: @escaping @MainActor @Sendable (any Error) -> Void) {
     queue.async { [self] in
-      guard let db else { return }
+      guard let db, !failed else { return }
+      let ops = retrying + ops
       do {
         try db.transaction {
           for op in ops { try Self.apply(op, to: db) }
         }
+        retrying = []
+      } catch let error as SQLiteError where error.isBusy {
+        retrying = ops
       } catch {
+        failed = true
         let e = error
         Task { @MainActor in onError(e) }
       }

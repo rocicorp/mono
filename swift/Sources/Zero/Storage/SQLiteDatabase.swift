@@ -9,6 +9,12 @@ struct SQLiteError: Error, CustomStringConvertible {
 
   /// The disk or the database file is full.
   var isFull: Bool { code & 0xff == SQLITE_FULL }
+  /// Another connection holds a lock past the busy timeout: contention,
+  /// not a storage failure.
+  var isBusy: Bool {
+    let primary = code & 0xff
+    return primary == SQLITE_BUSY || primary == SQLITE_LOCKED
+  }
   /// The database file can't be opened or isn't a database.
   var isCannotOpen: Bool {
     let primary = code & 0xff
