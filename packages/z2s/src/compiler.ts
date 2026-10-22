@@ -727,18 +727,18 @@ function selectIdent(server: ServerSpec, column: QualifiedColumn): SQLQuery {
   if (!serverColumnSchema.isEnum) {
     let needsNormalization = false;
     switch (serverType) {
-      case 'timestamptz':
-      // @ts-expect-error Fallthrough intended
       case 'timetz':
+      // @ts-expect-error Fallthrough intended
+      case 'time with time zone':
         needsNormalization = true;
       // fallthrough
 
       case 'date':
       case 'time':
       case 'time without time zone':
-      case 'time with time zone':
       case 'timestamp':
       case 'timestamp without time zone':
+      case 'timestamptz':
       case 'timestamp with time zone': {
         // EXTRACT(EPOCH FROM timetz) can be negative when the UTC offset is
         // positive (e.g. 01:00+02 = 23:00 UTC prev day = -3600s). Wrap with
