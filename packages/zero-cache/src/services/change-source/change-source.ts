@@ -28,6 +28,14 @@ export interface ChangeSource {
   } | null> | null;
 
   /**
+   * Requests that a lag report be initiated now rather than at the next
+   * report interval, e.g. so that a subscriber that has just caught up can
+   * determine its readiness promptly. Optional; a no-op if lag reporting is
+   * not supported / enabled, or if a report is already in flight.
+   */
+  requestLagReport?(): void;
+
+  /**
    * Starts a stream of changes starting after the specific watermark,
    * with a corresponding sink for upstream acknowledgements.
    */

@@ -6,7 +6,7 @@ import {StatementRunner} from '../../db/statements.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {getReplicationState} from '../replicator/schema/replication-state.ts';
-import type {BackedUpWatermark} from './backup-monitor.ts';
+import type {BackedUpWatermark, BackupPoller} from './backup-monitor.ts';
 
 const CHECK_INTERVAL_MS = 10 * 1000;
 
@@ -15,7 +15,7 @@ const CHECK_INTERVAL_MS = 10 * 1000;
  * 30 seconds and schedules cleanup when the watermark
  * (i.e. stateVersion) moves forward.
  */
-export class ReplicaPoller {
+export class ReplicaPoller implements BackupPoller {
   readonly id = 'replica-poller';
   readonly #lc: LogContext;
   readonly #replicaFile: string;

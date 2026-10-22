@@ -4,8 +4,8 @@ import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {getOrCreateGauge} from '../../observability/metrics.ts';
 import type {Source} from '../../types/streams.ts';
+import {Subscription} from '../../types/subscription.ts';
 import type {SingletonService} from '../service.ts';
-import type {ChangeStreamerService} from './change-streamer.ts';
 
 export type BackedUpWatermark = {
   watermark: string;
@@ -13,14 +13,52 @@ export type BackedUpWatermark = {
   backupTimeMs: number;
 };
 
+/**
+ * Determines which watermarks of the replica are backed up, by whatever means
+ * the backup (or its absence) allows.
+ */
+export interface BackupPoller {
+  /**
+   * Starts polling, returning the stream of backed-up watermarks. Must only
+   * be called once.
+   */
+  start(): Source<BackedUpWatermark>;
+
+  /**
+   * Requests that the replica be backed up through `watermark` promptly,
+   * rather than at the poller's regular cadence, once the replica has reached
+   * it. The resulting watermark is emitted on the stream as usual. Pollers
+   * that cannot initiate backups do not implement this.
+   */
+  requestSync?(watermark: string): void;
+}
+
+/**
+ * The interface through which the change-streamer consumes backed-up
+ * watermarks and requests prompt backups (see {@link BackupMonitor}).
+ */
+export type BackupSource = Pick<BackupMonitor, 'backups' | 'requestSync'>;
+
+/**
+ * Relays the watermarks backed up by a {@link BackupPoller} to the
+ * change-streamer, which consumes them (see {@link backups}) and requests
+ * prompt backups (see {@link requestSync}) as needed.
+ */
 export class BackupMonitor implements SingletonService {
   readonly id = 'backup-monitor';
   readonly #lc: LogContext;
-  readonly #watermarks: Source<BackedUpWatermark>;
-  readonly #changeStreamer: ChangeStreamerService;
+  readonly #poller: BackupPoller;
   readonly #replicaFile: string;
   readonly #firstBackupReceived = resolver();
+  // Backed-up watermarks only move forward, so the consumer only needs the
+  // latest one. Coalescing keeps at most one outstanding, so that the monitor
+  // neither waits on, nor queues for, the consumer.
+  readonly #backups = Subscription.create<BackedUpWatermark>({
+    coalesce: curr => curr,
+  });
 
+  #watermarks: Source<BackedUpWatermark> | undefined;
+  #stopped = false;
   #latestBackup: BackedUpWatermark | undefined;
   #firstBackupResolved = false;
   /**
@@ -31,15 +69,9 @@ export class BackupMonitor implements SingletonService {
    */
   #coverageTarget: string | undefined;
 
-  constructor(
-    lc: LogContext,
-    watermarks: Source<BackedUpWatermark>,
-    changeStreamer: ChangeStreamerService,
-    replicaFile: string,
-  ) {
+  constructor(lc: LogContext, poller: BackupPoller, replicaFile: string) {
     this.#lc = lc;
-    this.#watermarks = watermarks;
-    this.#changeStreamer = changeStreamer;
+    this.#poller = poller;
     this.#replicaFile = replicaFile;
   }
 
@@ -47,36 +79,72 @@ export class BackupMonitor implements SingletonService {
     return this.#firstBackupReceived.promise;
   }
 
+  /**
+   * The stream of backed-up watermarks, each later than the last, coalesced
+   * to the latest one that has not been consumed. It ends when the monitor
+   * stops.
+   */
+  backups(): Source<BackedUpWatermark> {
+    return this.#backups;
+  }
+
+  /**
+   * Requests that the replica be backed up through `watermark` promptly, if
+   * the poller supports it (see {@link BackupPoller.requestSync}). A no-op
+   * unless the monitor is running.
+   */
+  requestSync(watermark: string) {
+    if (
+      !this.#watermarks ||
+      this.#stopped ||
+      (this.#latestBackup && this.#latestBackup.watermark >= watermark)
+    ) {
+      return;
+    }
+    if (this.#poller.requestSync) {
+      this.#lc.info?.(`requesting backup through ${watermark}`);
+      this.#poller.requestSync(watermark);
+    }
+  }
+
   async run() {
+    if (this.#stopped) {
+      return;
+    }
     this.#lc.info?.('starting backup monitor');
     this.#initBackupLagMetric();
     this.#coverageTarget = this.#readReplicaStateVersion();
 
-    for await (const backedUp of this.#watermarks) {
-      if (this.#latestBackup) {
-        if (backedUp.watermark < this.#latestBackup.watermark) {
-          this.#lc.warn?.(
-            `ignoring earlier backup watermark ${backedUp.watermark}`,
-            {backedUp},
-          );
-          continue;
+    this.#watermarks = this.#poller.start();
+    try {
+      for await (const backedUp of this.#watermarks) {
+        if (this.#latestBackup) {
+          if (backedUp.watermark < this.#latestBackup.watermark) {
+            this.#lc.warn?.(
+              `ignoring earlier backup watermark ${backedUp.watermark}`,
+              {backedUp},
+            );
+            continue;
+          }
+          if (backedUp.watermark === this.#latestBackup.watermark) {
+            this.#lc.debug?.(
+              `ignoring redundant backup watermark ${backedUp.watermark}`,
+              {backedUp},
+            );
+            continue;
+          }
         }
-        if (backedUp.watermark === this.#latestBackup.watermark) {
-          this.#lc.debug?.(
-            `ignoring redundant backup watermark ${backedUp.watermark}`,
-            {backedUp},
-          );
-          continue;
-        }
+        this.#lc.info?.(`received backup watermark ${backedUp.watermark}`, {
+          backedUp,
+        });
+        this.#latestBackup = backedUp;
+        this.#backups.push(backedUp);
+        this.#checkFirstBackupCovers(backedUp);
       }
-      this.#lc.info?.(`received backup watermark ${backedUp.watermark}`, {
-        backedUp,
-      });
-      this.#latestBackup = backedUp;
-      this.#changeStreamer.trackBackupWatermark(backedUp.watermark);
-      this.#checkFirstBackupCovers(backedUp);
+      this.#lc.info?.('watermark stream closed. BackupMonitor stopped.');
+    } finally {
+      this.#backups.cancel();
     }
-    this.#lc.info?.('watermark stream closed. BackupMonitor stopped.');
   }
 
   /**
@@ -131,7 +199,9 @@ export class BackupMonitor implements SingletonService {
   }
 
   stop(): Promise<void> {
-    this.#watermarks.cancel();
+    this.#stopped = true;
+    this.#watermarks?.cancel();
+    this.#backups.cancel();
     return promiseVoid;
   }
 
