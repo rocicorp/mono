@@ -2,7 +2,7 @@
 struct MergedPoke {
   var baseCookie: JSONValue
   var cookie: JSONValue
-  var lastMutationIDChanges: [String: Double]
+  var lastMutationIDChanges: [JSKey: Double]
   var patch: [KVPatchOp]
 }
 
@@ -78,7 +78,7 @@ final class PokeHandler {
       return nil
     }
     receiving!.parts.append(part)
-    return part.lastMutationIDChanges?[clientID]
+    return part.lastMutationIDChanges?[JSKey(clientID)]
   }
 
   func handlePokeChunk(_ chunk: ArraySlice<UInt8>) {
@@ -116,7 +116,7 @@ final class PokeHandler {
     }
     var result = PokeEndResult(lastMutationIDChangeForSelf: nil, hasRows: false)
     for part in parts {
-      if let lmid = part.lastMutationIDChanges?[clientID] {
+      if let lmid = part.lastMutationIDChanges?[JSKey(clientID)] {
         result.lastMutationIDChangeForSelf = lmid
       }
       if let rows = part.rowsPatch, !rows.isEmpty { result.hasRows = true }
@@ -192,10 +192,14 @@ final class PokeHandler {
           for (clientID, lmid) in changes { merged.lastMutationIDChanges[clientID] = lmid }
         }
         if let patches = part.desiredQueriesPatches {
-          for (clientID, patch) in patches.sorted(by: { StringCompare.utf16Less($0.key, $1.key) }) {
+          for (clientID, patch) in patches.sorted(by: {
+            StringCompare.utf16Less($0.key.string, $1.key.string)
+          }) {
             for op in patch {
               merged.patch.append(
-                Self.queryPatchOp(op) { Keys.desiredQueriesKey(clientID: clientID, hash: $0) })
+                Self.queryPatchOp(op) {
+                  Keys.desiredQueriesKey(clientID: clientID.string, hash: $0)
+                })
             }
           }
         }

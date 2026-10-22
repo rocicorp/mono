@@ -35,28 +35,32 @@ public struct Row: @unchecked Sendable {
     self.init(layout: RowLayout(names), slots: names.map { dictionary[$0] })
   }
 
-  /// The row of `dictionary`'s columns in `layout`, with any others after
-  /// them.
-  package init(_ dictionary: [String: JSONValue], layout: RowLayout) {
-    var others: [String] = []
+  /// The row of `object`'s columns, in its order.
+  public init(_ object: JSONObject) {
+    self.init(layout: RowLayout(object.keys), slots: object.map(\.value))
+  }
+
+  /// The row of `object`'s columns in `layout`, with any others after
+  /// them in the object's order.
+  package init(_ object: JSONObject, layout: RowLayout) {
+    var others: [(key: String, value: JSONValue)] = []
     let storage = RowStorage.make(layout) { values in
       values.initialize(repeating: nil, count: layout.names.count)
-      for (name, value) in dictionary {
+      for (name, value) in object {
         if let i = layout.index(of: name) {
           values[i] = value
         } else {
-          others.append(name)
+          others.append((name, value))
         }
       }
     }
     if others.isEmpty {
       self.init(storage: storage)
     } else {
-      others.sort(by: StringCompare.utf16Less)
       let row = Row(storage: storage)
       self.init(
-        layout: RowLayout(layout.names + others),
-        slots: (0..<row.slotCount).map { row[slot: $0] } + others.map { dictionary[$0] })
+        layout: RowLayout(layout.names + others.map(\.key)),
+        slots: (0..<row.slotCount).map { row[slot: $0] } + others.map(\.value))
     }
   }
 
@@ -160,7 +164,12 @@ public struct Row: @unchecked Sendable {
   /// The names of the columns with a value, in the layout's order.
   public var keys: [String] { map(\.key) }
 
-  /// The row as a dictionary.
+  /// The row as a JSON object, columns in the layout's order.
+  public var object: JSONObject { JSONObject(self) }
+
+  /// The row as a dictionary. Of column names that are canonically
+  /// equivalent (`"é"` and `"e\u{301}"`), the last one wins; ``object``
+  /// keeps them all.
   public var dictionary: [String: JSONValue] {
     var out: [String: JSONValue] = [:]
     out.reserveCapacity(slotCount)
@@ -198,12 +207,12 @@ extension Row: ExpressibleByDictionaryLiteral {
   public init(dictionaryLiteral elements: (String, JSONValue)...) {
     var names: [String] = []
     var slots: [JSONValue?] = []
-    var indices: [String: Int] = [:]
+    var indices: [JSKey: Int] = [:]
     for (name, value) in elements {
-      if let i = indices[name] {
+      if let i = indices[JSKey(name)] {
         slots[i] = value
       } else {
-        indices[name] = names.count
+        indices[JSKey(name)] = names.count
         names.append(name)
         slots.append(value)
       }
@@ -234,7 +243,7 @@ extension Row: Hashable {
     var n = 0
     for (name, value) in self {
       var h = Hasher()
-      h.combine(name)
+      h.combine(JSKey(name))
       h.combine(value)
       acc ^= h.finalize()
       n += 1
@@ -255,7 +264,7 @@ extension Row: CustomStringConvertible, CustomDebugStringConvertible {
 extension JSONValue {
   /// The row as a JSON object.
   public init(_ row: Row) {
-    self = .object(row.dictionary)
+    self = .object(JSONObject(row))
   }
 }
 
@@ -267,17 +276,20 @@ extension JSONValue {
 @usableFromInline
 package final class RowLayout: Sendable {
   @usableFromInline let names: [String]
-  @usableFromInline let indices: [String: Int]
+  /// By code unit: canonically equivalent names are different columns.
+  @usableFromInline let indices: [JSKey: Int]
 
   package init(_ names: [String]) {
-    var indices: [String: Int] = [:]
+    var indices: [JSKey: Int] = [:]
     indices.reserveCapacity(names.count)
-    for (i, name) in names.enumerated() where indices[name] == nil { indices[name] = i }
+    for (i, name) in names.enumerated() where indices[JSKey(name)] == nil {
+      indices[JSKey(name)] = i
+    }
     self.names = names
     self.indices = indices
   }
 
-  init(_ names: [String], indices: [String: Int]) {
+  init(_ names: [String], indices: [JSKey: Int]) {
     self.names = names
     self.indices = indices
   }
@@ -290,7 +302,7 @@ package final class RowLayout: Sendable {
   }
 
   @inlinable
-  package func index(of name: String) -> Int? { indices[name] }
+  package func index(of name: String) -> Int? { indices[JSKey(name)] }
 
   /// A column of rows in this layout.
   package func column(_ name: String) -> ColumnRef {
@@ -300,7 +312,7 @@ package final class RowLayout: Sendable {
   /// This layout with `name` after its columns.
   func appending(_ name: String) -> RowLayout {
     var indices = indices
-    indices[name] = names.count
+    indices[JSKey(name)] = names.count
     return RowLayout(names + [name], indices: indices)
   }
 }

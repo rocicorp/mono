@@ -130,6 +130,7 @@ These are what `zero-swift codegen` writes; apps rarely use them directly.
 ### JSON
 
 - ``JSONValue``
+- ``JSONObject``
 - ``Row``
 - ``JSONValueEncoder``
 - ``JSONValueDecoder``

@@ -96,7 +96,7 @@ package struct NameMapper: Sendable {
       out.related = mapped
     }
     if let start = ast.start {
-      var row: [String: JSONValue] = [:]
+      var row: JSONObject = [:]
       for (column, value) in start.row { row[try columnName(ast.table, column)] = value }
       out.start = AST.Bound(row: row, exclusive: start.exclusive)
     }

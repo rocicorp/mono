@@ -109,8 +109,11 @@ three-argument form compares as JS compares `undefined`, so
   a column the schema says isn't optional, a `String`, `Double`, `Int`, or
   `Bool` property reads as `""`, `0`, or `false`. JS hands the null
   through. An enum or JSON column still fails to read.
-- **JSON objects.** `JSONValue` objects are dictionaries, so JSON columns
-  don't keep their key order.
+- **JSON objects.** A `JSONValue` object is a ``JSONObject``, which keeps
+  its keys as a JS object does: integer-like keys first in ascending order,
+  then the others in the order they were set. Keys are compared by UTF-16
+  code unit, so `"é"` and `"e\u{301}"` are two keys, as they are in JS. JSON
+  text round-trips as `JSON.stringify` writes it.
 - **Storage.** The replica is a SQLite database per user and URL, not
   IndexedDB. One process uses it at a time; there are no tabs to share it
   with.

@@ -24,7 +24,7 @@ public final class LoopbackServer: SocketFactory {
 
   /// Adds `row` to `table`, or replaces the row with the same primary key
   /// (`primaryKey` names its columns), and sends it to connected clients.
-  public func put(_ table: String, _ row: [String: JSONValue], primaryKey: [String] = ["id"]) {
+  public func put(_ table: String, _ row: JSONObject, primaryKey: [String] = ["id"]) {
     let key = RowKey(table: table, id: primaryKey.map { row[$0] ?? .null })
     if rows.updateValue(.object(row), forKey: key) == nil { order.append(key) }
     let op = Self.put(table, .object(row))
@@ -32,13 +32,23 @@ public final class LoopbackServer: SocketFactory {
   }
 
   /// `put` for each row, in one sync.
-  public func put(_ table: String, _ rows: [[String: JSONValue]], primaryKey: [String] = ["id"]) {
+  public func put(_ table: String, _ rows: [JSONObject], primaryKey: [String] = ["id"]) {
     for row in rows {
       let key = RowKey(table: table, id: primaryKey.map { row[$0] ?? .null })
       if self.rows.updateValue(.object(row), forKey: key) == nil { order.append(key) }
     }
     let ops = rows.map { Self.put(table, .object($0)) }
     for socket in sockets where socket.connected { socket.poke(rows: ops) }
+  }
+
+  /// `put` of a dictionary's row, columns in UTF-16 code unit order.
+  public func put(_ table: String, _ row: [String: JSONValue], primaryKey: [String] = ["id"]) {
+    put(table, JSONObject(row), primaryKey: primaryKey)
+  }
+
+  /// `put` of dictionaries' rows, in one sync.
+  public func put(_ table: String, _ rows: [[String: JSONValue]], primaryKey: [String] = ["id"]) {
+    put(table, rows.map(JSONObject.init), primaryKey: primaryKey)
   }
 
   public func open(
@@ -121,7 +131,7 @@ private final class LoopbackSocket: SocketConnection {
     let base: JSONValue = cookie == 0 ? .null : .string(Self.cookie(cookie))
     cookie += 1
     let id = JSONValue.string("p\(cookie)")
-    var part: [String: JSONValue] = ["pokeID": id]
+    var part: JSONObject = ["pokeID": id]
     if !rows.isEmpty { part["rowsPatch"] = .array(rows) }
     if !queries.isEmpty {
       part["gotQueriesPatch"] = .array(

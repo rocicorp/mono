@@ -1,8 +1,8 @@
 /// A JSON value, the data model Zero syncs and stores.
 ///
 /// Numbers are `Double`, as they are in JS: integers are exact up to 2^53.
-/// Objects are unordered; everything that depends on key order (hashing,
-/// encoding for comparison) sorts keys explicitly.
+/// Objects are `JSONObject`s, which keep their keys in JS property order and
+/// tell keys apart by UTF-16 code unit, as JS does.
 ///
 /// Equality compares strings by code units, as JS does, not by Swift's
 /// canonical equivalence: `"é"` and `"e\u{301}"` are different values.
@@ -12,7 +12,7 @@ public enum JSONValue: Sendable {
   case number(Double)
   case string(String)
   case array([JSONValue])
-  case object([String: JSONValue])
+  case object(JSONObject)
 }
 
 /// A value in a row or a query literal.
@@ -26,9 +26,7 @@ extension JSONValue: Hashable {
     case (.number(let a), .number(let b)): a == b
     case (.string(let a), .string(let b)): StringCompare.equal(a, b)
     case (.array(let a), .array(let b)): a == b
-    case (.object(let a), .object(let b)):
-      a.count == b.count
-        && a.allSatisfy { k, v in b[k].map { $0 == v } ?? false }
+    case (.object(let a), .object(let b)): a == b
     default: false
     }
   }
@@ -52,16 +50,7 @@ extension JSONValue: Hashable {
       hasher.combine(a)
     case .object(let o):
       hasher.combine(5)
-      // Order-independent: combine each entry's hash commutatively.
-      var acc = 0
-      for (k, v) in o {
-        var h = Hasher()
-        h.combine(k)
-        h.combine(v)
-        acc ^= h.finalize()
-      }
-      hasher.combine(o.count)
-      hasher.combine(acc)
+      hasher.combine(o)
     }
   }
 }
@@ -92,7 +81,7 @@ extension JSONValue {
     return nil
   }
 
-  public var objectValue: [String: JSONValue]? {
+  public var objectValue: JSONObject? {
     if case .object(let o) = self { return o }
     return nil
   }
@@ -146,8 +135,7 @@ extension JSONValue: ExpressibleByArrayLiteral {
 
 extension JSONValue: ExpressibleByDictionaryLiteral {
   public init(dictionaryLiteral elements: (String, JSONValue)...) {
-    var o: [String: JSONValue] = [:]
-    o.reserveCapacity(elements.count)
+    var o = JSONObject(minimumCapacity: elements.count)
     for (k, v) in elements { o[k] = v }
     self = .object(o)
   }
@@ -171,7 +159,7 @@ extension JSONValue: Codable {
     } else if let a = try? container.decode([JSONValue].self) {
       self = .array(a)
     } else {
-      self = .object(try container.decode([String: JSONValue].self))
+      self = .object(try container.decode(JSONObject.self))
     }
   }
 

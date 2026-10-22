@@ -26,8 +26,9 @@ public struct ViewEntry: Sendable {
 
   /// The row with its relationships, as JS views present it.
   public var json: JSONValue {
-    var o = row.dictionary
-    for (name, value) in relationships {
+    var o = row.object
+    // After the row's columns, by name: a dictionary has no order.
+    for (name, value) in relationships.sorted(by: { StringCompare.utf16Less($0.key, $1.key) }) {
       switch value {
       case .many(let entries): o[name] = .array(entries.map(\.json))
       case .one(let entry?): o[name] = entry.json
@@ -489,8 +490,7 @@ extension Format: JSONCodable {
   }
 
   package var json: JSONValue {
-    var rels: [String: JSONValue] = [:]
-    for (k, v) in relationships { rels[k] = v.json }
+    let rels = JSONObject(relationships.mapValues(\.json))
     return ["singular": .bool(singular), "relationships": .object(rels)]
   }
 }

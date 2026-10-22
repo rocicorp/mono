@@ -314,7 +314,7 @@ public enum ConnectionState: Sendable, Hashable {
 
   /// The JSON form of the JS `ConnectionState`.
   package var json: JSONValue {
-    var o: [String: JSONValue] = ["name": .string(status.rawValue)]
+    var o: JSONObject = ["name": .string(status.rawValue)]
     switch self {
     case .initializing, .connected: break
     case .connecting(let reason): if let reason { o["reason"] = .string(reason) }
@@ -356,7 +356,7 @@ public enum NeedsAuthReason: Sendable, Hashable {
   package var json: JSONValue {
     switch self {
     case .mutate(let status, let body), .query(let status, let body):
-      var o: [String: JSONValue] = [
+      var o: JSONObject = [
         "type": .string(self.isMutate ? "mutate" : "query"), "status": .number(Double(status)),
       ]
       if let body { o["body"] = .string(body) }

@@ -1,0 +1,39 @@
+{
+  "formatVersion": 1,
+  "kind": "sweep-downstream",
+  "description": "Downstream message texts and what the JS client parses them to (downstreamSchema), keys sorted.",
+  "cases": [
+    {
+      "text": "[\"pokePart\",{\"pokeID\":\"p\",\"rowsPatch\":[{\"op\":\"put\",\"tableName\":\"t\",\"value\":{\"id\":\"x\",\"\\u00e9\":1,\"e\\u0301\":2}}]}]",
+      "output": "[\"pokePart\",{\"pokeID\":\"p\",\"rowsPatch\":[{\"op\":\"put\",\"tableName\":\"t\",\"value\":{\"é\":2,\"id\":\"x\",\"é\":1}}]}]"
+    },
+    {
+      "text": "[\"pokePart\",{\"pokeID\":\"p\",\"rowsPatch\":[{\"op\":\"del\",\"tableName\":\"t\",\"id\":{\"\\u00c5\":\"a\",\"\\u212b\":\"b\"}}]}]",
+      "output": "[\"pokePart\",{\"pokeID\":\"p\",\"rowsPatch\":[{\"id\":{\"Å\":\"a\",\"Å\":\"b\"},\"op\":\"del\",\"tableName\":\"t\"}]}]"
+    },
+    {
+      "text": "[\"pokePart\",{\"pokeID\":\"p\",\"rowsPatch\":[{\"op\":\"update\",\"tableName\":\"t\",\"id\":{\"id\":\"x\"},\"merge\":{\"\\u00e9\":1,\"e\\u0301\":null}}]}]",
+      "output": "[\"pokePart\",{\"pokeID\":\"p\",\"rowsPatch\":[{\"id\":{\"id\":\"x\"},\"merge\":{\"é\":null,\"é\":1},\"op\":\"update\",\"tableName\":\"t\"}]}]"
+    },
+    {
+      "text": "[\"pokePart\",{\"pokeID\":\"p\",\"lastMutationIDChanges\":{\"\\u00e9\":1,\"e\\u0301\":2}}]",
+      "output": "[\"pokePart\",{\"lastMutationIDChanges\":{\"é\":2,\"é\":1},\"pokeID\":\"p\"}]"
+    },
+    {
+      "text": "[\"pokePart\",{\"pokeID\":\"p\",\"desiredQueriesPatches\":{\"\\u00e9\":[{\"op\":\"clear\"}],\"e\\u0301\":[{\"op\":\"del\",\"hash\":\"h\"}]}}]",
+      "output": "[\"pokePart\",{\"desiredQueriesPatches\":{\"é\":[{\"hash\":\"h\",\"op\":\"del\"}],\"é\":[{\"op\":\"clear\"}]},\"pokeID\":\"p\"}]"
+    },
+    {
+      "text": "[\"pokePart\",{\"pokeID\":\"p\",\"lastMutationIDChanges\":{\"__proto__\":5,\"c\":1}}]",
+      "output": "[\"pokePart\",{\"lastMutationIDChanges\":{\"__proto__\":5,\"c\":1},\"pokeID\":\"p\"}]"
+    },
+    {
+      "text": "[\"pokePart\",{\"pokeID\":\"p\",\"rowsPatch\":[{\"op\":\"put\",\"tableName\":\"__proto__\",\"value\":{\"__proto__\":{\"a\":1},\"id\":\"x\"}}]}]",
+      "output": "[\"pokePart\",{\"pokeID\":\"p\",\"rowsPatch\":[{\"op\":\"put\",\"tableName\":\"__proto__\",\"value\":{\"__proto__\":{\"a\":1},\"id\":\"x\"}}]}]"
+    },
+    {
+      "text": "[\"pokePart\",{\"pokeID\":\"p\",\"rowsPatch\":[{\"op\":\"put\",\"tableName\":\"t\",\"value\":{\"id\":\"x\",\"n\":1e400,\"m\":-0,\"big\":9007199254740993}}]}]",
+      "output": "[\"pokePart\",{\"pokeID\":\"p\",\"rowsPatch\":[{\"op\":\"put\",\"tableName\":\"t\",\"value\":{\"big\":9007199254740992,\"id\":\"x\",\"m\":0,\"n\":null}}]}]"
+    }
+  ]
+}

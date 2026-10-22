@@ -161,4 +161,9 @@ public struct TableMutator {
   public func upsert(_ value: [String: JSONValue]) throws { try upsert(Row(value)) }
   public func update(_ value: [String: JSONValue]) throws { try update(Row(value)) }
   public func delete(_ id: [String: JSONValue]) throws { try delete(Row(id)) }
+
+  public func insert(_ value: JSONObject) throws { try insert(Row(value)) }
+  public func upsert(_ value: JSONObject) throws { try upsert(Row(value)) }
+  public func update(_ value: JSONObject) throws { try update(Row(value)) }
+  public func delete(_ id: JSONObject) throws { try delete(Row(id)) }
 }

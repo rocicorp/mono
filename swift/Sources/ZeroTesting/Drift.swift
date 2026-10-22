@@ -169,7 +169,7 @@ public enum Drift {
         case (let o, let n?) where o != n:
           changes.append(["table": .string(table), "op": "put", "row": JSONValue(n)])
         case (let o?, nil):
-          var id: [String: JSONValue] = [:]
+          var id: JSONObject = [:]
           for c in pk { id[c] = o[c] ?? .null }
           changes.append(["table": .string(table), "op": "del", "id": .object(id)])
         default:

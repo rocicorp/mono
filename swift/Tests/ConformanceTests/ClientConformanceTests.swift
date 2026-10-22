@@ -134,9 +134,11 @@ final class ScenarioRunner {
     if let v = o["maxHeaderLength"]?.numberValue { options.maxHeaderLength = Int(v) }
     options.hiddenDisconnectDelayMs = o["hiddenTabDisconnectDelay"]?.numberValue ?? 300_000
     options.mutateURL = o["mutateURL"]?.stringValue
-    options.mutateHeaders = o["mutateHeaders"]?.objectValue?.compactMapValues(\.stringValue)
+    options.mutateHeaders = o["mutateHeaders"]?.objectValue?.dictionary.compactMapValues(
+      \.stringValue)
     options.queryURL = o["queryURL"]?.stringValue
-    options.queryHeaders = o["queryHeaders"]?.objectValue?.compactMapValues(\.stringValue)
+    options.queryHeaders = o["queryHeaders"]?.objectValue?.dictionary.compactMapValues(
+      \.stringValue)
     options.storageKey = "\(o["storageKey"]?.stringValue ?? "")#scenario-\(scenarioKey)"
     options.storage = storage
     options.onUpdateNeeded = { [weak self] reason in
@@ -186,7 +188,7 @@ final class ScenarioRunner {
     case .array(let a):
       return .array(a.map { normalize($0) })
     case .object(let o):
-      var out: [String: JSONValue] = [:]
+      var out: JSONObject = [:]
       for (k, e) in o { out[placeholders[k] ?? k] = normalize(e, key: k) }
       return .object(out)
     default:
@@ -201,7 +203,7 @@ final class ScenarioRunner {
     case .array(let a):
       return .array(a.map(substitute))
     case .object(let o):
-      var out: [String: JSONValue] = [:]
+      var out: JSONObject = [:]
       for (k, e) in o { out[ids[k] ?? k] = substitute(e) }
       return .object(out)
     default:
@@ -349,7 +351,7 @@ final class ScenarioRunner {
       let sockets = factory.sockets
       let sentCounts = sockets.map(\.messages.count)
       let closedBefore = sockets.map(\.closed)
-      var result: [String: JSONValue] = [:]
+      var result: JSONObject = [:]
       do {
         try perform(step)
       } catch {
@@ -381,7 +383,7 @@ final class ScenarioRunner {
       if !closed.isEmpty { result["closed"] = .array(closed) }
       result["state"] = normalize(zero.connection.state.json)
       if !views.isEmpty {
-        var o: [String: JSONValue] = [:]
+        var o: JSONObject = [:]
         for (name, v) in views {
           o[name] = [
             "data": v.data, "resultType": .string(v.resultType),
@@ -392,17 +394,17 @@ final class ScenarioRunner {
         result["views"] = .object(o)
       }
       if !mutations.isEmpty {
-        var o: [String: JSONValue] = [:]
+        var o: JSONObject = [:]
         for (name, c, s) in mutations { o[name] = ["client": c.value, "server": s.value] }
         result["mutations"] = .object(o)
       }
       if !runs.isEmpty {
-        var o: [String: JSONValue] = [:]
+        var o: JSONObject = [:]
         for (name, r) in runs { o[name] = r.value }
         result["runs"] = .object(o)
       }
       if !preloads.isEmpty {
-        var o: [String: JSONValue] = [:]
+        var o: JSONObject = [:]
         for (name, c, p, _) in preloads { o[name] = ["cached": c.value, "complete": p.value] }
         result["preloads"] = .object(o)
       }

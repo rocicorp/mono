@@ -59,9 +59,9 @@ package struct PullResponseBody: Sendable, Hashable, JSONCodable {
   package var cookie: Version
   /// The `requestID` of the pull request this answers.
   package var requestID: String
-  package var lastMutationIDChanges: [String: Double]
+  package var lastMutationIDChanges: [JSKey: Double]
 
-  package init(cookie: Version, requestID: String, lastMutationIDChanges: [String: Double]) {
+  package init(cookie: Version, requestID: String, lastMutationIDChanges: [JSKey: Double]) {
     self.cookie = cookie
     self.requestID = requestID
     self.lastMutationIDChanges = lastMutationIDChanges

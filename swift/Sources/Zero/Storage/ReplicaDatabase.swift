@@ -116,7 +116,7 @@ struct StoredMutation: Sendable, Hashable {
 struct StoredGroup {
   var entries = KVMap()
   var cookie: JSONValue = .null
-  var lastMutationIDs: [String: Double] = [:]
+  var lastMutationIDs: [JSKey: Double] = [:]
   var mutations: [StoredMutation] = []
 }
 
@@ -134,7 +134,7 @@ enum StorageOp: Sendable {
   /// IDs. Drops the mutations the IDs confirm.
   case updateSnapshot(
     group: String, changes: [(String, JSONValue?)], cleared: Bool, cookie: JSONValue,
-    lastMutationIDs: [String: Double])
+    lastMutationIDs: [JSKey: Double])
   case addMutation(group: String, StoredMutation)
 }
 
@@ -371,7 +371,7 @@ final class ReplicaDatabase {
       }
       g.cookie = cookie
       g.lastMutationIDs = lmids
-      g.mutations.removeAll { $0.id <= lmids[$0.clientID] ?? 0 }
+      g.mutations.removeAll { $0.id <= lmids[JSKey($0.clientID)] ?? 0 }
       memoryGroups![group] = g
     case .addMutation(let group, let m):
       memoryGroups![group, default: StoredGroup()].mutations.append(m)
@@ -791,11 +791,11 @@ final class SQLiteStore: @unchecked Sendable {
       }
       try db.run(
         "UPDATE client_groups SET cookie = ?, last_mutation_ids = ? WHERE id = ?",
-        [json(cookie), json(.object(lmids.mapValues { .number($0) })), .text(group)])
+        [json(cookie), json(.numberRecord(lmids)), .text(group)])
       for (clientID, lmid) in lmids {
         try db.run(
           "DELETE FROM mutations WHERE client_group_id = ? AND client_id = ? AND id <= ?",
-          [.text(group), .text(clientID), .real(lmid)])
+          [.text(group), .text(clientID.string), .real(lmid)])
       }
     case .addMutation(let group, let m):
       try db.run(
@@ -817,7 +817,7 @@ final class SQLiteStore: @unchecked Sendable {
     ) { row in
       g.cookie = try JSONParser.parse(row.bytes(0))
       for (k, v) in try JSONParser.parse(row.bytes(1)).objectValue ?? [:] {
-        g.lastMutationIDs[k] = v.numberValue ?? 0
+        g.lastMutationIDs[JSKey(k)] = v.numberValue ?? 0
       }
     }
     try db.query("SELECT key, value FROM entries WHERE client_group_id = ?", [.text(id)]) { row in

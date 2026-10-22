@@ -6,11 +6,11 @@ package typealias Version = String
 /// The values of a row's primary key columns, by column
 /// (`primaryKeyValueRecordSchema` in `packages/zero-protocol/src/primary-key.ts`).
 /// Each value is a string, number, or boolean.
-package typealias PrimaryKeyValueRecord = [String: JSONValue]
+package typealias PrimaryKeyValueRecord = JSONObject
 
 /// A row as the protocol carries it (`rowSchema` in
 /// `packages/zero-protocol/src/data.ts`): a record of JSON values.
-package typealias RowRecord = [String: JSONValue]
+package typealias RowRecord = JSONObject
 
 /// `packages/zero-protocol/src/mutation-id.ts`.
 package struct MutationID: Sendable, Hashable, JSONCodable {

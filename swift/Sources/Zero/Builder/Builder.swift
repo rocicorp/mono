@@ -56,10 +56,10 @@ package func buildPipeline(
 
 /// Values for static parameters (`StaticQueryParameters`).
 package struct StaticQueryParameters {
-  package var authData: [String: JSONValue]?
+  package var authData: JSONObject?
   package var preMutationRow: Row?
 
-  package init(authData: [String: JSONValue]?, preMutationRow: Row? = nil) {
+  package init(authData: JSONObject?, preMutationRow: Row? = nil) {
     self.authData = authData
     self.preMutationRow = preMutationRow
   }
@@ -70,8 +70,8 @@ package func bindStaticParameters(_ ast: AST, _ params: StaticQueryParameters?) 
   func bindValue(_ v: AST.ValuePosition) -> AST.ValuePosition {
     guard case .static(let anchor, let field) = v else { return v }
     guard let params else { preconditionFailure("Static query params do not exist") }
-    let anchorValue: [String: JSONValue]? =
-      anchor == .authData ? params.authData : params.preMutationRow?.dictionary
+    let anchorValue: JSONObject? =
+      anchor == .authData ? params.authData : params.preMutationRow?.object
     guard let anchorValue else { return .literal(.null) }
     switch field {
     case .single(let f):

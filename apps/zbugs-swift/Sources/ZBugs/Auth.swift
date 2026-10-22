@@ -28,7 +28,7 @@ public enum MutationErrorCode: String, Sendable {
 func mutationError(_ message: String, _ code: MutationErrorCode, _ id: String? = nil)
   -> ApplicationError
 {
-  var details: [String: JSONValue] = ["code": .string(code.rawValue)]
+  var details: JSONObject = ["code": .string(code.rawValue)]
   if let id { details["id"] = .string(id) }
   return ApplicationError(message, details: .object(details))
 }

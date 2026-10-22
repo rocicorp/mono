@@ -138,7 +138,7 @@ extension ZeroEnum {
 
 /// Reads the fields of a JSON object, for generated `json<T>()` types.
 public struct ZeroObjectReader: Sendable {
-  public let object: [String: JSONValue]
+  public let object: JSONObject
 
   public init(_ value: JSONValue, _ type: String) throws(ZeroValueError) {
     guard case .object(let o) = value else { throw .mismatch("a \(type) object", value) }
@@ -157,7 +157,7 @@ public struct ZeroObjectReader: Sendable {
 
 /// Writes the fields of a JSON object.
 public struct ZeroObjectWriter: Sendable {
-  public private(set) var object: [String: JSONValue] = [:]
+  public private(set) var object: JSONObject = [:]
 
   public init() {}
 

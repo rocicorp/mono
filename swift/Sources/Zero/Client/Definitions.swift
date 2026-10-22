@@ -278,11 +278,11 @@ public enum MutationOutcome: Sendable, Hashable {
   package var json: JSONValue {
     switch self {
     case .success(let data):
-      var o: [String: JSONValue] = ["type": "success"]
+      var o: JSONObject = ["type": "success"]
       if let data { o["data"] = data }
       return .object(o)
     case .appError(let message, let details):
-      var e: [String: JSONValue] = ["type": "app", "message": .string(message)]
+      var e: JSONObject = ["type": "app", "message": .string(message)]
       if let details { e["details"] = details }
       return ["type": "error", "error": .object(e)]
     case .zeroError(let message):

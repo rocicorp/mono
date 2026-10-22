@@ -43,12 +43,14 @@ package struct ClientSchema: Sendable, Hashable, JSONCodable {
   package var json: JSONValue {
     .object([
       "tables": .object(
-        tables.mapValues { t in
-          [
-            "columns": .object(t.columns.mapValues { ["type": .string($0.rawValue)] }),
-            "primaryKey": t.primaryKey.json,
-          ]
-        })
+        JSONObject(
+          tables.mapValues { t in
+            [
+              "columns": .object(
+                JSONObject(t.columns.mapValues { ["type": .string($0.rawValue)] })),
+              "primaryKey": t.primaryKey.json,
+            ]
+          }))
     ])
   }
 
@@ -60,8 +62,7 @@ package struct ClientSchema: Sendable, Hashable, JSONCodable {
 
   /// `normalizeClientSchema`: sorts each primary key, as JS `sort()` does,
   /// by UTF-16 code units. JS also orders the table and column entries by
-  /// `<`; ``json`` has no order of its own and ``JSONSerializer`` writes keys
-  /// in that same order.
+  /// `<`, which is the order ``json`` puts them in.
   package func normalized() -> ClientSchema {
     ClientSchema(
       tables: tables.mapValues { t in

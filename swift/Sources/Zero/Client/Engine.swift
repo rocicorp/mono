@@ -63,7 +63,7 @@ public struct UpdateNeededReason: Sendable, Hashable {
   public var message: String?
 
   package var json: JSONValue {
-    var o: [String: JSONValue] = ["type": .string(type)]
+    var o: JSONObject = ["type": .string(type)]
     if let message { o["message"] = .string(message) }
     return .object(o)
   }
@@ -237,7 +237,7 @@ final class Engine {
       onApplied: { [weak self] poke in
         guard let self else { return }
         defer { self.settlePendingWaiters() }
-        guard let lmid = poke.lastMutationIDChanges[self.clientID] else { return }
+        guard let lmid = poke.lastMutationIDChanges[JSKey(self.clientID)] else { return }
         try self.mutationTracker.lmidAdvanced(lmid)
       },
       onPokeError: { [weak self] message in self?.onPokeError(message) })
@@ -1305,7 +1305,9 @@ final class Engine {
     guard poke.baseCookie == base.cookie else {
       throw PokeError("unexpected base cookie for poke: " + JSONSerializer.stringify(poke.json))
     }
-    for (cid, lmid) in poke.lastMutationIDChanges.sorted(by: { $0.key < $1.key }) {
+    for (cid, lmid) in poke.lastMutationIDChanges.sorted(by: {
+      StringCompare.utf16Less($0.key.string, $1.key.string)
+    }) {
       if let last = base.lastMutationIDs[cid], lmid < last {
         throw PokeError(
           Self.badOrderMessage(
@@ -1338,7 +1340,9 @@ final class Engine {
     var touched = patchWrite.writes.union(store.pendingWrites)
     var main = snapshot.map
     var replayed: [ReplicaStore.PendingMutation] = []
-    let pending = store.pending.filter { $0.id > (snapshot.lastMutationIDs[$0.clientID] ?? 0) }
+    let pending = store.pending.filter {
+      $0.id > (snapshot.lastMutationIDs[JSKey($0.clientID)] ?? 0)
+    }
     if !pending.isEmpty {
       // The rebase runs over a fork of the views' branch moved to the new
       // snapshot.
@@ -1493,11 +1497,11 @@ final class SocketHandle: SocketEvents {
 extension MergedPoke {
   /// The poke as `JSON.stringify` shows it in errors.
   var json: JSONValue {
-    var changes: [String: JSONValue] = [:]
-    for (k, v) in lastMutationIDChanges { changes[k] = .number(v) }
-    return [
+    [
       "baseCookie": baseCookie,
-      "pullResponse": ["cookie": cookie, "lastMutationIDChanges": .object(changes)],
+      "pullResponse": [
+        "cookie": cookie, "lastMutationIDChanges": .numberRecord(lastMutationIDChanges),
+      ],
     ]
   }
 }

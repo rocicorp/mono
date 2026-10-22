@@ -38,13 +38,13 @@ extension JSONDecode {
   }
 
   /// `v.record(v.number())`.
-  static func numberRecord(_ v: JSONValue) throws(DecodingError) -> [String: Double] {
-    try record(v, number)
+  static func numberRecord(_ v: JSONValue) throws(DecodingError) -> [JSKey: Double] {
+    try keyedRecord(v, number)
   }
 
   /// `primaryKeyValueRecordSchema` (`packages/zero-protocol/src/primary-key.ts`).
-  static func primaryKeyValueRecord(_ v: JSONValue) throws(DecodingError) -> [String: JSONValue] {
-    try record(v, primaryKeyValue)
+  static func primaryKeyValueRecord(_ v: JSONValue) throws(DecodingError) -> JSONObject {
+    try objectRecord(v, primaryKeyValue)
   }
 
   /// `jsonObjectSchema` (`packages/shared/src/json-schema.ts`). It checks
@@ -106,11 +106,11 @@ extension JSONValue {
   static func strings(_ a: [String]) -> JSONValue { .array(a.map { .string($0) }) }
 
   static func stringRecord(_ r: [String: String]) -> JSONValue {
-    .object(r.mapValues { .string($0) })
+    .object(JSONObject(r.mapValues { .string($0) }))
   }
 
-  static func numberRecord(_ r: [String: Double]) -> JSONValue {
-    .object(r.mapValues { .number($0) })
+  static func numberRecord(_ r: [JSKey: Double]) -> JSONValue {
+    .object(JSONObject(r) { .number($0) })
   }
 
   /// A `[tag, body]` message.

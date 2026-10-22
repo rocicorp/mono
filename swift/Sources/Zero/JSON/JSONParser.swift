@@ -84,7 +84,7 @@ package struct JSONParser {
   private mutating func parseObject(depth: Int) throws(Error) -> JSONValue {
     if depth >= Self.maxDepth { throw error("JSON nested too deeply") }
     i += 1  // {
-    var object: [String: JSONValue] = [:]
+    var object = JSONObject()
     skipWhitespace()
     if i < end && b[i] == UInt8(ascii: "}") {
       i += 1

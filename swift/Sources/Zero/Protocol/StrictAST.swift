@@ -22,7 +22,7 @@ enum StrictAST {
 
   /// `isPlainObject` (`packages/shared/src/deep-merge.ts`) is true for
   /// arrays too; they have none of the keys looked at.
-  private static func plainObject(_ v: JSONValue?) -> [String: JSONValue]? {
+  private static func plainObject(_ v: JSONValue?) -> JSONObject? {
     switch v {
     case .object(let o)?: o
     case .array?: [:]
@@ -60,7 +60,7 @@ enum StrictAST {
   // The keys each object of the AST may have. `AST(json:)` checks the
   // values; this only rejects the keys `strict` mode would.
 
-  private static func only(_ o: [String: JSONValue], _ keys: Set<String>) throws(DecodingError) {
+  private static func only(_ o: JSONObject, _ keys: Set<String>) throws(DecodingError) {
     for k in o.keys where !keys.contains(k) {
       throw DecodingError("Unexpected key", path: [k])
     }

@@ -155,9 +155,10 @@ extension QueryHash.State {
       mix(H.tagEnd)
     case .object(let o):
       mix(H.tagObj)
-      for k in o.keys.sorted(by: StringCompare.utf16Less) {
+      // `Object.keys(v).sort()`: by UTF-16 code unit, whatever the order.
+      for (k, value) in o.sorted(by: { StringCompare.utf16Less($0.key, $1.key) }) {
         mixString(k)
-        visitValue(o[k]!)
+        visitValue(value)
       }
       mix(H.tagEnd)
     }

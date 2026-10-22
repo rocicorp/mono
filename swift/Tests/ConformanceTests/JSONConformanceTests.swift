@@ -47,11 +47,12 @@ struct JSONConformanceTests {
       case .success(let value):
         #expect(c.ok, "accepted \(String(reflecting: c.input))")
         if let stringify = c.stringify {
-          // Key order differs (JS keeps insertion order), so compare the
-          // re-encodings as values. Re-encoding maps non-finite numbers to
-          // null on both sides.
-          let ours = try JSONParser.parse(JSONSerializer.stringify(value))
-          #expect(ours == (try JSONParser.parse(stringify)), "\(String(reflecting: c.input))")
+          // The same text, keys in JS property order, by code unit.
+          let ours = JSONSerializer.stringify(value)
+          #expect(
+            Array(ours.utf16) == Array(stringify.utf16),
+            "\(String(reflecting: c.input)): Swift \(ours.debugDescription), JS \(stringify.debugDescription)"
+          )
         }
       case .failure:
         #expect(!c.ok, "rejected \(String(reflecting: c.input))")

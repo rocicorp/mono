@@ -1,9 +1,8 @@
 /// Encodes `JSONValue`s as `JSON.stringify` does: the same string escaping and
 /// number formatting, with non-finite numbers written as `null`.
 ///
-/// Object keys are written sorted by UTF-16 code unit (`Object.keys().sort()`
-/// order), since `JSONValue` objects are unordered. The output is therefore
-/// deterministic.
+/// Object keys are written in the object's order, which is JS property order,
+/// so the output is what `JSON.stringify` writes for the same object.
 package enum JSONSerializer {
   package static func stringify(_ value: JSONValue) -> String {
     var out = ""
@@ -35,12 +34,12 @@ package enum JSONSerializer {
     case .object(let o):
       out += "{"
       var first = true
-      for key in o.keys.sorted(by: StringCompare.utf16Less) {
+      for (key, value) in o {
         if !first { out += "," }
         first = false
         writeString(key, into: &out)
         out += ":"
-        write(o[key]!, into: &out)
+        write(value, into: &out)
       }
       out += "}"
     }

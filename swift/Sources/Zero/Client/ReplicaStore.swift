@@ -145,7 +145,7 @@ final class ReplicaStore {
     var map = KVMap()
     /// The server's cookie for the snapshot, `null` before the first poke.
     var cookie: JSONValue = .null
-    var lastMutationIDs: [String: Double] = [:]
+    var lastMutationIDs: [JSKey: Double] = [:]
   }
 
   struct PendingMutation {
@@ -176,7 +176,7 @@ final class ReplicaStore {
   /// The ID the next mutation of `clientID` gets.
   func nextMutationID(for clientID: String) -> Double {
     if let last = pending.last(where: { $0.clientID == clientID }) { return last.id + 1 }
-    return (snapshot.lastMutationIDs[clientID] ?? 0) + 1
+    return (snapshot.lastMutationIDs[JSKey(clientID)] ?? 0) + 1
   }
 
   /// Commits a mutation that ran in `write` over `main`.
@@ -227,7 +227,9 @@ final class ReplicaStore {
         if let merge { entries += merge.map { ($0.key, $0.value) } }
         var next: RowRecord = [:]
         for (k, v) in entries
-        where constrain == nil || constrain!.isEmpty || constrain!.contains(k) {
+        where constrain == nil || constrain!.isEmpty
+          || constrain!.contains(where: { StringCompare.equal($0, k) })
+        {
           next[k] = v
         }
         write.set(key, .object(next))

@@ -245,7 +245,8 @@ public struct Query<Row: ZeroRow, Result: QueryResult>: Sendable where Result.Ro
   ) -> Self {
     var row: [String: JSONValue] = [:]
     for (keyPath, value) in values { row[Row.column(keyPath)] = value.zeroValue }
-    return Self(any.start(row, inclusive: inclusive))
+    // A dictionary has no order: columns by name.
+    return Self(any.start(JSONObject(row), inclusive: inclusive))
   }
 
   /// At most one row.

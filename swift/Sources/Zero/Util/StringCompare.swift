@@ -7,6 +7,7 @@
 ///
 /// Both differ from Swift's `String <`, which compares by Unicode canonical
 /// equivalence.
+@usableFromInline
 package enum StringCompare {
   /// `compareUTF8(a, b)`: negative, zero, or positive.
   @inlinable
@@ -80,8 +81,9 @@ package enum StringCompare {
 
 /// A string key compared by code units, like a JS `Map` key. Swift's own
 /// `String` equality treats canonically equivalent strings as equal.
+@usableFromInline
 package struct JSKey: Hashable, Sendable, CustomStringConvertible {
-  package let string: String
+  @usableFromInline package let string: String
 
   @inlinable
   package init(_ string: String) { self.string = string }
@@ -95,5 +97,5 @@ package struct JSKey: Hashable, Sendable, CustomStringConvertible {
     s.withUTF8 { hasher.combine(bytes: UnsafeRawBufferPointer($0)) }
   }
 
-  package var description: String { string }
+  @usableFromInline package var description: String { string }
 }

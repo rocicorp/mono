@@ -1,0 +1,182 @@
+{
+  "formatVersion": 1,
+  "kind": "sweep-name-args-hash",
+  "description": "hashOfNameAndArgs of awkward arguments, given as JSON text.",
+  "cases": [
+    {
+      "name": "q",
+      "args": "[{\"\\u00e9\":1,\"e\\u0301\":2}]",
+      "hash": "117t7321b4v185"
+    },
+    {
+      "name": "q",
+      "args": "[{\"e\\u0301\":1}]",
+      "hash": "1d182330a6jb4z"
+    },
+    {
+      "name": "q",
+      "args": "[{\"\\u00e9\":1}]",
+      "hash": "0e6nzso1actvry"
+    },
+    {
+      "name": "q",
+      "args": "[\"\\u00e9\"]",
+      "hash": "0w4u8yb1gasicr"
+    },
+    {
+      "name": "q",
+      "args": "[\"e\\u0301\"]",
+      "hash": "1lkwxi70nlh9zh"
+    },
+    {
+      "name": "q",
+      "args": "[{\"\\uffff\":1,\"\\ud83d\\ude00\":2,\"\\ue000\":3,\"z\":4}]",
+      "hash": "0y61idd1diuk4c"
+    },
+    {
+      "name": "q",
+      "args": "[{\"b\":1,\"a\":2,\"10\":3,\"9\":4,\"1\":5}]",
+      "hash": "1xtut0q1qh8n7f"
+    },
+    {
+      "name": "q",
+      "args": "[{\"__proto__\":1}]",
+      "hash": "0e60b5p13oz6p3"
+    },
+    {
+      "name": "q",
+      "args": "[{\"__proto__\":{\"a\":1}}]",
+      "hash": "144aohl1t1ragi"
+    },
+    {
+      "name": "q",
+      "args": "[-0]",
+      "hash": "0rdaypu03k8og0"
+    },
+    {
+      "name": "q",
+      "args": "[0]",
+      "hash": "0rdaypu03k8og0"
+    },
+    {
+      "name": "q",
+      "args": "[2147483647]",
+      "hash": "044plqv1cvd5o9"
+    },
+    {
+      "name": "q",
+      "args": "[2147483648]",
+      "hash": "0qb6ikx0hr0zu3"
+    },
+    {
+      "name": "q",
+      "args": "[-2147483648]",
+      "hash": "0s9x8t91mfsivn"
+    },
+    {
+      "name": "q",
+      "args": "[-2147483649]",
+      "hash": "0b5swhq1ohaa63"
+    },
+    {
+      "name": "q",
+      "args": "[4294967296]",
+      "hash": "12n6gt215brdh2"
+    },
+    {
+      "name": "q",
+      "args": "[9007199254740993]",
+      "hash": "068qdzd1n6ty06"
+    },
+    {
+      "name": "q",
+      "args": "[1e21]",
+      "hash": "01b1rq01h97jbs"
+    },
+    {
+      "name": "q",
+      "args": "[5e-324]",
+      "hash": "184q3td0uos7nn"
+    },
+    {
+      "name": "q",
+      "args": "[1e400]",
+      "hash": "19o6gmz1pwuwt8"
+    },
+    {
+      "name": "q",
+      "args": "[[1e400,-1e400]]",
+      "hash": "0kbcx6t1pdx9e8"
+    },
+    {
+      "name": "q",
+      "args": "[{\"a\":1e400}]",
+      "hash": "0zt7tnh0n3zxno"
+    },
+    {
+      "name": "q",
+      "args": "[0.1]",
+      "hash": "1wzqf0p1hm7ga5"
+    },
+    {
+      "name": "q",
+      "args": "[1.5,-1.5]",
+      "hash": "1dbz4ub1x9dg00"
+    },
+    {
+      "name": "q",
+      "args": "[\"\\u0000\"]",
+      "hash": "0yg76bm1yn6mh2"
+    },
+    {
+      "name": "q",
+      "args": "[{\"\":null}]",
+      "hash": "0ss38hj0g6251c"
+    },
+    {
+      "name": "q",
+      "args": "[null,true,false]",
+      "hash": "04d3gd303xoxv3"
+    },
+    {
+      "name": "q",
+      "args": "[{\"a\":{\"b\":{\"c\":[]}}}]",
+      "hash": "1bm0t9g0w5r2r5"
+    },
+    {
+      "name": "q",
+      "args": "[[]]",
+      "hash": "00h9smo1fkhk73"
+    },
+    {
+      "name": "q",
+      "args": "[{}]",
+      "hash": "1sois8k0dte8sb"
+    },
+    {
+      "name": "q",
+      "args": "[]",
+      "hash": "0n836jo14o79hq"
+    },
+    {
+      "name": "q",
+      "args": "[]",
+      "hash": "0n836jo14o79hq"
+    },
+    {
+      "name": "",
+      "args": "[]",
+      "hash": "1i59xn81j41pqv"
+    },
+    {
+      "name": "é",
+      "args": "[]",
+      "hash": "07w63jx1eohxfg"
+    },
+    {
+      "name": "é",
+      "args": "[]",
+      "hash": "0z1tunc0x3cw4c"
+    }
+  ]
+}

@@ -20,11 +20,27 @@ public enum JSONValueDecoder {
 /// A value being built: containers write into it after they are handed out.
 private final class Slot {
   var value: JSONValue?
-  var object: [String: Slot]?
+  /// The entries of an object, in the order they were first encoded.
+  var object: [(key: String, slot: Slot)]?
   var array: [Slot]?
 
+  /// Sets an entry of the object, keeping a key's first place.
+  func set(_ key: String, _ slot: Slot) {
+    if let i = object!.firstIndex(where: { StringCompare.equal($0.key, key) }) {
+      object![i].slot = slot
+    } else {
+      object!.append((key, slot))
+    }
+  }
+
   var resolved: JSONValue? {
-    if let object { return .object(object.compactMapValues(\.resolved)) }
+    if let object {
+      var o = JSONObject(minimumCapacity: object.count)
+      for (key, slot) in object {
+        if let v = slot.resolved { o[key] = v }
+      }
+      return .object(o)
+    }
     if let array { return .array(array.map { $0.resolved ?? .null }) }
     return value
   }
@@ -50,7 +66,7 @@ private final class ValueEncoder: Encoder {
   var storage: (value: JSONValue?, Void) { (slot.resolved, ()) }
 
   func container<Key: CodingKey>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> {
-    if slot.object == nil { slot.object = [:] }
+    if slot.object == nil { slot.object = [] }
     return KeyedEncodingContainer(KeyedEncoder<Key>(slot: slot, codingPath: codingPath))
   }
 
@@ -83,7 +99,7 @@ private struct KeyedEncoder<Key: CodingKey>: KeyedEncodingContainerProtocol {
   private func set(_ key: Key, _ v: JSONValue) {
     let s = Slot()
     s.value = v
-    slot.object![key.stringValue] = s
+    slot.set(key.stringValue, s)
   }
 
   mutating func encodeNil(forKey key: Key) throws { set(key, .null) }
@@ -105,22 +121,22 @@ private struct KeyedEncoder<Key: CodingKey>: KeyedEncodingContainerProtocol {
   mutating func encode<T: Encodable>(_ value: T, forKey key: Key) throws {
     let s = Slot()
     try encodeValue(value, into: s, path: codingPath + [key])
-    slot.object![key.stringValue] = s
+    slot.set(key.stringValue, s)
   }
 
   mutating func nestedContainer<NestedKey: CodingKey>(
     keyedBy keyType: NestedKey.Type, forKey key: Key
   ) -> KeyedEncodingContainer<NestedKey> {
     let s = Slot()
-    s.object = [:]
-    slot.object![key.stringValue] = s
+    s.object = []
+    slot.set(key.stringValue, s)
     return KeyedEncodingContainer(KeyedEncoder<NestedKey>(slot: s, codingPath: codingPath + [key]))
   }
 
   mutating func nestedUnkeyedContainer(forKey key: Key) -> any UnkeyedEncodingContainer {
     let s = Slot()
     s.array = []
-    slot.object![key.stringValue] = s
+    slot.set(key.stringValue, s)
     return UnkeyedEncoder(slot: s, codingPath: codingPath + [key])
   }
 
@@ -128,7 +144,7 @@ private struct KeyedEncoder<Key: CodingKey>: KeyedEncodingContainerProtocol {
 
   mutating func superEncoder(forKey key: Key) -> any Encoder {
     let encoder = ValueEncoder(codingPath: codingPath + [key])
-    slot.object![key.stringValue] = encoder.slot
+    slot.set(key.stringValue, encoder.slot)
     return encoder
   }
 }
@@ -174,7 +190,7 @@ private struct UnkeyedEncoder: UnkeyedEncodingContainer {
     -> KeyedEncodingContainer<NestedKey>
   {
     let s = Slot()
-    s.object = [:]
+    s.object = []
     let path = codingPath + [key]
     slot.array!.append(s)
     return KeyedEncodingContainer(KeyedEncoder<NestedKey>(slot: s, codingPath: path))
@@ -231,7 +247,7 @@ private struct ValueDecoder: Decoder {
 
   func container<Key: CodingKey>(keyedBy type: Key.Type) throws -> KeyedDecodingContainer<Key> {
     guard case .object(let o) = value else {
-      throw typeMismatch([String: JSONValue].self, value, codingPath)
+      throw typeMismatch(JSONObject.self, value, codingPath)
     }
     return KeyedDecodingContainer(KeyedDecoder<Key>(object: o, codingPath: codingPath))
   }
@@ -283,7 +299,7 @@ private func exactInteger<T: BinaryInteger>(_ n: Double) -> T? {
 }
 
 private struct KeyedDecoder<Key: CodingKey>: KeyedDecodingContainerProtocol {
-  let object: [String: JSONValue]
+  let object: JSONObject
   let codingPath: [any CodingKey]
 
   var allKeys: [Key] { object.keys.compactMap { Key(stringValue: $0) } }

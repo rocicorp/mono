@@ -68,15 +68,20 @@ indirect enum ValitaSchema: Sendable {
       }
       return .array(out)
     case .record(let element):
-      return .object(try JSONDecode.record(v, element.parse))
+      return .object(try JSONDecode.objectRecord(v, element.parse))
     case .object(let fields):
       let r = try JSONObjectReader(v)
-      var out: [String: JSONValue] = [:]
+      var parsed: [JSKey: JSONValue] = [:]
       for (key, field) in fields {
         switch field {
-        case .required(let schema): out[key] = try r.required(key, schema.parse)
-        case .optional(let schema): out[key] = try r.optional(key, schema.parse)
+        case .required(let schema): parsed[JSKey(key)] = try r.required(key, schema.parse)
+        case .optional(let schema): parsed[JSKey(key)] = try r.optional(key, schema.parse)
         }
+      }
+      // In the input's order, as valita keeps it.
+      var out = JSONObject(minimumCapacity: parsed.count)
+      for key in r.object.keys {
+        if let value = parsed[JSKey(key)] { out[key] = value }
       }
       return .object(out)
     case .union(let options):

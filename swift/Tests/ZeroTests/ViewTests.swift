@@ -71,7 +71,7 @@ import ZeroTesting
       snapshots.last?.data.json == [.object(Self.rest.merging(["id": "a", "title": "3"]) { $1 })])
   }
 
-  static let rest: [String: JSONValue] = [
+  static let rest: JSONObject = [
     "description": "", "closed": false, "ownerId": nil, "createdAt": 1,
   ]
 

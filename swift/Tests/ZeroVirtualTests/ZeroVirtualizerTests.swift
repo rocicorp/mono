@@ -153,7 +153,7 @@ import ZeroTesting
 
   @Test func pagesOverALoopbackServerOnRealTime() async throws {
     let server = LoopbackServer()
-    func issue(_ i: Int) -> [String: JSONValue] {
+    func issue(_ i: Int) -> JSONObject {
       [
         "id": .string(Self.id(i)), "title": "", "description": "", "closed": .bool(false),
         "owner_id": .null, "createdAt": 1,

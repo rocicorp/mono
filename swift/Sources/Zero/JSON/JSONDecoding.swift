@@ -22,7 +22,7 @@ package struct DecodingError: Error, CustomStringConvertible, Equatable {
 /// fields may be absent but not `null` (unless declared nullable), unknown
 /// keys are ignored (`passthrough` mode).
 package struct JSONObjectReader {
-  package let object: [String: JSONValue]
+  package let object: JSONObject
 
   package init(_ value: JSONValue, _ what: String = "object") throws(DecodingError) {
     guard case .object(let o) = value else {
@@ -102,7 +102,7 @@ package enum JSONDecode {
     return b
   }
 
-  package static func object(_ v: JSONValue) throws(DecodingError) -> [String: JSONValue] {
+  package static func object(_ v: JSONValue) throws(DecodingError) -> JSONObject {
     guard case .object(let o) = v else { throw DecodingError("Expected object, got \(v.typeName)") }
     return o
   }
@@ -131,7 +131,8 @@ package enum JSONDecode {
     return out
   }
 
-  /// `v.record(element)`.
+  /// `v.record(element)`. Keys that are canonically equivalent (`"é"` and
+  /// `"e\u{301}"`) collide; `keyedRecord` keeps them apart.
   package static func record<T>(
     _ v: JSONValue, _ element: (JSONValue) throws(DecodingError) -> T
   ) throws(DecodingError) -> [String: T] {
@@ -146,6 +147,39 @@ package enum JSONDecode {
       }
     }
     return out
+  }
+
+  /// `v.record(element)`, keyed by code unit as JS keys are: for records
+  /// of data, such as by client ID.
+  package static func keyedRecord<T>(
+    _ v: JSONValue, _ element: (JSONValue) throws(DecodingError) -> T
+  ) throws(DecodingError) -> [JSKey: T] {
+    let o = try object(v)
+    var out: [JSKey: T] = [:]
+    out.reserveCapacity(o.count)
+    for (k, e) in o {
+      do {
+        out[JSKey(k)] = try element(e)
+      } catch {
+        throw error.at(k)
+      }
+    }
+    return out
+  }
+
+  /// `v.record(element)` of JSON values, keeping the object's order.
+  package static func objectRecord(
+    _ v: JSONValue, _ element: (JSONValue) throws(DecodingError) -> JSONValue
+  ) throws(DecodingError) -> JSONObject {
+    var o = try object(v)
+    for (k, e) in o {
+      do {
+        o[k] = try element(e)
+      } catch {
+        throw error.at(k)
+      }
+    }
+    return o
   }
 
   /// A non-empty array of strings (`CompoundKey`, `PrimaryKey`).
@@ -174,7 +208,7 @@ package enum JSONDecode {
 
 /// Builds a JSON object, leaving out `nil` fields.
 package struct JSONObjectBuilder {
-  package var object: [String: JSONValue] = [:]
+  package var object = JSONObject()
 
   package init() {}
 

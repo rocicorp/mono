@@ -100,8 +100,8 @@ extension ZeroSchema: JSONCodable {
     let o = try JSONObjectReader(json)
     let tablesJSON = try o.required("tables", JSONDecode.object)
     var tables: [TableSchema] = []
-    for key in tablesJSON.keys.sorted(by: StringCompare.utf16Less) {
-      tables.append(try TableSchema(json: tablesJSON[key]!).named(key))
+    for (key, value) in tablesJSON {
+      tables.append(try TableSchema(json: value).named(key))
     }
     var relationships: [String: [String: Relationship]] = [:]
     if let rels = try o.optional("relationships", JSONDecode.object) {
@@ -119,14 +119,12 @@ extension ZeroSchema: JSONCodable {
   }
 
   package var json: JSONValue {
-    var tables: [String: JSONValue] = [:]
-    for (name, table) in self.tables { tables[name] = table.json }
-    var rels: [String: JSONValue] = [:]
-    for (table, byName) in relationships {
-      var o: [String: JSONValue] = [:]
-      for (name, hops) in byName { o[name] = .array(hops.map(\.json)) }
-      rels[table] = .object(o)
-    }
+    // Dictionaries have no order: tables and relationships by name.
+    let tables = JSONObject(self.tables.mapValues(\.json))
+    let rels = JSONObject(
+      relationships.mapValues { byName in
+        .object(JSONObject(byName.mapValues { .array($0.map(\.json)) }))
+      })
     return ["tables": .object(tables), "relationships": .object(rels)]
   }
 }
@@ -138,8 +136,8 @@ extension TableSchema: JSONCodable {
     return copy
   }
 
-  /// Decodes a table. JSON objects lose their key order in `JSONValue`, so
-  /// columns are ordered by an optional `columnOrder` array, else by name.
+  /// Decodes a table. Columns are in the order of an optional `columnOrder`
+  /// array, else in the order of `columns`' keys, as `Object.keys` has them.
   package init(json: JSONValue) throws(DecodingError) {
     let o = try JSONObjectReader(json)
     let name = try o.optionalString("name") ?? ""
@@ -148,7 +146,7 @@ extension TableSchema: JSONCodable {
     let order =
       try o.optional("columnOrder") { (v) throws(DecodingError) in
         try JSONDecode.array(v, JSONDecode.string)
-      } ?? columnsJSON.keys.sorted(by: StringCompare.utf16Less)
+      } ?? columnsJSON.keys
     var columns: [(String, ColumnSchema)] = []
     for column in order {
       guard let value = columnsJSON[column] else { continue }
@@ -179,14 +177,14 @@ extension TableSchema: JSONCodable {
   }
 
   package var json: JSONValue {
-    var columns: [String: JSONValue] = [:]
+    var columns: JSONObject = [:]
     for (name, column) in self.columns {
-      var c: [String: JSONValue] = ["type": .string(column.type.rawValue)]
+      var c: JSONObject = ["type": .string(column.type.rawValue)]
       if column.optional { c["optional"] = true }
       if let serverName = column.serverName { c["serverName"] = .string(serverName) }
       columns[name] = .object(c)
     }
-    var o: [String: JSONValue] = [
+    var o: JSONObject = [
       "name": .string(name),
       "columns": .object(columns),
       "columnOrder": columnNames.json,
