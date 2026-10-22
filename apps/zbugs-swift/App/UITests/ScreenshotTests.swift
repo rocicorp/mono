@@ -104,6 +104,12 @@ final class ScreenshotTests: XCTestCase {
   func testListPagesPastTheFirst200() throws {
     let environment = ProcessInfo.processInfo.environment
     let token = try XCTUnwrap(environment["ZBUGS_TOKEN"], "Set TEST_RUNNER_ZBUGS_TOKEN")
+    // In portrait, an iPad's sidebar has no Status picker.
+    #if os(iOS)
+      if UIDevice.current.userInterfaceIdiom == .pad {
+        XCUIDevice.shared.orientation = .landscapeLeft
+      }
+    #endif
     let app = XCUIApplication()
     app.launchEnvironment["ZBUGS_TOKEN"] = token
     for key in ["ZBUGS_CACHE_URL", "ZBUGS_API_URL"] {
