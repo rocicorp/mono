@@ -29,7 +29,7 @@
     "oxfmt": "^0.74.0",
     "shared": "workspace:*",
     "typescript": "~7.0.2",
-    "vitest": "^5.0.0",
+    "vitest": "^5.0.5",
     "zero-protocol": "workspace:*",
     "zero-types": "workspace:*"
   },

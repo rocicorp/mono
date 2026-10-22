@@ -52,7 +52,7 @@
     "playwright": "^1.60.0",
     "type-fest": "^4.41.0",
     "typescript": "~7.0.2",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.5"
   },
   "packageManager": "pnpm@11.11.0"
 }
