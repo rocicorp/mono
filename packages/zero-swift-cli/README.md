@@ -55,6 +55,29 @@ Rename a row struct whose name clashes with a type you use. A table named
 `list` generates `struct List`, which hides SwiftUI's `List`; set
 `tables.list.type` to `NoteList`, or set a `typePrefix`.
 
+### Names
+
+Tables, columns, relationships, JSON fields and enumeration values keep
+their names where Swift allows them, and keywords are backticked. Otherwise:
+
+- Characters Swift doesn't allow in identifiers become `_` (`a-b` is
+  `a_b`), and a leading digit gets a `_`. A name with none it allows is `_`
+  and its code points in hex: the enumeration value `+` is `_2B`.
+- A member that is taken, that the generated code declares (such as
+  `columnValues`, `hashValue`, `zeroValue` or `rawValue`), or that Swift
+  doesn't allow even backticked (`self`, `Type`, `Protocol`) gets `_`
+  appended until it is free: `self_`. Names that need no change are claimed
+  first, so with columns `a-b` and `a_b`, `a_b` keeps its name and `a-b` is
+  `a_b_`.
+- A row struct name that is a keyword, taken, or a type the generated code
+  uses (such as `Zero`, `ZeroRow` or `Codable`) gets `Row`, then a number
+  from 2: `zero` is `ZeroRow2`.
+
+A renamed member still reads and writes the original name: the column
+names, `CodingKeys`, and enumeration raw values use it.
+
+A recursive `json<T>()` type is `JSONValue` where it recurs.
+
 Each config key has an option, such as `--schema-file`, `--out`,
 `--type-prefix`, and `--access`, that overrides it. `--config` picks the
 config file. Run `npx zero-swift codegen --help` for the full list.

@@ -106,14 +106,30 @@ function property(
   return p && checker.getTypeOfSymbol(p);
 }
 
+/** How deep objects nest before the rest is `json`, for recursive generic
+ * types, whose every level is a new type. */
+const maxDepth = 32;
+
 const nullish = ts.TypeFlags.Null | ts.TypeFlags.Undefined | ts.TypeFlags.Void;
 
-function model(checker: ts.TypeChecker, type: ts.Type): TypeModel {
+/**
+ * The model of a type. `outer` holds the object types it is inside of: a
+ * recursive type, such as `type Tree = {children: Tree[]}`, is `json` where
+ * it recurs.
+ */
+function model(
+  checker: ts.TypeChecker,
+  type: ts.Type,
+  outer: ReadonlySet<ts.Type> = new Set(),
+): TypeModel {
+  if (outer.has(type) || outer.size >= maxDepth) {
+    return {kind: 'json'};
+  }
   const alias = aliasName(type);
   if (type.isUnion()) {
     const parts = type.types.filter(t => !(t.flags & nullish));
     const nullable = parts.length !== type.types.length;
-    const inner = unionModel(checker, parts, alias);
+    const inner = unionModel(checker, parts, alias, outer);
     return nullable ? {kind: 'nullable', wrapped: inner} : inner;
   }
   if (type.isIntersection()) {
@@ -134,17 +150,18 @@ function model(checker: ts.TypeChecker, type: ts.Type): TypeModel {
     const [element] = checker.getTypeArguments(type as ts.TypeReference);
     return {
       kind: 'array',
-      element: element ? model(checker, element) : {kind: 'json'},
+      element: element ? model(checker, element, outer) : {kind: 'json'},
     };
   }
   if (type.flags & ts.TypeFlags.Object && isPlainObject(checker, type)) {
+    const inside = new Set(outer).add(type);
     const fields = checker.getPropertiesOfType(type).map(p => {
       const optional = (p.flags & ts.SymbolFlags.Optional) !== 0;
       let t = checker.getTypeOfSymbol(p);
       if (optional) {
         t = checker.getNonNullableType(t);
       }
-      return {name: p.name, type: model(checker, t), optional};
+      return {name: p.name, type: model(checker, t, inside), optional};
     });
     return {kind: 'object', ...(alias ? {alias} : {}), fields};
   }
@@ -155,6 +172,7 @@ function unionModel(
   checker: ts.TypeChecker,
   parts: ts.Type[],
   alias: string | undefined,
+  outer: ReadonlySet<ts.Type>,
 ): TypeModel {
   if (parts.length === 0) return {kind: 'json'};
   if (parts.every(t => t.isStringLiteral())) {
@@ -169,7 +187,7 @@ function unionModel(
   if (parts.every(t => t.flags & ts.TypeFlags.NumberLike)) {
     return {kind: 'number'};
   }
-  if (parts.length === 1) return model(checker, parts[0]);
+  if (parts.length === 1) return model(checker, parts[0], outer);
   return {kind: 'json'};
 }
 

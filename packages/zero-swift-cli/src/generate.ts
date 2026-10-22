@@ -74,6 +74,24 @@ const reservedTypeNames = new Set([
   'Optional',
   'Set',
   'String',
+  // The protocols the generated types conform to, and the types of their
+  // members.
+  'AllCases',
+  'CaseIterable',
+  'Codable',
+  'CodingKey',
+  'CodingKeys',
+  'Decodable',
+  'Encodable',
+  'Equatable',
+  'Hashable',
+  'Hasher',
+  'Identifiable',
+  'KeyPath',
+  'PartialKeyPath',
+  'RawRepresentable',
+  'RawValue',
+  'Sendable',
 ]);
 
 const swiftKeywords = new Set(
@@ -83,46 +101,261 @@ const swiftKeywords = new Set(
     'private precedencegroup protocol public rethrows static struct subscript ' +
     'typealias var break case catch continue default defer do else ' +
     'fallthrough for guard if in repeat return throw switch where while Any ' +
-    'as await false is nil self Self super throws true try'
+    'as await false is nil self Self super throws true try _'
   ).split(' '),
 );
 
-const nonIdentifierChars = /[^A-Za-z0-9_]/g;
-const leadingDigit = /^[0-9]/;
-const wordBoundary = /([a-z0-9])([A-Z])/g;
-const wordSeparators = /[^A-Za-z0-9]+/;
-const identifierStart = /^[A-Za-z_]/;
+/** Members Swift doesn't allow, even backticked. */
+const unusableMembers = new Set(['self', 'Type', 'Protocol']);
 
-/** A name usable as a Swift identifier, backticked when it is a keyword. */
-export function identifier(name: string): string {
-  let id = name.replace(nonIdentifierChars, '_');
-  if (leadingDigit.test(id) || id === '') {
-    id = '_' + id;
+/** The members of a row struct besides its columns and relationships. */
+const rowMembers = [
+  'tableName',
+  'columns',
+  'relationships',
+  'columnValues',
+  'hashValue',
+  'CodingKeys',
+  // The parameter of `init(entry:)`, which assigns the columns.
+  'entry',
+];
+
+/** The members of a `json<T>()` object struct besides its fields. */
+const objectMembers = [
+  'zeroValue',
+  'valueForNull',
+  'hashValue',
+  'CodingKeys',
+  // The local of `init(zeroValue:)` and `zeroValue`, which use the fields.
+  'o',
+];
+
+/** The members of an enumeration besides its cases. */
+const enumMembers = [
+  'rawValue',
+  'RawValue',
+  'zeroValue',
+  'valueForNull',
+  'allCases',
+  'AllCases',
+];
+
+const asciiIdentifierChar = /[A-Za-z0-9_]/;
+const unicodeIdentifierChar = /[\p{L}\p{M}\p{N}]/u;
+const wordBoundary = /([a-z0-9])([A-Z])/g;
+
+/** Code point ranges outside ASCII Swift allows in identifiers. */
+const identifierRanges: readonly (readonly [number, number])[] = [
+  [0xa8, 0xa8],
+  [0xaa, 0xaa],
+  [0xad, 0xad],
+  [0xaf, 0xaf],
+  [0xb2, 0xb5],
+  [0xb7, 0xba],
+  [0xbc, 0xbe],
+  [0xc0, 0xd6],
+  [0xd8, 0xf6],
+  [0xf8, 0x2ff],
+  [0x300, 0x36f],
+  [0x370, 0x167f],
+  [0x1681, 0x180d],
+  [0x180f, 0x1dbf],
+  [0x1dc0, 0x1dff],
+  [0x1e00, 0x1fff],
+  [0x2070, 0x218f],
+  [0x2460, 0x24ff],
+  [0x2776, 0x2793],
+  [0x2c00, 0x2dff],
+  [0x2e80, 0x2fff],
+  [0x3004, 0x3007],
+  [0x3021, 0x302f],
+  [0x3031, 0x303f],
+  [0x3040, 0xd7ff],
+  [0xf900, 0xfd3d],
+  [0xfd40, 0xfdcf],
+  [0xfdf0, 0xfe1f],
+  [0xfe20, 0xfe2f],
+  [0xfe30, 0xfe44],
+  [0xfe47, 0xfffd],
+  [0x10000, 0xefffd],
+];
+
+/** Swift's identifier characters that can't start one: digits and combining marks. */
+const nonHeadRanges: readonly (readonly [number, number])[] = [
+  [0x30, 0x39],
+  [0x300, 0x36f],
+  [0x1dc0, 0x1dff],
+  [0x20d0, 0x20ff],
+  [0xfe20, 0xfe2f],
+];
+
+const inRanges = (c: number, ranges: readonly (readonly [number, number])[]) =>
+  ranges.some(([lo, hi]) => c >= lo && c <= hi);
+
+/** Whether Swift allows the character in an identifier: ASCII letters,
+ * digits and `_`, and the letters, marks and digits of its Unicode ranges. */
+function isIdentifierChar(ch: string): boolean {
+  const c = ch.codePointAt(0)!;
+  return c < 0x80
+    ? asciiIdentifierChar.test(ch)
+    : unicodeIdentifierChar.test(ch) && inRanges(c, identifierRanges);
+}
+
+function isIdentifierHead(ch: string): boolean {
+  return isIdentifierChar(ch) && !inRanges(ch.codePointAt(0)!, nonHeadRanges);
+}
+
+/**
+ * The name with the characters Swift doesn't allow in identifiers replaced
+ * by `_`, and `_` before a leading digit. A name with none of them, such as
+ * `+`, is `_` and its code points in hex: `_2B`. May be a keyword.
+ */
+function sanitize(name: string): string {
+  const chars = [...name];
+  if (!chars.some(isIdentifierChar)) {
+    return chars.length
+      ? '_' +
+          chars
+            .map(ch => ch.codePointAt(0)!.toString(16).toUpperCase())
+            .join('_')
+      : '_';
   }
+  const id = chars.map(ch => (isIdentifierChar(ch) ? ch : '_'));
+  return (isIdentifierHead(id[0]) ? '' : '_') + id.join('');
+}
+
+/** An identifier as code: backticked when it is a keyword. */
+function ref(id: string): string {
   return swiftKeywords.has(id) ? '`' + id + '`' : id;
 }
 
+/** A name usable as a Swift identifier, backticked when it is a keyword. */
+export function identifier(name: string): string {
+  return ref(sanitize(name));
+}
+
+/**
+ * The member names of one Swift type or scope. A name that is taken, or
+ * that Swift doesn't allow as a member, gets `_` appended until it is
+ * free.
+ */
+class Members {
+  readonly #used: Set<string>;
+
+  constructor(reserved: Iterable<string> = []) {
+    this.#used = new Set(reserved);
+  }
+
+  #free(id: string): boolean {
+    return !this.#used.has(id) && !unusableMembers.has(id);
+  }
+
+  #available(id: string, wrapped: boolean): boolean {
+    return this.#free(id) && (!wrapped || this.#free('_' + id));
+  }
+
+  /**
+   * A free member for `id`, not backticked. `wrapped` also claims the
+   * `_id` storage of a property wrapper.
+   */
+  claim(id: string, wrapped = false): string {
+    while (!this.#available(id, wrapped)) {
+      id += '_';
+    }
+    this.#used.add(id);
+    if (wrapped) {
+      this.#used.add('_' + id);
+    }
+    return id;
+  }
+
+  /**
+   * Claims a member for each name, from `id`, its identifier. The names
+   * that are their identifier and free claim first, so a name that works
+   * as it is keeps it.
+   */
+  claimAll(
+    names: readonly {name: string; id: string; wrapped?: boolean}[],
+  ): string[] {
+    const out: string[] = [];
+    const keep = names.map(
+      n => n.id === n.name && this.#available(n.id, n.wrapped ?? false),
+    );
+    for (const pass of [true, false]) {
+      for (const [i, n] of names.entries()) {
+        if (keep[i] === pass) {
+          out[i] = this.claim(n.id, n.wrapped);
+        }
+      }
+    }
+    return out;
+  }
+}
+
 function words(name: string): string[] {
-  return name
-    .replace(wordBoundary, '$1 $2')
-    .split(wordSeparators)
-    .filter(w => w !== '');
+  const out: string[] = [];
+  let word = '';
+  for (const ch of name.replace(wordBoundary, '$1 $2')) {
+    if (ch !== '_' && isIdentifierChar(ch)) {
+      word += ch;
+    } else if (word) {
+      out.push(word);
+      word = '';
+    }
+  }
+  return word ? [...out, word] : out;
+}
+
+function capitalize(w: string): string {
+  const [first, ...rest] = w;
+  return first.toUpperCase() + rest.join('');
 }
 
 export function pascalCase(name: string): string {
-  const out = words(name)
-    .map(w => w[0].toUpperCase() + w.slice(1))
-    .join('');
-  return identifierStart.test(out) ? out : '_' + out;
+  const out = words(name).map(capitalize).join('');
+  if (out === '') {
+    return sanitize(name);
+  }
+  return isIdentifierHead([...out][0]) ? out : '_' + out;
 }
 
 function camelCase(name: string): string {
   const p = pascalCase(name);
-  return p[0] === '_' ? p : p[0].toLowerCase() + p.slice(1);
+  if (p[0] === '_') {
+    return p;
+  }
+  const [first, ...rest] = p;
+  return first.toLowerCase() + rest.join('');
 }
 
+/** A Swift string literal. */
 function str(s: string): string {
-  return JSON.stringify(s);
+  let out = '"';
+  for (const ch of s) {
+    const c = ch.codePointAt(0)!;
+    if (ch === '"' || ch === '\\') {
+      out += '\\' + ch;
+    } else if (ch === '\n') {
+      out += '\\n';
+    } else if (ch === '\r') {
+      out += '\\r';
+    } else if (ch === '\t') {
+      out += '\\t';
+    } else if (c < 0x20 || c === 0x7f || (c >= 0xd800 && c <= 0xdfff)) {
+      // Swift has no `\b` or `\f`, and a lone surrogate can't be written.
+      out += `\\u{${(c >= 0xd800 && c <= 0xdfff ? 0xfffd : c).toString(16)}}`;
+    } else {
+      out += ch;
+    }
+  }
+  return out + '"';
+}
+
+/** A type name for the row or zql builder: free, and not a keyword. */
+function typeTaken(name: string, used: ReadonlySet<string>): boolean {
+  return (
+    used.has(name) || reservedTypeNames.has(name) || swiftKeywords.has(name)
+  );
 }
 
 function strings(a: readonly string[]): string {
@@ -164,11 +397,14 @@ class Emitter {
     return this.#named;
   }
 
-  /** A free type name, without the prefix: the alias, else `fallback`. */
-  #claimBare(preferred: string | undefined, fallback: string): string {
+  /**
+   * A free type name, without the prefix: the alias, else `path` as an
+   * identifier, else that with a number.
+   */
+  #claimBare(preferred: string | undefined, path: string): string {
+    const fallback = sanitize(path);
     const free = (name: string) =>
-      !this.#names.has(this.#prefix + name) &&
-      !reservedTypeNames.has(this.#prefix + name);
+      sanitize(name) === name && !typeTaken(this.#prefix + name, this.#names);
     for (const name of [preferred, fallback]) {
       if (name && free(name)) {
         this.#names.add(this.#prefix + name);
@@ -222,7 +458,11 @@ class Emitter {
 }
 
 type Column = {
+  /** The column's name in the schema. */
   name: string;
+  /** The property, not backticked. */
+  id: string;
+  /** The property as code. */
   property: string;
   swiftType: string;
   optional: boolean;
@@ -236,12 +476,17 @@ export function generate(
 ): string {
   const tableNames = Object.keys(schema.tables);
   const prefix = config.typePrefix ?? '';
+  const schemaName = config.schemaName ?? 'app';
+  const zqlName = config.zql ?? 'zql';
+  const zqlType = zqlName === 'zql' ? 'ZQL' : pascalCase(zqlName);
   const rowNames = new Map<string, string>();
-  const used = new Set<string>();
+  const used = new Set<string>([zqlType]);
   for (const t of tableNames) {
-    let name = config.tables?.[t]?.type ?? prefix + pascalCase(t);
-    if (reservedTypeNames.has(name) || used.has(name)) {
-      name += 'Row';
+    // A taken name gets `Row`, and then a number from 2.
+    const preferred = config.tables?.[t]?.type ?? prefix + pascalCase(t);
+    let name = preferred;
+    for (let i = 1; typeTaken(name, used); i++) {
+      name = `${preferred}Row${i === 1 ? '' : i}`;
     }
     used.add(name);
     rowNames.set(t, name);
@@ -250,9 +495,6 @@ export function generate(
   const bare = (name: string) =>
     prefix && name.startsWith(prefix) ? name.slice(prefix.length) : name;
   const pub = e.access;
-  const schemaName = config.schemaName ?? 'app';
-  const zqlName = config.zql ?? 'zql';
-  const zqlType = zqlName === 'zql' ? 'ZQL' : pascalCase(zqlName);
 
   const out: string[] = [
     `// Generated by \`zero-swift codegen\` from ${source}. Do not edit.`,
@@ -290,26 +532,33 @@ export function generate(
       }
       const optional = c.optional === true;
       const swiftType = optional && !base.endsWith('?') ? base + '?' : base;
-      return {name, property: identifier(name), swiftType, optional};
+      const id = sanitize(name);
+      return {name, id, property: ref(id), swiftType, optional};
     });
 
     const relationships = Object.entries(schema.relationships[t] ?? {}).map(
       ([name, hops]) => {
         const last = hops.at(-1)!;
         const dest = rowNames.get(last.destSchema)!;
-        return {
-          name,
-          property: identifier(name),
-          dest,
-          one: last.cardinality === 'one',
-        };
+        const one = last.cardinality === 'one';
+        const id = sanitize(name);
+        return {name, id, property: ref(id), dest, one};
       },
     );
+    // One scope: `@Indirect` also declares `_name`.
+    const props = [...columns, ...relationships];
+    const ids = new Members(rowMembers).claimAll(
+      props.map(p => ({...p, wrapped: 'one' in p && p.one})),
+    );
+    for (const [i, p] of props.entries()) {
+      p.id = ids[i];
+      p.property = ref(ids[i]);
+    }
 
     const identifiable =
       table.primaryKey.length === 1 &&
       table.primaryKey[0] === 'id' &&
-      columns.some(c => c.name === 'id' && !c.optional);
+      columns.some(c => c.name === 'id' && c.id === 'id' && !c.optional);
     const conformances = ['ZeroRow', 'Codable', 'Hashable'];
     if (identifiable) {
       conformances.push('Identifiable');
@@ -392,6 +641,7 @@ export function generate(
     }
     lines.push('    ]');
     lines.push('  }');
+    lines.push(...codingKeys([...columns, ...relationships]));
     lines.push('}');
     typeDecls.push(lines.join('\n'));
   }
@@ -415,11 +665,14 @@ export function generate(
   );
   out.push(`${pub}struct ${zqlType}: Sendable {`);
   out.push(`  ${pub}init() {}`);
-  for (const t of tableNames) {
+  const tableIds = new Members().claimAll(
+    tableNames.map(t => ({name: t, id: sanitize(t)})),
+  );
+  for (const [i, t] of tableNames.entries()) {
     const row = rowNames.get(t)!;
     out.push('');
     out.push(
-      `  ${pub}var ${identifier(t)}: Query<${row}, [${row}]> { Query(AnyQuery(.${schemaName}, ${str(t)})) }`,
+      `  ${pub}var ${ref(tableIds[i])}: Query<${row}, [${row}]> { Query(AnyQuery(.${schemaName}, ${str(t)})) }`,
     );
   }
   out.push('}');
@@ -429,19 +682,40 @@ export function generate(
   return out.join('\n');
 }
 
+/**
+ * The `CodingKeys` of a struct whose properties aren't all named as their
+ * keys, so `Codable` uses the names on the wire; none when they are.
+ */
+function codingKeys(
+  props: readonly {name: string; id: string; property: string}[],
+): string[] {
+  if (props.every(p => p.id === p.name)) {
+    return [];
+  }
+  return [
+    '',
+    '  private enum CodingKeys: String, CodingKey {',
+    ...props.map(p =>
+      p.id === p.name
+        ? `    case ${p.property}`
+        : `    case ${p.property} = ${str(p.name)}`,
+    ),
+    '  }',
+  ];
+}
+
 function enumDecl(pub: string, n: {name: string; cases: string[]}): string {
-  const used = new Set<string>();
+  const ids = new Members(enumMembers).claimAll(
+    n.cases.map(value => ({name: value, id: camelCase(value)})),
+  );
   const lines = [
     `${pub}enum ${n.name}: String, ZeroEnum, Codable, CaseIterable {`,
   ];
-  for (const value of n.cases) {
-    let c = camelCase(value);
-    while (used.has(c)) {
-      c += '_';
-    }
-    used.add(c);
-    const id = identifier(c);
-    lines.push(c === value ? `  case ${id}` : `  case ${id} = ${str(value)}`);
+  for (const [i, value] of n.cases.entries()) {
+    const c = ids[i];
+    lines.push(
+      c === value ? `  case ${ref(c)}` : `  case ${ref(c)} = ${str(value)}`,
+    );
   }
   lines.push('}');
   return lines.join('\n');
@@ -452,10 +726,13 @@ function objectDecl(
   pub: string,
   n: {name: string; fields: FieldModel[]},
 ): string {
-  const fields = n.fields.map(f => {
+  const ids = new Members(objectMembers).claimAll(
+    n.fields.map(f => ({name: f.name, id: sanitize(f.name)})),
+  );
+  const fields = n.fields.map((f, i) => {
     const base = e.swiftType(f.type, e.bare(n.name) + pascalCase(f.name));
     const type = f.optional && !base.endsWith('?') ? base + '?' : base;
-    return {...f, property: identifier(f.name), swiftType: type};
+    return {...f, id: ids[i], property: ref(ids[i]), swiftType: type};
   });
   const lines = [`${pub}struct ${n.name}: ZeroValue, Codable, Hashable {`];
   for (const f of fields) {
@@ -495,6 +772,7 @@ function objectDecl(
   }
   lines.push('    return o.value');
   lines.push('  }');
+  lines.push(...codingKeys(fields));
   lines.push('}');
   return lines.join('\n');
 }
