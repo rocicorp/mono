@@ -12,6 +12,23 @@ public enum ZeroStorage: Sendable, Hashable {
   case memory
 }
 
+/// What `Zero.delete()` and `dropAllDatabases(_:)` deleted.
+public struct DroppedDatabases: Sendable, Hashable {
+  /// The names of the databases deleted.
+  public var deleted: [String] = []
+  /// The databases that couldn't be deleted.
+  public var errors: [StorageFailure] = []
+}
+
+/// Deletes every Zero database in `storage`, of every user
+/// (`dropAllDatabases`). Clients still open on one keep running on what
+/// they have in memory, and their later writes are dropped.
+@MainActor
+@discardableResult
+public func dropAllDatabases(_ storage: ZeroStorage = .sqlite()) async -> DroppedDatabases {
+  await ReplicaDatabase.drop(storage) { _ in true }
+}
+
 /// A failure of the local storage, rather than of its data
 /// (`StorageFailureError`): the client keeps running on memory.
 public struct StorageFailure: Error, Sendable, Hashable, CustomStringConvertible {
@@ -406,6 +423,46 @@ final class ReplicaDatabase {
     sqlite?.drop()
   }
 
+  /// The Replicache name a database name holds (`replicacheName`):
+  /// `zero-<userID>-<hash>`, from `rep:<name>:<format>:<schemaVersion>`.
+  nonisolated static func replicacheName(_ name: String) -> String {
+    var parts = name.dropFirst("rep:".count).split(separator: ":", omittingEmptySubsequences: false)
+    parts.removeLast(min(2, parts.count))
+    return parts.joined(separator: ":")
+  }
+
+  /// Deletes the databases in `storage` whose Replicache name `matches`
+  /// (`dropMatchingDatabases`): those open in this process, whose clients'
+  /// later writes are dropped, and the files of the others.
+  static func drop(
+    _ storage: ZeroStorage, matching matches: @escaping @Sendable (String) -> Bool
+  ) async -> DroppedDatabases {
+    var result = DroppedDatabases()
+    let prefix: String
+    switch storage {
+    case .memory: prefix = "memory:"
+    case .sqlite(let directory):
+      do {
+        prefix = try (directory ?? defaultDirectory()) + "/"
+      } catch {
+        result.errors.append(StorageFailure(error))
+        return result
+      }
+    }
+    for (key, db) in open where key.hasPrefix(prefix) && matches(replicacheName(db.name)) {
+      db.drop()
+      result.deleted.append(db.name)
+    }
+    guard case .sqlite = storage else { return result }
+    let directory = String(prefix.dropLast())
+    let files = await Task.detached {
+      SQLiteStore.dropDatabases(in: directory) { matches(replicacheName($0)) }
+    }.value
+    result.deleted += files.deleted
+    result.errors += files.errors
+    return result
+  }
+
   /// Deletes, in the background, the other databases in this database's
   /// directory whose clients all last ran more than `maxAge` ago. A
   /// database open in this process is kept.
@@ -545,21 +602,59 @@ final class SQLiteStore: @unchecked Sendable {
     }
   }
 
+  /// The paths of the database files in `directory`.
+  static func databaseFiles(in directory: String) -> [String] {
+    guard let dir = opendir(directory) else { return [] }
+    var files: [String] = []
+    while let entry = readdir(dir) {
+      let name = withUnsafeBytes(of: entry.pointee.d_name) { raw in
+        String(decoding: raw.prefix { $0 != 0 }, as: UTF8.self)
+      }
+      if name.hasPrefix("zero-"), name.hasSuffix(".sqlite") { files.append(directory + "/" + name) }
+    }
+    closedir(dir)
+    return files
+  }
+
+  private static func unlinkDatabase(_ path: String) -> Bool {
+    var deleted = true
+    for suffix in ["", "-wal", "-shm"] where unlink(path + suffix) != 0 && errno != ENOENT {
+      deleted = false
+    }
+    return deleted
+  }
+
+  /// Deletes the database files in `directory` whose name `matches`, for
+  /// `ReplicaDatabase.drop`. A file that isn't one of ours is left.
+  static func dropDatabases(
+    in directory: String, matching matches: (String) -> Bool
+  ) -> DroppedDatabases {
+    var result = DroppedDatabases()
+    for path in databaseFiles(in: directory) {
+      var name: String?
+      do {
+        let db = try SQLiteDatabase(path: path)
+        defer { db.close() }
+        try db.query("SELECT value FROM meta WHERE key = 'name'") { name = $0.text(0) }
+      } catch {
+        continue
+      }
+      guard let name, matches(name) else { continue }
+      if unlinkDatabase(path) {
+        result.deleted.append(name)
+      } else {
+        result.errors.append(
+          StorageFailure(kind: .ioError, message: "Cannot delete \(path): errno \(errno)"))
+      }
+    }
+    return result
+  }
+
   /// See `ReplicaDatabase.collectDatabases`.
   func collectDatabases(keeping: Set<String>, now: Double, maxAge: Double) {
     let directory = self.directory
     queue.async {
-      guard let dir = opendir(directory) else { return }
-      var files: [String] = []
-      while let entry = readdir(dir) {
-        let name = withUnsafeBytes(of: entry.pointee.d_name) { raw in
-          String(decoding: raw.prefix { $0 != 0 }, as: UTF8.self)
-        }
-        if name.hasPrefix("zero-"), name.hasSuffix(".sqlite") { files.append(name) }
-      }
-      closedir(dir)
-      for name in files {
-        let path = directory + "/" + name
+      for path in Self.databaseFiles(in: directory) {
         guard !keeping.contains(path) else { continue }
         var recent = false
         do {
@@ -572,9 +667,7 @@ final class SQLiteStore: @unchecked Sendable {
           // Not a database of ours, or busy: leave it.
           continue
         }
-        if !recent {
-          for suffix in ["", "-wal", "-shm"] { _ = unlink(path + suffix) }
-        }
+        if !recent { _ = Self.unlinkDatabase(path) }
       }
     }
   }

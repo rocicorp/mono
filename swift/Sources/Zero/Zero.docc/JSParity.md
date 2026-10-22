@@ -48,7 +48,8 @@ are arguments of
 | `zero.connection.state`, `.subscribe`, `.connect({auth})`                                                                                                                                         | ``Connection/state``, ``Connection/subscribe(_:)``, ``Connection/connect(auth:)``                           |
 | `zero.close()`                                                                                                                                                                                    | `zero.close()`                                                                                        |
 | `zero.mutate.issue.insert(...)` (CRUD mutators)                                                                                                                                                   | not ported: write a mutator                                                                           |
-| `zero.mutateBatch`, `zero.online`, `zero.onOnline`, `zero.inspector`, `zero.delete()`, `dropAllDatabases`, `zero.server`, `zero.storageKey`, `zero.idbName`, `zero.kvStore`, `zero.schemaVersion` | not ported                                                                                            |
+| `zero.delete()`, `dropAllDatabases()` | `await zero.delete()`, `await dropAllDatabases(_:)`, which return the ``DroppedDatabases`` |
+| `zero.mutateBatch`, `zero.online`, `zero.onOnline`, `zero.inspector`, `zero.server`, `zero.storageKey`, `zero.idbName`, `zero.kvStore`, `zero.schemaVersion` | not ported |
 | `zero.version`                                                                                                                                                                                    | ``protocolVersion``, the sync protocol version                                                          |
 
 When the server no longer has the client's state, JS asks the app to

@@ -220,6 +220,19 @@ public final class Zero<Context: Sendable> {
   }
 }
 
+extension Zero {
+  /// Closes the client and deletes its local data (`zero.delete()`): the
+  /// replica and pending mutations of this user and `storageKey`, under
+  /// every schema version. Pending mutations the server hasn't confirmed
+  /// are lost. Use it to log a user out.
+  @discardableResult
+  public func delete() async -> DroppedDatabases {
+    close()
+    let name = ReplicaDatabase.replicacheName(engine.database.name)
+    return await ReplicaDatabase.drop(options.storage) { $0 == name }
+  }
+}
+
 extension Zero: LifecycleClient {}
 
 /// The socket factory a client uses by default: `URLSessionTransport` on

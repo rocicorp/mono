@@ -5,7 +5,7 @@ import ZeroTesting
 @testable import Zero
 
 /// What the client stores on disk beyond what the client scenarios check:
-/// falling back to memory, and collecting old databases.
+/// falling back to memory, collecting old databases, and deleting them.
 @Suite @MainActor struct StorageTests {
   static let day: Double = 24 * 60 * 60_000
   let directory = NSTemporaryDirectory() + "zero-storage-tests-" + UUID().uuidString
@@ -89,5 +89,48 @@ import ZeroTesting
     current.engine.database.flush()
     #expect(try files() == [fileName("recent"), fileName("current")])
     current.close()
+  }
+  @Test(arguments: [false, true])
+  func deleteRemovesTheDataOfItsUserAndStorageKeyOnly(inMemory: Bool) async throws {
+    defer { try? FileManager.default.removeItem(atPath: directory) }
+    let storage: ZeroStorage = inMemory ? .memory : .sqlite(directory: directory)
+    let key = randomID()
+    let (other, _) = try makeZero(key + "-other", at: 0, storage: storage)
+    other.mutate(create("kept"))
+    other.close()
+    let (zero, _) = try makeZero(key, at: 0, storage: storage)
+    zero.mutate(create("i1"))
+
+    let dropped = await zero.delete()
+    #expect(zero.closed)
+    #expect(dropped.deleted.count == 1)
+    #expect(dropped.errors.isEmpty)
+
+    let (again, _) = try makeZero(key, at: 1000, storage: storage)
+    #expect(try await again.run(zql.issue).isEmpty)
+    #expect(again.engine.store.pending.isEmpty)
+    again.close()
+    let (otherAgain, _) = try makeZero(key + "-other", at: 1000, storage: storage)
+    #expect(try await otherAgain.run(zql.issue).map(\.id) == ["kept"])
+    otherAgain.close()
+  }
+
+  @Test func dropAllDatabasesDeletesEveryDatabase() async throws {
+    defer { try? FileManager.default.removeItem(atPath: directory) }
+    let (closed, _) = try makeZero("a", at: 0)
+    closed.mutate(create("i1"))
+    closed.close()
+    let (open, _) = try makeZero("b", at: 0)
+    open.mutate(create("i2"))
+
+    let dropped = await dropAllDatabases(.sqlite(directory: directory))
+    #expect(dropped.deleted.count == 2)
+    #expect(try files().isEmpty)
+
+    // A client still open keeps running on what it has, and writes nothing.
+    open.mutate(create("i3"))
+    #expect(try await open.run(zql.issue).map(\.id).sorted() == ["i2", "i3"])
+    open.close()
+    #expect(try files().isEmpty)
   }
 }
