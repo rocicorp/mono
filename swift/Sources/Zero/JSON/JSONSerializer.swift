@@ -14,35 +14,73 @@ package enum JSONSerializer {
     Array(stringify(value).utf8)
   }
 
+  /// An array or object being written, and the index of its next value.
+  private enum Container {
+    case array([JSONValue], next: Int)
+    case object(JSONObject, next: Int)
+  }
+
+  /// Writes `value` without recursion: the arrays and objects it is in are
+  /// on `containers`, so nesting takes heap, not stack.
   package static func write(_ value: JSONValue, into out: inout String) {
-    switch value {
-    case .null:
-      out += "null"
-    case .bool(let b):
-      out += b ? "true" : "false"
-    case .number(let n):
-      out += n.isFinite ? JSNumber.format(n) : "null"
-    case .string(let s):
-      writeString(s, into: &out)
-    case .array(let a):
-      out += "["
-      for (i, e) in a.enumerated() {
-        if i > 0 { out += "," }
-        write(e, into: &out)
+    if writeScalar(value, into: &out) { return }
+    var containers: [Container] = []
+    var value = value
+    nested: while true {
+      switch value {
+      case .array(let a):
+        out += "["
+        containers.append(.array(a, next: 0))
+      case .object(let o):
+        out += "{"
+        containers.append(.object(o, next: 0))
+      default:
+        preconditionFailure("not an array or object")
       }
-      out += "]"
-    case .object(let o):
-      out += "{"
-      var first = true
-      for (key, value) in o {
-        if !first { out += "," }
-        first = false
-        writeString(key, into: &out)
-        out += ":"
-        write(value, into: &out)
+      // Writes values until one is an array or object, closing the
+      // containers that are done.
+      while let container = containers.popLast() {
+        switch container {
+        case .array(let a, var i):
+          while i < a.count {
+            if i > 0 { out += "," }
+            let e = a[i]
+            i += 1
+            if writeScalar(e, into: &out) { continue }
+            containers.append(.array(a, next: i))
+            value = e
+            continue nested
+          }
+          out += "]"
+        case .object(let o, var i):
+          while i < o.count {
+            if i > 0 { out += "," }
+            let (key, v) = o[i]
+            i += 1
+            writeString(key, into: &out)
+            out += ":"
+            if writeScalar(v, into: &out) { continue }
+            containers.append(.object(o, next: i))
+            value = v
+            continue nested
+          }
+          out += "}"
+        }
       }
-      out += "}"
+      return
     }
+  }
+
+  /// Writes `value` unless it is an array or object; returns whether it did.
+  private static func writeScalar(_ value: JSONValue, into out: inout String) -> Bool {
+    switch value {
+    case .null: out += "null"
+    case .bool(let b): out += b ? "true" : "false"
+    case .number(let n): out += n.isFinite ? JSNumber.format(n) : "null"
+    case .string(let s): writeString(s, into: &out)
+    case .array, .object: return false
+    }
+    return true
   }
 
   static let hex: [Character] = Array("0123456789abcdef")

@@ -36,29 +36,25 @@ struct SweepWireTests {
 
   /// `JSON.parse` acceptance, and `JSON.stringify` of what it parsed, keys
   /// in JS property order, for each input.
-  /// On an 8 MB stack, as `deepRowValue`: a vector nests 1,000 deep.
-  @Test func json() async throws {
-    let cases = try Vectors.cases("sweep-json")
-    try await onLargeStack {
-      for c in cases {
-        let input = c["input"]!.stringValue!
-        let ok = c["ok"]!.boolValue!
-        let value: JSONValue
-        do {
-          value = try JSONParser.parse(input)
-        } catch {
-          #expect(!ok, "rejected \(String(reflecting: input)): \(error)")
-          continue
-        }
-        #expect(ok, "accepted \(String(reflecting: input))")
-        guard ok else { continue }
-        let expected = c["stringify"]!.stringValue!
-        let actual = JSONSerializer.stringify(value)
-        #expect(
-          Self.same(actual, expected),
-          "\(String(reflecting: input)): Swift \(actual.debugDescription), JS \(expected.debugDescription)"
-        )
+  @Test func json() throws {
+    for c in try Vectors.cases("sweep-json") {
+      let input = c["input"]!.stringValue!
+      let ok = c["ok"]!.boolValue!
+      let value: JSONValue
+      do {
+        value = try JSONParser.parse(input)
+      } catch {
+        #expect(!ok, "rejected \(String(reflecting: input)): \(error)")
+        continue
       }
+      #expect(ok, "accepted \(String(reflecting: input))")
+      guard ok else { continue }
+      let expected = c["stringify"]!.stringValue!
+      let actual = JSONSerializer.stringify(value)
+      #expect(
+        Self.same(actual, expected),
+        "\(String(reflecting: input)): Swift \(actual.debugDescription), JS \(expected.debugDescription)"
+      )
     }
   }
 
@@ -73,35 +69,51 @@ struct SweepWireTests {
     #expect(JSONValue.object(["\u{e9}": 1]) != JSONValue.object(["e\u{301}": 1]))
   }
 
-  /// A row value nested 4,000 deep, which `JSON.stringify` on zero-cache
-  /// writes (Node's default stack takes about 4,100 levels) and the parser
-  /// accepts (its limit is 5,000). Parsing, encoding, hashing, comparing,
-  /// and freeing it must not overflow the stack of the thread it is on.
-  /// It runs on a thread with an 8 MB stack, the size of the macOS main
-  /// thread's: test threads get 512 KB there, and the debug build's frames
-  /// are larger than release's.
+  /// A row value nested as deep as the parser accepts: the poke takes 5
+  /// levels, the value the rest of `JSONParser.maxDepth`. Parsing, encoding,
+  /// hashing, and comparing it must not overflow the stack of the thread it
+  /// is on: here one with 512 KB, the size of a test or cooperative thread
+  /// on macOS. One level more is rejected. (zero-cache writes about 4,100
+  /// levels; see JSParity.md.)
   @Test func deepRowValue() async throws {
-    try await onLargeStack {
-      let depth = 4_000
-      let text =
-        #"["pokePart",{"pokeID":"p","rowsPatch":[{"op":"put","tableName":"t","value":{"id":"x","j":"#
+    func poke(_ depth: Int) -> String {
+      #"["pokePart",{"pokeID":"p","rowsPatch":[{"op":"put","tableName":"t","value":{"id":"x","j":"#
         + String(repeating: "[", count: depth) + String(repeating: "]", count: depth) + "}}]}]"
+    }
+    let text = poke(JSONParser.maxDepth - 5)
+    #expect(throws: (any Error).self) { try Downstream(text: poke(JSONParser.maxDepth - 4)) }
+    let messages = try await onThread(stackSize: 512 << 10) {
       let message = try Downstream(text: text)
       let encoded = JSONSerializer.stringify(message.json)
-      #expect(encoded.utf8.count == text.utf8.count)
-      #expect(message == (try Downstream(text: encoded)))
+      let decoded = try Downstream(text: encoded)
       var hasher = Hasher()
       message.hash(into: &hasher)
       _ = hasher.finalize()
+      return Messages([message, decoded], encodedLength: encoded.utf8.count)
+    }
+    #expect(messages.encodedLength == text.utf8.count)
+    #expect(messages.all[0] == messages.all[1])
+    // Freeing still recurses, in `Array`'s deinit, and fits as well.
+    try await onThread(stackSize: 512 << 10) { messages.all = [] }
+  }
+
+  final class Messages: @unchecked Sendable {
+    var all: [Downstream]
+    let encodedLength: Int
+
+    init(_ all: [Downstream], encodedLength: Int) {
+      self.all = all
+      self.encodedLength = encodedLength
     }
   }
 
-  private func onLargeStack(_ body: @escaping @Sendable () throws -> Void) async throws {
-    try await withCheckedThrowingContinuation { (done: CheckedContinuation<Void, any Error>) in
-      let thread = Thread {
-        done.resume(with: Result { try body() })
-      }
-      thread.stackSize = 8 << 20
+  /// Runs `body` on a thread with a stack of `stackSize` bytes.
+  private func onThread<T: Sendable>(
+    stackSize: Int, _ body: @escaping @Sendable () throws -> T
+  ) async throws -> T {
+    try await withCheckedThrowingContinuation { (done: CheckedContinuation<T, any Error>) in
+      let thread = Thread { done.resume(with: Result { try body() }) }
+      thread.stackSize = stackSize
       thread.start()
     }
   }

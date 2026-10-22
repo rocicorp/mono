@@ -9,8 +9,14 @@ package struct JSONParser {
     package var description: String { "\(message) at offset \(offset)" }
   }
 
-  /// Nesting deeper than this is rejected instead of overflowing the stack.
-  package static let maxDepth = 5_000
+  /// Nesting deeper than this is rejected with "JSON nested too deeply".
+  ///
+  /// Parsing, writing, comparing, and hashing don't recurse, but freeing a
+  /// value does (in `Array`'s and `JSONObject`'s storage), so the limit
+  /// keeps freeing within a 512 KB stack (a macOS test or cooperative
+  /// thread) in a release build. JS has no limit short of its own stack
+  /// (zero-cache writes about 4,100 levels); see JSParity.md.
+  package static let maxDepth = 1_500
 
   package static func parse(_ text: String) throws(Error) -> JSONValue {
     var text = text
@@ -30,7 +36,7 @@ package struct JSONParser {
   package static func parse(_ buffer: UnsafeBufferPointer<UInt8>) throws(Error) -> JSONValue {
     var p = JSONParser(buffer)
     p.skipWhitespace()
-    let value = try p.parseValue(depth: 0)
+    let value = try p.parseValue()
     p.skipWhitespace()
     if p.i != p.end { throw p.error("Unexpected non-whitespace character after JSON") }
     return value
@@ -57,18 +63,118 @@ package struct JSONParser {
     }
   }
 
-  private mutating func parseValue(depth: Int) throws(Error) -> JSONValue {
-    guard i < end else { throw error("Unexpected end of JSON input") }
-    switch b[i] {
-    case UInt8(ascii: "{"): return try parseObject(depth: depth)
-    case UInt8(ascii: "["): return try parseArray(depth: depth)
-    case UInt8(ascii: "\""): return .string(try parseString())
-    case UInt8(ascii: "t"): try expectLiteral("true"); return .bool(true)
-    case UInt8(ascii: "f"): try expectLiteral("false"); return .bool(false)
-    case UInt8(ascii: "n"): try expectLiteral("null"); return .null
-    case UInt8(ascii: "-"), UInt8(ascii: "0")...UInt8(ascii: "9"): return .number(try parseNumber())
-    default: throw error("Unexpected token")
+  /// An array or object that a value being parsed is in.
+  private enum Container {
+    case array([JSONValue])
+    /// An object and the key of the value being parsed.
+    case object(JSONObject, key: String)
+  }
+
+  /// Parses a value without recursion, so nesting takes heap, not stack.
+  /// The innermost open array or object is `array` or `object` (with
+  /// `key`); the ones it is in are on `parents`. They move between the two
+  /// (`take()`), so each stays uniquely referenced and adding to it doesn't
+  /// copy it.
+  private mutating func parseValue() throws(Error) -> JSONValue {
+    var parents: [Container] = []
+    var array: [JSONValue]?
+    var object: JSONObject?
+    var key = ""
+    while true {
+      guard i < end else { throw error("Unexpected end of JSON input") }
+      var value: JSONValue
+      switch b[i] {
+      case UInt8(ascii: "{"), UInt8(ascii: "["):
+        let isObject = b[i] == UInt8(ascii: "{")
+        if parents.count + (array == nil && object == nil ? 0 : 1) >= Self.maxDepth {
+          throw error("JSON nested too deeply")
+        }
+        i += 1
+        skipWhitespace()
+        if i < end && b[i] == (isObject ? UInt8(ascii: "}") : UInt8(ascii: "]")) {
+          i += 1
+          value = isObject ? .object(JSONObject()) : .array([])
+          break
+        }
+        if let a = array.take() {
+          parents.append(.array(a))
+        } else if let o = object.take() {
+          parents.append(.object(o, key: key))
+        }
+        if isObject {
+          object = JSONObject()
+          key = try parseKey()
+        } else {
+          array = []
+        }
+        continue
+      case UInt8(ascii: "\""): value = .string(try parseString())
+      case UInt8(ascii: "t"): try expectLiteral("true"); value = .bool(true)
+      case UInt8(ascii: "f"): try expectLiteral("false"); value = .bool(false)
+      case UInt8(ascii: "n"): try expectLiteral("null"); value = .null
+      case UInt8(ascii: "-"), UInt8(ascii: "0")...UInt8(ascii: "9"):
+        value = .number(try parseNumber())
+      default: throw error("Unexpected token")
+      }
+      // Adds the value to its container, closing the containers that end
+      // after it, until one has another value.
+      while true {
+        skipWhitespace()
+        if array != nil {
+          array!.append(value)
+          guard i < end else { throw error("Unexpected end of JSON input") }
+          if b[i] == UInt8(ascii: ",") {
+            i += 1
+            skipWhitespace()
+            break
+          }
+          guard b[i] == UInt8(ascii: "]") else {
+            throw error("Expected ',' or ']' after array element")
+          }
+          i += 1
+          value = .array(array.take()!)
+        } else if object != nil {
+          // A repeated key keeps its first place and its last value.
+          object![key] = value
+          guard i < end else { throw error("Unexpected end of JSON input") }
+          if b[i] == UInt8(ascii: ",") {
+            i += 1
+            key = try parseKey()
+            break
+          }
+          guard b[i] == UInt8(ascii: "}") else {
+            throw error("Expected ',' or '}' after property value")
+          }
+          i += 1
+          value = .object(object.take()!)
+        } else {
+          return value
+        }
+        guard let parent = parents.popLast() else { continue }
+        switch consume parent {
+        case .array(let a):
+          array = consume a
+        case .object(let o, let k):
+          object = consume o
+          key = consume k
+        }
+      }
     }
+  }
+
+  /// A property name and its colon, and the whitespace around them.
+  private mutating func parseKey() throws(Error) -> String {
+    skipWhitespace()
+    guard i < end else { throw error("Unexpected end of JSON input") }
+    guard b[i] == UInt8(ascii: "\"") else { throw error("Expected property name") }
+    let key = try parseString()
+    skipWhitespace()
+    guard i < end, b[i] == UInt8(ascii: ":") else {
+      throw error("Expected ':' after property name")
+    }
+    i += 1
+    skipWhitespace()
+    return key
   }
 
   private mutating func expectLiteral(_ literal: StaticString) throws(Error) {
@@ -79,67 +185,6 @@ package struct JSONParser {
       throw error("Unexpected token")
     }
     i += n
-  }
-
-  private mutating func parseObject(depth: Int) throws(Error) -> JSONValue {
-    if depth >= Self.maxDepth { throw error("JSON nested too deeply") }
-    i += 1  // {
-    var object = JSONObject()
-    skipWhitespace()
-    if i < end && b[i] == UInt8(ascii: "}") {
-      i += 1
-      return .object(object)
-    }
-    while true {
-      skipWhitespace()
-      guard i < end else { throw error("Unexpected end of JSON input") }
-      guard b[i] == UInt8(ascii: "\"") else { throw error("Expected property name") }
-      let key = try parseString()
-      skipWhitespace()
-      guard i < end, b[i] == UInt8(ascii: ":") else {
-        throw error("Expected ':' after property name")
-      }
-      i += 1
-      skipWhitespace()
-      object[key] = try parseValue(depth: depth + 1)
-      skipWhitespace()
-      guard i < end else { throw error("Unexpected end of JSON input") }
-      if b[i] == UInt8(ascii: ",") {
-        i += 1
-        continue
-      }
-      if b[i] == UInt8(ascii: "}") {
-        i += 1
-        return .object(object)
-      }
-      throw error("Expected ',' or '}' after property value")
-    }
-  }
-
-  private mutating func parseArray(depth: Int) throws(Error) -> JSONValue {
-    if depth >= Self.maxDepth { throw error("JSON nested too deeply") }
-    i += 1  // [
-    var array: [JSONValue] = []
-    skipWhitespace()
-    if i < end && b[i] == UInt8(ascii: "]") {
-      i += 1
-      return .array(array)
-    }
-    while true {
-      skipWhitespace()
-      array.append(try parseValue(depth: depth + 1))
-      skipWhitespace()
-      guard i < end else { throw error("Unexpected end of JSON input") }
-      if b[i] == UInt8(ascii: ",") {
-        i += 1
-        continue
-      }
-      if b[i] == UInt8(ascii: "]") {
-        i += 1
-        return .array(array)
-      }
-      throw error("Expected ',' or ']' after array element")
-    }
   }
 
   private mutating func parseString() throws(Error) -> String {

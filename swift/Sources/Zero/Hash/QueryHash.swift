@@ -133,7 +133,64 @@ package enum QueryHash {
 extension QueryHash.State {
   typealias H = QueryHash
 
+  /// Visits `v` without recursion: the arrays and objects it is in are on
+  /// a stack, so nesting takes heap, not stack.
   mutating func visitValue(_ v: JSONValue) {
+    if visitScalar(v) { return }
+    // An array, or an object's entries in `Object.keys(v).sort()` order,
+    // and the index of the next value.
+    var containers: [(entries: Entries, next: Int)] = []
+    var value = v
+    nested: while true {
+      switch value {
+      case .array(let a):
+        mix(H.tagArr)
+        containers.append((.array(a), 0))
+      case .object(let o):
+        mix(H.tagObj)
+        // By UTF-16 code unit, whatever the order.
+        containers.append((.object(o.sorted { StringCompare.utf16Less($0.key, $1.key) }), 0))
+      default:
+        preconditionFailure("not an array or object")
+      }
+      // Visits values until one is an array or object, ending the
+      // containers that are done.
+      while var container = containers.popLast() {
+        while container.next < container.entries.count {
+          let e: JSONValue
+          switch container.entries {
+          case .array(let a):
+            e = a[container.next]
+          case .object(let entries):
+            mixString(entries[container.next].key)
+            e = entries[container.next].value
+          }
+          container.next += 1
+          if visitScalar(e) { continue }
+          containers.append(container)
+          value = e
+          continue nested
+        }
+        mix(H.tagEnd)
+      }
+      return
+    }
+  }
+
+  enum Entries {
+    case array([JSONValue])
+    case object([(key: String, value: JSONValue)])
+
+    var count: Int {
+      switch self {
+      case .array(let a): a.count
+      case .object(let o): o.count
+      }
+    }
+  }
+
+  /// Visits `v` unless it is an array or object; returns whether it did.
+  private mutating func visitScalar(_ v: JSONValue) -> Bool {
     switch v {
     case .string(let s):
       mixString(s)
@@ -141,27 +198,18 @@ extension QueryHash.State {
       // NaN and Infinity are null on the wire (JSON.stringify writes null).
       if !n.isFinite {
         mix(H.tagNull)
-        return
+      } else {
+        mix(JSNumber.isInt32(n) ? H.tagInt : H.tagFloat)
+        mixNumber(n)
       }
-      mix(JSNumber.isInt32(n) ? H.tagInt : H.tagFloat)
-      mixNumber(n)
     case .bool(let b):
       mix(b ? H.tagTrue : H.tagFalse)
     case .null:
       mix(H.tagNull)
-    case .array(let a):
-      mix(H.tagArr)
-      for e in a { visitValue(e) }
-      mix(H.tagEnd)
-    case .object(let o):
-      mix(H.tagObj)
-      // `Object.keys(v).sort()`: by UTF-16 code unit, whatever the order.
-      for (k, value) in o.sorted(by: { StringCompare.utf16Less($0.key, $1.key) }) {
-        mixString(k)
-        visitValue(value)
-      }
-      mix(H.tagEnd)
+    case .array, .object:
+      return false
     }
+    return true
   }
 
   mutating func visitOptionalString(_ s: String?) {

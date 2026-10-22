@@ -134,6 +134,17 @@ is written or sent.
   then the others in the order they were set. Keys are compared by UTF-16
   code unit, so `"é"` and `"e\u{301}"` are two keys, as they are in JS. JSON
   text round-trips as `JSON.stringify` writes it.
+- **JSON nesting depth.** JSON nested more than 1,500 arrays and objects
+  deep is rejected ("JSON nested too deeply"); JS accepts whatever fits its
+  stack, and zero-cache writes up to about 4,100 levels. A poke is about 5
+  levels before a row's values, and real data, such as a rich-text document
+  in a JSON column, rarely passes a few hundred, but a row with a JSON
+  column nested deeper than about 1,495 levels makes the client reject the
+  message, disconnect, and fail the same way after it reconnects. Values
+  that deep are parsed, written, compared, and hashed without recursion.
+  Freeing one still recurses: in a release build 1,500 levels fit in a
+  512 KB stack (a macOS test or cooperative thread), but a debug build
+  overflows one when it frees objects nested more than about 1,000 deep.
 - **Storage.** The replica is a SQLite database per user and URL, not
   IndexedDB. One process uses it at a time; there are no tabs to share it
   with.

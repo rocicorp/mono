@@ -403,33 +403,19 @@ extension JSONObject: ExpressibleByDictionaryLiteral {
 extension JSONObject: Hashable {
   /// The same keys, by code unit, with equal values, in any order.
   public static func == (a: JSONObject, b: JSONObject) -> Bool {
-    if a.storage === b.storage { return true }
-    guard a.count == b.count else { return false }
-    for i in 0..<a.count {
-      let (key, value) = a[i]
-      // Usually the keys are in the same order.
-      if StringCompare.equal(key, b.storage.key(at: i)) {
-        if value != b.storage.value(at: i) { return false }
-      } else {
-        guard let j = b.index(forKey: key), value == b.storage.value(at: j) else {
-          return false
-        }
-      }
-    }
-    return true
+    JSONValue.object(a) == .object(b)
   }
+
+  /// Whether the two share their storage, so are equal.
+  func hasSameStorage(as other: JSONObject) -> Bool { storage === other.storage }
+
+  func key(at i: Int) -> String { storage.key(at: i) }
+
+  func value(at i: Int) -> JSONValue { storage.value(at: i) }
 
   /// Independent of the order, as `==` is.
   public func hash(into hasher: inout Hasher) {
-    var acc = 0
-    for (key, value) in self {
-      var h = Hasher()
-      h.combine(JSKey(key))
-      h.combine(value)
-      acc ^= h.finalize()
-    }
-    hasher.combine(count)
-    hasher.combine(acc)
+    JSONValue.object(self).hash(into: &hasher)
   }
 }
 
