@@ -21,7 +21,7 @@
     }
   },
   "scripts": {
-    "build": "esbuild src/bin.ts --bundle --platform=node --format=esm --target=node22 --splitting --outdir=dist --external:@rocicorp/zero --external:typescript",
+    "build": "esbuild src/bin.ts --bundle --platform=node --format=esm --target=node22 --splitting --outdir=dist --external:@rocicorp/zero --external:typescript --external:incur",
     "test": "vitest run",
     "generate": "UPDATE_GENERATED=1 vitest run",
     "check-types": "tsc",
@@ -31,6 +31,7 @@
     "version-packages": "cd ../.. && pnpm dlx @changesets/cli@3.0.3 version && jq -r .version packages/zero-swift-cli/package.json > swift/VERSION"
   },
   "dependencies": {
+    "incur": "0.7.1",
     "typescript": "6.0.3"
   },
   "devDependencies": {

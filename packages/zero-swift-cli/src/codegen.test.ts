@@ -1,7 +1,7 @@
 import {readFileSync, writeFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {expect, test} from 'vitest';
-import {codegenFile, main, UsageError} from './cli.ts';
+import {cli, codegenFile, legacyArgv} from './cli.ts';
 import type {Config} from './generate.ts';
 
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
@@ -96,9 +96,19 @@ for (const {name, dir = '', config} of fixtures) {
 }
 
 test('a missing schema is a usage error, not a crash', async () => {
-  await expect(main(['--schema', 'no-such-schema.ts'])).rejects.toThrow(
-    new UsageError(
-      `Schema no-such-schema.ts doesn't exist. Pass --schema, or set "schema" in zero-swift.json.`,
-    ),
+  let out = '';
+  let code: number | undefined;
+  // 0.1.0's `--schema <path>` still names the schema module.
+  await cli.serve(
+    legacyArgv(['codegen', '--schema', 'no-such-schema.ts', '--json']),
+    {
+      stdout: s => (out += s),
+      exit: c => (code = c),
+    },
   );
+  expect(code).toBe(1);
+  expect(JSON.parse(out)).toMatchObject({
+    code: 'SCHEMA_NOT_FOUND',
+    message: `Schema no-such-schema.ts doesn't exist. Pass --schema-file, or set "schema" in zero-swift.json.`,
+  });
 });
