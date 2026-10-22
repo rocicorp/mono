@@ -12,7 +12,11 @@ let package = Package(
     .library(name: "ZBugsUI", targets: ["ZBugsUI"]),
   ],
   dependencies: [
-    .package(name: "Zero", path: "../../swift")
+    .package(name: "Zero", path: "../../swift"),
+    // Test-only: the backend tests connect over SwiftNIO on Linux, with
+    // zero-swift's own NIOTransport (Tests/ZBugsTests/NIOTransport.swift
+    // links to it).
+    .package(url: "https://github.com/apple/swift-nio.git", from: "2.104.0"),
   ],
   targets: [
     .target(name: "ZBugs", dependencies: [.product(name: "Zero", package: "Zero")]),
@@ -31,7 +35,10 @@ let package = Package(
         "ZBugs",
         .product(name: "Zero", package: "Zero"),
         .product(name: "ZeroTesting", package: "Zero"),
-        .product(name: "ZeroNIOTesting", package: "Zero"),
+        .product(name: "NIOCore", package: "swift-nio"),
+        .product(name: "NIOPosix", package: "swift-nio"),
+        .product(name: "NIOHTTP1", package: "swift-nio"),
+        .product(name: "NIOWebSocket", package: "swift-nio"),
       ],
       exclude: ["drift-vectors.json"]),
   ],

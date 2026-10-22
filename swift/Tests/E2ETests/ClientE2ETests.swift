@@ -1,7 +1,6 @@
 import Foundation
 import Testing
 import Zero
-import ZeroNIOTesting
 
 /// The app of the end-to-end server (`packages/zero-conformance/src/e2e/app.ts`),
 /// defined in Swift as an app would.

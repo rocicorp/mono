@@ -59,7 +59,6 @@ swift/                      Swift package (source of truth)
   Sources/Zero/Zero.docc/   DocC: getting started, the JS parity matrix
   Sources/ZeroUI/           SwiftUI, UIKit, AppKit helpers
   Sources/ZeroTesting/      drift-harness replay API and test helpers
-  Sources/ZeroNIOTesting/   SwiftNIO WebSocket transport for Linux end-to-end tests
   Sources/ZeroBenchmarks/   benchmarks (BENCHMARKS.md)
   Tests/...
   scripts/docs.sh           builds the DocC catalogs, failing on warnings
@@ -76,8 +75,8 @@ apps/zbugs-swift/           dogfood app (iOS + macOS)
   mirror directly.
 - The mirror is public. The Swift source is visible in this public monorepo
   either way.
-- SwiftPM products: `Zero`, `ZeroUI`, `ZeroTesting`, and `ZeroNIOTesting`
-  (test-only; the only product that depends on SwiftNIO).
+- SwiftPM products: `Zero`, `ZeroUI`, `ZeroVirtual`, and `ZeroTesting`. Only
+  the end-to-end test target uses swift-nio, so apps don't fetch it.
 - The public API is what apps and the generated code use. The engine (IVM
   operators, the wire protocol, the B-tree, hashes) is `package`: the
   package's own modules (tests, `ZeroTesting`, benchmarks) see it, apps don't.
@@ -228,7 +227,7 @@ Rationale:
   reason, which the client's error handling reads.
 - One writer task per connection sends frames in order.
 - Tests use an in-memory transport that replays scenario vectors, and, on Linux
-  end-to-end runs, `NIOTransport` from `ZeroNIOTesting` (plain `ws://`). Linux
+  end-to-end runs, `NIOTransport` in `Tests/E2ETests` (plain `ws://`). Linux
   needs it because corelibs Foundation's `URLSessionWebSocketTask` compiles
   but never completes a connection.
 - Wire details follow `zero-protocol`: connect to `/sync/v53/connect`, put

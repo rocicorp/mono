@@ -2,7 +2,6 @@ import Foundation
 import Testing
 import ZBugs
 import Zero
-import ZeroNIOTesting
 
 /// Where zbugs' backend (server/server.ts) runs, and a token it accepts.
 enum Backend {

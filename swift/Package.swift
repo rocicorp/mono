@@ -9,7 +9,6 @@ let package = Package(
     .library(name: "ZeroUI", targets: ["ZeroUI"]),
     .library(name: "ZeroVirtual", targets: ["ZeroVirtual"]),
     .library(name: "ZeroTesting", targets: ["ZeroTesting"]),
-    .library(name: "ZeroNIOTesting", targets: ["ZeroNIOTesting"]),
   ],
   dependencies: [
     // Test-only: the WebSocket transport of the Linux end-to-end tests.
@@ -24,16 +23,6 @@ let package = Package(
     // Virtual lists that page their rows in (`@rocicorp/zero-virtual`).
     .target(name: "ZeroVirtual", dependencies: ["Zero"]),
     .target(name: "ZeroTesting", dependencies: ["Zero"]),
-    // A plain ws:// transport for end-to-end tests on Linux.
-    .target(
-      name: "ZeroNIOTesting",
-      dependencies: [
-        "Zero",
-        .product(name: "NIOCore", package: "swift-nio"),
-        .product(name: "NIOPosix", package: "swift-nio"),
-        .product(name: "NIOHTTP1", package: "swift-nio"),
-        .product(name: "NIOWebSocket", package: "swift-nio"),
-      ]),
     // `swift run -c release ZeroBenchmarks`.
     .executableTarget(name: "ZeroBenchmarks", dependencies: ["Zero", "ZeroTesting"]),
     .testTarget(name: "ZeroTests", dependencies: ["Zero", "ZeroTesting"]),
@@ -45,7 +34,17 @@ let package = Package(
     .testTarget(
       name: "ZeroVirtualTests", dependencies: ["Zero", "ZeroVirtual", "ZeroTesting"],
       exclude: ["UPSTREAM.md"]),
-    .testTarget(name: "E2ETests", dependencies: ["Zero", "ZeroNIOTesting"]),
+    // Against a real zero-cache. On Linux they connect with `NIOTransport`,
+    // over plain ws://: corelibs Foundation's WebSocket never connects.
+    .testTarget(
+      name: "E2ETests",
+      dependencies: [
+        "Zero",
+        .product(name: "NIOCore", package: "swift-nio"),
+        .product(name: "NIOPosix", package: "swift-nio"),
+        .product(name: "NIOHTTP1", package: "swift-nio"),
+        .product(name: "NIOWebSocket", package: "swift-nio"),
+      ]),
   ],
   swiftLanguageModes: [.v6]
 )

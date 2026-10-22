@@ -1,7 +1,6 @@
 import Foundation
 import Testing
 import Zero
-import ZeroNIOTesting
 
 /// The end-to-end environment: `ZERO_E2E_URL` is the origin of a zero-cache
 /// over the fixture database (`packages/zero-conformance/src/e2e/`).
