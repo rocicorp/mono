@@ -1,5 +1,11 @@
 # zero-swift
 
+## 0.4.3
+
+### Patch Changes
+
+- 0a7b9b5: `codegen`'s options are named `schema-file`, `schema-name`, and `type-prefix` in its JSON Schema (`--schema`), so its help prints the "Generate without a config file" example again, with `--schema-file` as it is typed. `--schemaFile`, `--schemaName`, and `--typePrefix` still work.
+
 ## 0.4.2
 
 ### Patch Changes
