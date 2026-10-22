@@ -148,6 +148,31 @@ import ZeroTesting
     outliving.destroy()
   }
 
+  @Test(.timeLimit(.minutes(1))) func aCancelledRunThrowsAndReleasesItsQuery() async throws {
+    let zero = try makeZero()
+    scheduler.runDueTimers()
+    let socket = try #require(sockets.sockets.first)
+    socket.receive(text: #"["connected",{"wsid":"w1"}]"#)
+    scheduler.runDueTimers()
+
+    // The server never confirms the rows.
+    let run = Task { try await zero.run(Self.mine(), type: .complete) }
+    let mine: JSONValue? = .string(QueryHash.hashOfNameAndArgs("issues.mine", []))
+    func patches() -> [JSONValue] {
+      sent("changeDesiredQueries").flatMap { $0["desiredQueriesPatch"]?.arrayValue ?? [] }
+    }
+    for _ in 0..<100 where patches().isEmpty {
+      await Task.yield()
+      scheduler.advance(by: 10)
+    }
+    #expect(patches().map { [$0["op"], $0["hash"]] } == [["put", mine]])
+
+    run.cancel()
+    await #expect(throws: CancellationError.self) { try await run.value }
+    scheduler.advance(by: 100)
+    #expect(patches().map { [$0["op"], $0["hash"]] }.last == ["del", mine])
+  }
+
   @Test func rejectsAMutatorNameRegisteredTwice() {
     #expect(throws: (any Error).self) {
       try Zero(

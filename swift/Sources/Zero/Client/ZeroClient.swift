@@ -142,17 +142,30 @@ public final class Zero<Context: Sendable> {
   /// The query's rows: what the replica holds now (`.unknown`), or once the
   /// server has confirmed them on this connection (`.complete`) or any
   /// (`.cached`).
+  ///
+  /// As in JS, `.complete` and `.cached` wait through connection errors for
+  /// a later connection to confirm the rows. Cancel the task to stop
+  /// waiting: the run throws `CancellationError` and releases its query.
   public func run<R: ZeroRow, S: QueryResult>(
     _ request: QueryRequest<R, S, Context>, type: RunType = .unknown, ttl: TTL? = nil
   ) async throws -> S {
-    let data = try await run(request.query(context), type: type, ttl: ttl).value
-    return try S(view: data)
+    try await run(request.query(context), type: type, ttl: ttl)
   }
 
   public func run<R: ZeroRow, S: QueryResult>(
     _ query: Query<R, S>, type: RunType = .unknown, ttl: TTL? = nil
   ) async throws -> S {
-    let data = try await run(query.any, type: type, ttl: ttl).value
+    try await run(query.any, type: type, ttl: ttl)
+  }
+
+  private func run<S: QueryResult>(_ query: AnyQuery, type: RunType, ttl: TTL?) async throws -> S {
+    try Task.checkCancellation()
+    let result: Deferred<ViewValue> = try run(query, type: type, ttl: ttl)
+    let data = try await withTaskCancellationHandler {
+      try await result.value
+    } onCancel: {
+      Task { @MainActor in result.reject(CancellationError()) }
+    }
     return try S(view: data)
   }
 

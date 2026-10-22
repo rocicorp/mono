@@ -85,13 +85,17 @@ do something else, or where a query or mutator exists on one side only.
 ## Create a client
 
 ```swift
-var options = ZeroOptions(cacheURL: "https://zero.example.com", userID: auth?.sub, auth: token)
-options.mutateURL = "https://api.example.com/mutate"   // or zero-cache's configured URL
-options.queryURL = "https://api.example.com/query"
+let options = ZeroOptions(cacheURL: "https://zero.example.com", userID: auth?.sub, auth: token)
 
 let zero = try Zero(
   schema: .app, context: auth, mutators: [IssueMutators.create], options: options)
 ```
+
+Leave `queryURL` and `mutateURL` unset, so zero-cache uses its own
+`ZERO_QUERY_URL` and `ZERO_MUTATE_URL`. Set them only to pick one of the
+URLs those allow. zero-cache closes the connection when they name any other
+URL, even the same API server by its public address, and the connection
+state becomes `.error` with zero-cache's reason.
 
 Register every mutator the app may run: pending mutations are stored by
 name and run again when the server's state arrives, including after a
@@ -114,7 +118,9 @@ and AppKit, `DiffableAdapter` feeds a diffable data source.
 `zero.materialize(_:ttl:)` returns the untyped ``MaterializedView``, whose
 ``ViewSnapshot``s say which rows were inserted, removed, or changed.
 `zero.run(_:type:ttl:)` reads rows once, and `zero.preload(_:ttl:)` syncs
-rows without a view.
+rows without a view. A `run` of type `.complete` or `.cached` waits until
+the server confirms the rows, through connection errors, as in JS; cancel
+its task to stop waiting.
 
 ## Change rows
 
@@ -128,8 +134,44 @@ The client applies the mutator at once; views update before `mutate`
 returns. The server runs its own mutator; when its result arrives, the
 client replaces its optimistic changes with the server's.
 
+A server outcome of `.zeroError` means the client couldn't learn the
+result, such as when the connection closed. The server may still have
+applied the mutation, and the client sends pending mutations again when it
+reconnects, so don't retry it as a failure.
+
 ## Follow the connection
 
 ``Connection`` is observable. Its ``ConnectionState`` is `.needsAuth` when
 the server rejects the token: get a new one and call
 ``Connection/connect(auth:)``.
+
+## Develop against a local backend
+
+The client connects to any `http`, `https`, `ws`, or `wss` `cacheURL`. A
+few platform rules apply to a backend on your own machine, in Docker,
+OrbStack, or on the LAN:
+
+- **Sandboxed Mac apps.** Besides the `com.apple.security.network.client`
+  entitlement, add `NSLocalNetworkUsageDescription` to Info.plist. Hosts
+  that resolve to a private address, such as OrbStack's `*.orb.local`,
+  count as the local network. Without it, requests fail with
+  `NSURLErrorNotConnectedToInternet` (-1009) and no prompt appears.
+- **The iOS simulator** doesn't trust your Mac's development certificate
+  authorities. For OrbStack's HTTPS domains, export its root and add it to
+  the booted simulator:
+
+  ```sh
+  security find-certificate -c "OrbStack Development Root CA" -p > /tmp/orbstack.pem
+  xcrun simctl keychain booted add-root-cert /tmp/orbstack.pem
+  ```
+
+- **A physical device** can't resolve `*.orb.local` or `localhost`. Publish
+  zero-cache's and the API server's ports and use the Mac's LAN address
+  over `http`. Allow it with `NSAllowsLocalNetworking` under
+  `NSAppTransportSecurity`, and add `NSLocalNetworkUsageDescription`; the
+  app asks for local network access on its first connection. Take
+  `cacheURL` from per-destination build settings through Info.plist, so
+  simulator and Mac builds keep their own URLs.
+- **Port 4848** is only zero-cache's default. A second local zero-cache
+  needs another host port; otherwise the URL may quietly reach the other
+  project's zero-cache.

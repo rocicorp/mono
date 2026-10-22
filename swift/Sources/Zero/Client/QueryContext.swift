@@ -277,12 +277,13 @@ final class QueryContext {
       result.resolve(data)
       return result
     }
+    // Settling releases the view, also when `Zero.run` rejects it because
+    // its task was cancelled.
+    result.onSettle { _ in v.destroy() }
     _ = v.addListener { data, resultType, error in
       if resultType == .complete || (type == .cached && resultType == .cached) {
-        v.destroy()
         result.resolve(data)
       } else if resultType == .error {
-        v.destroy()
         result.reject(QueryError(error, data: data))
       }
     }
