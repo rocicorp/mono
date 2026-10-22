@@ -103,4 +103,35 @@ struct ClientE2ETests {
     #expect(Set(["i1", "i3", "i4"]).isSubset(of: cached.map(\.id)))
     #expect(!cached.contains { $0.id == id })
   }
+
+  /// Two clients of one client group (two windows) both keep their
+  /// queries: each lists the other in `activeClients`, so zero-cache
+  /// doesn't delete it.
+  @Test func twoClientsOfAGroupBothKeepTheirQueries() async throws {
+    defer { try? FileManager.default.removeItem(atPath: directory) }
+    let key = UUID().uuidString
+    let first = try makeZero(storageKey: key)
+    defer { first.close() }
+    // Without a TTL, a query of a client the server deletes goes at once.
+    let open = try first.liveQuery(E2EApp.open(), ttl: .none)
+    try await eventually("the first client's issues") { open.resultType == .complete }
+
+    let second = try makeZero(storageKey: key)
+    defer { second.close() }
+    #expect(second.clientGroupID == first.clientGroupID)
+    let byID = try second.liveQuery(E2EApp.byID("i1"))
+    try await eventually("the second client's issue") { byID.resultType == .complete }
+
+    // The first client's query still syncs a row only it asks for.
+    let id = "swift-\(UUID().uuidString)"
+    let created = second.mutate(E2EApp.create(.init(id: id, title: "Two windows", ownerId: nil)))
+    #expect(try await created.server.value == .success(data: nil))
+    try await eventually("the first client to see the new issue") {
+      open.data.contains { $0.id == id }
+    }
+    #expect(open.resultType == .complete)
+    #expect(byID.data?.id == "i1")
+    let closed = second.mutate(E2EApp.close(id))
+    #expect(try await closed.server.value == .success(data: nil))
+  }
 }

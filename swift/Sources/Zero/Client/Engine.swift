@@ -94,6 +94,7 @@ final class Engine {
     for t in lifecycleTimers { t.cancel() }
     if !repClosed {
       database.removeWriteFailureListener(clientID)
+      database.clientStopped(clientID)
       database.release()
     }
   }
@@ -252,6 +253,14 @@ final class Engine {
     }
     database.addWriteFailureListener(clientID) { [weak self] failure in
       self?.storageFailed(failure)
+    }
+    // Another client of the group stopped (the `onDelete` of
+    // `makeActiveClientsManager`): tell the server, if connected.
+    database.clientStarted(clientID, clientGroupID: clientGroupID) { [weak self] id in
+      guard let self else { return }
+      self.loop.dispatch {
+        self.sendIfConnected(.deleteClients(DeleteClientsBody(clientIDs: [id])))
+      }
     }
     if let openFailure {
       log.warn(
@@ -690,7 +699,10 @@ final class Engine {
       clientSchema: connectCookie.isNull ? clientSchema : nil, deleted: deleted,
       userPushURL: options.mutateURL, userPushHeaders: options.mutateHeaders,
       userQueryURL: options.queryURL, userQueryHeaders: options.queryHeaders,
-      activeClients: [clientID])
+      activeClients: [clientID]
+        + database.activeClients(ofGroup: clientGroupID).filter {
+          $0 != clientID
+        })
     let authToken = auth.flatMap { $0.isEmpty ? nil : $0 }
     var secProtocol = SecProtocols.encode(initConnection: initConnection, authToken: authToken)
     if secProtocol.utf8.count > options.maxHeaderLength {
@@ -1030,6 +1042,7 @@ final class Engine {
     for t in lifecycleTimers { t.cancel() }
     lifecycleTimers = []
     database.removeWriteFailureListener(clientID)
+    database.clientStopped(clientID)
     database.release()
     connectionManager.closed()
   }

@@ -163,6 +163,12 @@ final class ReplicaDatabase {
   private var writeFailureListeners: [(clientID: String, listener: (StorageFailure) -> Void)] =
     []
 
+  /// The clients running on this database in this process, in the order
+  /// they started (`ActiveClientsManager`, which JS keeps across tabs
+  /// with Web Locks). Each hears when another of its group stops.
+  private var running: [(clientID: String, clientGroupID: String, onDelete: (String) -> Void)] =
+    []
+
   private static var open: [String: ReplicaDatabase] = [:]
   /// The profile ID of memory databases, one per process as in JS.
   private static var memoryProfileID: String?
@@ -236,6 +242,29 @@ final class ReplicaDatabase {
     guard users == 0, let sqlite else { return }
     if Self.open[key] === self { Self.open[key] = nil }
     sqlite.close()
+  }
+
+  /// Records that `clientID` runs until `clientStopped`. `onDelete` gets
+  /// the clients of its group that stop before it.
+  func clientStarted(
+    _ clientID: String, clientGroupID: String, onDelete: @escaping (String) -> Void
+  ) {
+    running.append((clientID, clientGroupID, onDelete))
+  }
+
+  /// Tells the other running clients of its group, once, that `clientID`
+  /// stopped (`ActiveClientsManager.onDelete`).
+  func clientStopped(_ clientID: String) {
+    guard let i = running.firstIndex(where: { $0.clientID == clientID }) else { return }
+    let stopped = running.remove(at: i)
+    for other in running where other.clientGroupID == stopped.clientGroupID {
+      other.onDelete(clientID)
+    }
+  }
+
+  /// The running clients of group `id` (`ActiveClientsManager.activeClients`).
+  func activeClients(ofGroup id: String) -> [String] {
+    running.filter { $0.clientGroupID == id }.map(\.clientID)
   }
 
   /// Waits for the writes queued so far.
