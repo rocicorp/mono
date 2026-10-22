@@ -21,7 +21,7 @@ The JS sides:
 | `zero.bench.ts`                       | `pnpm --filter zero-client bench`                                                                 |
 | `btree-set.bench.ts`, `hash.bench.ts` | `pnpm --filter shared bench --project shared/bench/node src/btree-set.bench.ts src/hash.bench.ts` |
 | `memory`, `hydration`, `mutations`    | `pnpm --filter zero-conformance bench` (`src/bench/client.bench.ts`)                              |
-| `pokes`, the round trip               | none: the JS client applies pokes on the next frame, so a JS timing measures the scheduling       |
+| `pokes`, `first sync`, the round trip | none: the JS client applies pokes on the next frame, so a JS timing measures the scheduling       |
 
 Without `--project`, the shared benchmarks also run in headless Chromium at
 the same time, which slows the Node run by up to 10%.
@@ -123,6 +123,13 @@ times faster.
 | poke putting 100 rows, 1000-row view                      | 551 µs†  | 695 µs†  | 1.00 ms† |
 | poke putting 1000 rows, 1000-row view                     | 5.13 ms† | 6.58 ms† | 9.82 ms† |
 | round trip (update, push, confirming poke), 1000-row view | 37 µs†   | 42 µs†   | 80 µs†   |
+
+`first sync` replays zbugs' first sync as the zbugs-swift app got it: one
+poke of 21 parts with 516 issues, 894 comments, 603 issue labels, 30
+labels, 14 users, and a project, into a fresh client with the issue list's
+first page of `issueListV2` (or no view, for the cost of the poke itself).
+Each sample is timed from the poke's frames arriving to the view being
+flushed; the output also gives the fastest sample.
 
 JS views hand out their rows; Swift apps read them as structs, which costs
 about three times the materialization. A live query reads only the rows

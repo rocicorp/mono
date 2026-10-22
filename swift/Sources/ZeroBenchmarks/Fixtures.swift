@@ -91,7 +91,7 @@ enum Mutators {
 }
 
 /// A client on memory storage with `rows` users, on a manual clock;
-/// connected to a mock socket when `socket` is set.
+/// connected to a mock socket when `connected` is set.
 @MainActor
 final class Client {
   let zero: Zero<Void>
@@ -99,20 +99,23 @@ final class Client {
   private let sockets = MockSocketFactory()
   private var cookie = 0
 
-  init(rows: Int, connected: Bool = false) throws {
+  init(
+    rows: Int, connected: Bool = false, schema: ZeroSchema = .bench,
+    mutators: [any Mutator<Void>] = Mutators.all
+  ) throws {
     var options = ZeroOptions(
       cacheURL: connected ? "http://zero.bench" : nil, userID: "bench",
       storageKey: UUID().uuidString, storage: .memory)
     options.logLevel = .error
     zero = try Zero(
-      schema: .bench, mutators: Mutators.all, options: options, scheduler: scheduler,
+      schema: schema, mutators: mutators, options: options, scheduler: scheduler,
       socketFactory: connected ? sockets : nil)
     if connected {
       // The rows come from the server, so no mutation is pending.
       scheduler.runDueTimers()
       socket.receive(text: #"["connected",{"wsid":"bench"}]"#)
       scheduler.runDueTimers()
-      receive(nextPoke(rows: (0..<rows).map { User.json($0, $0) }))
+      if rows > 0 { receive(nextPoke(rows: (0..<rows).map { User.json($0, $0) })) }
     } else if rows > 0 {
       zero.mutate(Mutators.insertUsers(InsertUsers(from: 0, count: rows)))
     }
@@ -122,18 +125,25 @@ final class Client {
 
   /// The frames of the next poke: `rows` and the client's last mutation.
   func nextPoke(rows: [String], lastMutationID: Int? = nil) -> [String] {
+    nextPoke(parts: [rows], lastMutationID: lastMutationID)
+  }
+
+  /// The frames of the next poke, with a part for each of `parts`; the
+  /// last part has the client's last mutation.
+  func nextPoke(parts: [[String]], lastMutationID: Int? = nil) -> [String] {
     // Cookies compare as strings.
     let base = cookie == 0 ? "null" : "\"\(Self.cookie(cookie))\""
     cookie += 1
     let id = "p\(cookie)"
-    var part = #""pokeID":"\#(id)","rowsPatch":[\#(rows.joined(separator: ","))]"#
-    if let lastMutationID {
-      part += #","lastMutationIDChanges":{"\#(zero.clientID)":\#(lastMutationID)}"#
+    let pokeParts = parts.enumerated().map { i, rows in
+      var part = #""pokeID":"\#(id)","rowsPatch":[\#(rows.joined(separator: ","))]"#
+      if let lastMutationID, i == parts.count - 1 {
+        part += #","lastMutationIDChanges":{"\#(zero.clientID)":\#(lastMutationID)}"#
+      }
+      return "[\"pokePart\",{\(part)}]"
     }
-    return [
-      #"["pokeStart",{"pokeID":"\#(id)","baseCookie":\#(base)}]"#,
-      "[\"pokePart\",{\(part)}]",
-      #"["pokeEnd",{"pokeID":"\#(id)","cookie":"\#(Self.cookie(cookie))"}]"#,
+    return [#"["pokeStart",{"pokeID":"\#(id)","baseCookie":\#(base)}]"#] + pokeParts + [
+      #"["pokeEnd",{"pokeID":"\#(id)","cookie":"\#(Self.cookie(cookie))"}]"#
     ]
   }
 

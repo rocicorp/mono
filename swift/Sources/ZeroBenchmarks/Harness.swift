@@ -11,6 +11,7 @@ final class Bench {
     var median: Double?
     var p75: Double?
     var p99: Double?
+    var min: Double?
     var samples: Int?
     /// Memory benchmarks: bytes.
     var bytes: Int?
@@ -91,10 +92,13 @@ final class Bench {
     let (median, p75, p99) = (
       samples[samples.count / 2], samples[samples.count * 3 / 4], samples[samples.count * 99 / 100]
     )
-    results.append(Result(name: name, median: median, p75: p75, p99: p99, samples: samples.count))
+    results.append(
+      Result(
+        name: name, median: median, p75: p75, p99: p99, min: samples[0], samples: samples.count))
     print(
       "  \(label(name)) \(Self.format(median).leftPad(10))/iter"
-        + "  p75 \(Self.format(p75).leftPad(10))  p99 \(Self.format(p99).leftPad(10))")
+        + "  p75 \(Self.format(p75).leftPad(10))  p99 \(Self.format(p99).leftPad(10))"
+        + "  min \(Self.format(samples[0]).leftPad(10))")
   }
 
   /// Records a measured amount of memory.

@@ -4,7 +4,7 @@ import Zero
 /// The client's benchmarks: ports of the JS benchmarks
 /// (`zero-client/src/client/zero.bench.ts`, `shared/src/btree-set.bench.ts`,
 /// `shared/src/hash.bench.ts`) under the same names, and the Swift client's
-/// own (memory, hydration, pokes, and mutations).
+/// own (memory, hydration, pokes, first sync, and mutations).
 ///
 ///     swift run -c release ZeroBenchmarks [--time <seconds>] [--json <file>] [<filter>…]
 ///
@@ -32,6 +32,7 @@ enum Benchmarks {
     try zeroBench(bench)
     try hydration(bench)
     try pokes(bench)
+    try firstSync(bench)
     try mutations(bench)
     btree(bench)
     hash(bench)
@@ -126,6 +127,49 @@ enum Benchmarks {
         if value > n {
           check(view.data.entries[0].row["b"] == .number(Double(value)), "the poke applied")
         }
+      }
+    }
+  }
+
+  /// zbugs' first sync: one poke of 2,058 rows into a fresh client with
+  /// the issue list's view, timed from the poke's frames arriving to the
+  /// view being flushed. Its rows arrive by table in alphabetical order, so
+  /// the issues come before the labels, the project, and the users that
+  /// their joins and `exists` wait for.
+  static func firstSync(_ bench: Bench) throws {
+    try bench.group("first sync") {
+      let rows = FirstSync.rows()
+      let total = rows.count
+      let perPart = (total + FirstSync.parts - 1) / FirstSync.parts
+      let parts = stride(from: 0, to: total, by: perPart).map {
+        Array(rows[$0..<min($0 + perPart, total)])
+      }
+      @MainActor func client() throws -> Client {
+        try Client(rows: 0, connected: true, schema: FirstSync.schema, mutators: [])
+      }
+      try bench.run(
+        "issueListV2 view, zbugs poke of \(total) rows in \(parts.count) parts",
+        setup: { () throws -> (Client, MaterializedView, [String]) in
+          let c = try client()
+          let view = try c.zero.materialize(FirstSync.issueList)
+          return (c, view, c.nextPoke(parts: parts))
+        }
+      ) { state in
+        state.0.receive(state.2)
+        let entries = state.1.data.entries
+        check(entries.count == FirstSync.pageSize + 1, "a page of issues")
+        check(entries.contains { $0.relationships["creator"] != .one(nil) }, "their creators")
+      }
+      // The same poke with no view: what the issue list adds is the
+      // difference.
+      try bench.run(
+        "no view, zbugs poke of \(total) rows in \(parts.count) parts",
+        setup: { () throws -> (Client, [String]) in
+          let c = try client()
+          return (c, c.nextPoke(parts: parts))
+        }
+      ) { state in
+        state.0.receive(state.1)
       }
     }
   }
