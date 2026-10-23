@@ -15,6 +15,11 @@ export const downstreamStatusSchema = v.object({
 
   // Contains a lag report for recording end to end latency metrics.
   lagReport: changeSourceReportSchema.optional(),
+
+  // Requests that the consumer back up its changes through this watermark
+  // promptly, rather than at its regular backup cadence, as the change source
+  // is waiting on the resulting ack (e.g. to fork a new replica from it).
+  syncBackupThrough: v.string().optional(),
 });
 
 export type DownstreamStatus = v.Infer<typeof downstreamStatusSchema>;

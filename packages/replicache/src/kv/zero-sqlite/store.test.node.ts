@@ -82,6 +82,24 @@ test('entry rejects NULL keys', async () => {
   }
 });
 
+test('overlapping close() calls keep other stores on the same file open', async () => {
+  // Both calls pass the closed check before either takes the lock, so the
+  // second one must not drop the reference held by the other store.
+  const name = 'zero-sqlite-overlapping-close';
+  const closing = createStore(name);
+  const other = createStore(name);
+  await withWrite(other, async wt => {
+    await wt.put('k', 'v');
+  });
+
+  await Promise.all([closing.close(), closing.close()]);
+
+  await withRead(other, async rt => {
+    expect(await rt.get('k')).toBe('v');
+  });
+  await other.close();
+});
+
 test('setupDatabase pragmas take effect on a real SQLite connection', () => {
   // The pragma tests in sqlite-store.test.node.ts only record the SQL sent to a
   // fake delegate. SQLite ignores page_size silently when it is issued too late,

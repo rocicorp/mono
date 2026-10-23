@@ -16,12 +16,14 @@ import type {PgChangeLogPurgeLocker} from '../services/change-source/common/repl
 import {initializeCustomChangeSource} from '../services/change-source/custom/change-source.ts';
 import {initializePostgresChangeSource} from '../services/change-source/pg/change-source-init.ts';
 import {createBackupCleanupMonitor} from '../services/change-streamer/backup-cleanup-monitor-factory.ts';
+import type {BackupMonitor} from '../services/change-streamer/backup-monitor.ts';
 import {ChangeStreamerHttpServer} from '../services/change-streamer/change-streamer-http.ts';
 import {initializeStreamer} from '../services/change-streamer/change-streamer-service.ts';
 import type {ChangeStreamerService} from '../services/change-streamer/change-streamer.ts';
 import {DEFAULT_READINESS_GRACE_PERIOD_MS} from '../services/change-streamer/restore-admission.ts';
 import {initChangeStreamerSchema} from '../services/change-streamer/schema/init.ts';
 import {AutoResetSignal} from '../services/change-streamer/schema/tables.ts';
+import {ServerStartMetrics} from '../services/change-streamer/server-start-metrics.ts';
 import {
   PurgeLocker,
   type PurgeLock,
@@ -133,6 +135,7 @@ export default async function runWorker(
 
   let purgeLock = null as PurgeLock | null;
   let changeStreamer: ChangeStreamerService | undefined;
+  let backupMonitor: BackupMonitor | undefined;
   let backupURL: string | undefined;
 
   const context = getServerContext(config);
@@ -164,6 +167,7 @@ export default async function runWorker(
     );
   }
 
+  const startMetrics = new ServerStartMetrics();
   let waitForFirstBackupBeforeServing = false;
   let newBackupLineage = false;
   for (const first of [true, false]) {
@@ -210,6 +214,7 @@ export default async function runWorker(
         waitForBackupBeforeServing,
         newBackupLineage: initNewBackupLineage,
         pgChangeLogBehindSlot,
+        startTimings,
       } = upstream.type === 'pg'
         ? await initializePostgresChangeSource(
             lc,
@@ -244,6 +249,24 @@ export default async function runWorker(
 
       const replicationStatusPublisher =
         ReplicationStatusPublisher.forReplicaFile(replica.file);
+
+      // Created before the change-streamer, which tracks its watermarks (and
+      // requests prompt backups from it) from construction. It is run (and
+      // stopped) as a service below. It monitors the backup-replicator's
+      // destination (see `backupURLOverride` below).
+      backupMonitor = createBackupCleanupMonitor({
+        lc,
+        config: destinationBackupURL
+          ? {
+              ...config,
+              litestream: {
+                ...config.litestream,
+                backupURLOverride: destinationBackupURL,
+              },
+            }
+          : config,
+        replicaFile: replica.file,
+      });
 
       changeStreamer = await initializeStreamer(
         lc,
@@ -332,11 +355,16 @@ export default async function runWorker(
                   retentionMs: sqliteChangeLogRetentionMs,
                 }
               : undefined,
+          backupMonitor,
         },
         setTimeout,
       );
       backupURL = destinationBackupURL;
       waitForFirstBackupBeforeServing = waitForBackupBeforeServing;
+      startMetrics.setKind(startTimings?.kind);
+      startMetrics.record('slot_create', startTimings?.slotCreateMs);
+      startMetrics.record('fork_wait', startTimings?.forkWaitMs);
+      startMetrics.record('restore', startTimings?.restoreMs);
       newBackupLineage = initNewBackupLineage;
       break;
     } catch (e) {
@@ -354,6 +382,9 @@ export default async function runWorker(
       //   UPSTREAM_DB: CREATE_REPLICATION_SLOT waits for all older
       //   transactions to finish, including this lock's open transaction.
       await cleanup.release();
+      // Not yet started (the change-streamer starts it), so nothing to wait on.
+      void backupMonitor?.stop();
+      backupMonitor = undefined;
       if (first && e instanceof AutoResetSignal) {
         lc.warn?.(`resetting replica ${replica.file}`, e);
         // TODO: Make deleteLiteDB work with litestream. It will probably have to be
@@ -378,12 +409,19 @@ export default async function runWorker(
   }
   // impossible: upstream must have advanced in order for replication to be stuck.
   assert(changeStreamer, `resetting replica did not advance replicaVersion`);
+  assert(backupMonitor, `backup monitor is created with the change-streamer`);
 
   // The backup-replicator is stopped with the other services, i.e. after the
   // ChangeStreamerHttpServer has drained its subscribers.
   const processes = new SupportingProcesses(lc, parent);
   const profileSubWorkers: Worker[] = [];
   const {promise: replicatorReady, resolve} = resolver();
+  if (backupURL) {
+    const catchUpStart = performance.now();
+    void replicatorReady.then(() =>
+      startMetrics.record('catch_up', performance.now() - catchUpStart),
+    );
+  }
   if (!backupURL) {
     resolve(); // No backup replicator to wait for, so resolve immediately.
   } else {
@@ -412,13 +450,6 @@ export default async function runWorker(
     );
   }
 
-  const backupMonitor = createBackupCleanupMonitor({
-    lc,
-    config,
-    replicaFile: replica.file,
-    changeStreamer,
-  });
-
   let backupReady = promiseVoid;
   if (waitForFirstBackupBeforeServing) {
     const start = performance.now();
@@ -427,6 +458,7 @@ export default async function runWorker(
     backupReady = backupMonitor.firstBackupReceived().then(() => {
       const elapsed = performance.now() - start;
       lc.info?.(`initial backup confirmed after ${elapsed.toFixed(2)}ms`);
+      startMetrics.record('backup_confirm', elapsed);
     });
   }
 
@@ -466,7 +498,10 @@ export default async function runWorker(
     changeStreamer,
   );
 
-  void readinessGate.then(() => parent.send(['ready', {ready: true}]));
+  void readinessGate.then(() => {
+    startMetrics.ready();
+    parent.send(['ready', {ready: true}]);
+  });
 
   // Note: The changeStreamer itself is not started here; it is started by the
   //       changeStreamerWebServer after a delay to ensure that routing

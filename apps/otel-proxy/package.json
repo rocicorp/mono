@@ -17,10 +17,10 @@
   },
   "devDependencies": {
     "@types/node": "^22.19.19",
-    "@vitest/coverage-v8": "^5.0.0",
+    "@vitest/coverage-v8": "^5.0.5",
     "oxfmt": "^0.74.0",
     "typescript": "~7.0.2",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.5"
   },
   "packageManager": "pnpm@11.11.0"
 }

@@ -1,12 +1,13 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.ts';
+import {must} from '../../../../shared/src/must.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import {Database, type Statement} from '../../../../zqlite/src/db.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {LitestreamController} from '../litestream/litestream-controller.ts';
 import {RunningState} from '../running-state.ts';
-import type {BackedUpWatermark} from './backup-monitor.ts';
+import type {BackedUpWatermark, BackupPoller} from './backup-monitor.ts';
 
 /**
  * How long litestream waits for a requested sync (and its upload) before
@@ -34,6 +35,14 @@ const ERROR_LOG_INTERVAL_MS = 60_000;
  * waiting out an interval.
  */
 const MIN_RETRY_DELAY_MS = 250;
+
+/**
+ * How often the local replica is polled while a requested sync (see
+ * {@link LitestreamSyncRequester.requestSync}) waits for the replica to reach
+ * the requested watermark. Each poll is a single read of the replica's
+ * watermark, which the replica typically reaches within a poll or two.
+ */
+export const EXPEDITED_POLL_INTERVAL_MS = 50;
 
 const localWatermarkSchema = v.object({
   stateVersion: v.string(),
@@ -76,17 +85,25 @@ export type SyncRequesterConfig = {
  * are retried with a backoff that starts short and, once it grows to the
  * interval, defers to the regular ticks. Nothing is published until a request
  * succeeds.
+ *
+ * A sync through a specific watermark can also be requested out of band (see
+ * {@link requestSync}), e.g. when a replica fork waits on its backup.
  */
-export class LitestreamSyncRequester {
+export class LitestreamSyncRequester implements BackupPoller {
   readonly #lc: LogContext;
   readonly #state = new RunningState('litestream-sync-requester');
   readonly #config: SyncRequesterConfig;
   readonly #litestream: SyncController;
-  readonly #readLocalWatermark: Statement;
+  readonly #replicaFile: string;
   readonly #stream: Subscription<BackedUpWatermark>;
 
+  #db: Database | undefined;
+  #readLocalWatermark: Statement | undefined;
   #timer: NodeJS.Timeout | undefined;
   #retryTimer: NodeJS.Timeout | undefined;
+  // The target of a requested sync, and when it stops being expedited.
+  #expedited: {target: string; deadlineMs: number} | undefined;
+  #expediteTimer: NodeJS.Timeout | undefined;
   #retryDelayMs = MIN_RETRY_DELAY_MS;
   #inFlight: Promise<void> | undefined;
   #backedUp: string | undefined;
@@ -101,18 +118,15 @@ export class LitestreamSyncRequester {
     this.#lc = lc.withContext('component', 'litestream-sync-requester');
     this.#config = config;
     this.#litestream = litestream;
-
-    const db = new Database(this.#lc, replicaFile, {readonly: true});
-    this.#readLocalWatermark = db.prepare(
-      `SELECT stateVersion, writeTimeMs FROM "_zero.replicationState"`,
-    );
+    this.#replicaFile = replicaFile;
     this.#stream = Subscription.create<BackedUpWatermark>({
       cleanup: () => {
         clearInterval(this.#timer);
         clearTimeout(this.#retryTimer);
+        clearTimeout(this.#expediteTimer);
         this.#state.stop(this.#lc);
         this.#litestream.close();
-        db.close();
+        this.#db?.close();
       },
     });
   }
@@ -120,9 +134,16 @@ export class LitestreamSyncRequester {
   /**
    * Starts requesting syncs and pushes backed-up watermarks to the returned
    * stream. Must only be called once.
+   *
+   * The replica is only opened here, so that a requester that is never
+   * started holds no resources.
    */
   start(): Source<BackedUpWatermark> {
     assert(this.#timer === undefined, `Already called start()`);
+    this.#db = new Database(this.#lc, this.#replicaFile, {readonly: true});
+    this.#readLocalWatermark = this.#db.prepare(
+      `SELECT stateVersion, writeTimeMs FROM "_zero.replicationState"`,
+    );
     this.#lc.info?.(
       `requesting litestream syncs every ${this.#config.intervalMs} ms`,
     );
@@ -140,17 +161,96 @@ export class LitestreamSyncRequester {
     if (!this.#state.shouldRun() || this.#inFlight) {
       return this.#inFlight ?? Promise.resolve();
     }
-    let local: LocalWatermark;
-    try {
-      local = v.parse(this.#readLocalWatermark.get(), localWatermarkSchema);
-    } catch (e) {
-      this.#lc.warn?.(`unable to read local watermark`, e);
+    const local = this.#readLocal();
+    if (!local) {
       return Promise.resolve();
     }
     this.#inFlight = this.#requestSync(local).finally(() => {
       this.#inFlight = undefined;
     });
     return this.#inFlight;
+  };
+
+  #readLocal(): LocalWatermark | undefined {
+    try {
+      return v.parse(
+        must(this.#readLocalWatermark, `start() was not called`).get(),
+        localWatermarkSchema,
+      );
+    } catch (e) {
+      this.#lc.warn?.(`unable to read local watermark`, e);
+      return undefined;
+    }
+  }
+
+  /**
+   * Requests a sync through `watermark` as soon as the local replica has
+   * reached it, rather than at the next regular tick.
+   *
+   * The replica is polled every {@link EXPEDITED_POLL_INTERVAL_MS} until its
+   * watermark reaches the target, after which a sync is requested
+   * immediately (or once the outstanding request, which may predate the
+   * target, completes). A failed request is retried with the usual backoff.
+   * Concurrent requests are coalesced into one, for the latest target.
+   *
+   * If the replica does not reach the target within the configured interval,
+   * the request is dropped, as the regular ticks then cover it anyway.
+   */
+  requestSync(watermark: string) {
+    if (
+      !this.#state.shouldRun() ||
+      (this.#backedUp !== undefined && this.#backedUp >= watermark)
+    ) {
+      return;
+    }
+    const prev = this.#expedited?.target;
+    this.#expedited = {
+      target: prev !== undefined && prev > watermark ? prev : watermark,
+      deadlineMs: Date.now() + this.#config.intervalMs,
+    };
+    this.#scheduleExpedite(0);
+  }
+
+  #scheduleExpedite(delayMs: number) {
+    clearTimeout(this.#expediteTimer);
+    this.#expediteTimer = setTimeout(this.#expedite, delayMs);
+  }
+
+  readonly #expedite = () => {
+    this.#expediteTimer = undefined;
+    const expedited = this.#expedited;
+    if (!expedited || !this.#state.shouldRun()) {
+      return;
+    }
+    const {target, deadlineMs} = expedited;
+    if (this.#backedUp !== undefined && this.#backedUp >= target) {
+      this.#expedited = undefined; // e.g. by a regular tick
+      return;
+    }
+    if (Date.now() >= deadlineMs) {
+      this.#lc.info?.(
+        `replica did not reach ${target} within ${this.#config.intervalMs} ms. ` +
+          `Deferring its backup to the regular syncs.`,
+      );
+      this.#expedited = undefined;
+      return;
+    }
+    if (this.#inFlight) {
+      // The outstanding request may have read the local watermark before the
+      // replica reached the target. Check again once it completes.
+      void this.#inFlight.finally(() => this.#scheduleExpedite(0));
+      return;
+    }
+    const local = this.#readLocal();
+    if (!local || local.stateVersion < target) {
+      this.#scheduleExpedite(EXPEDITED_POLL_INTERVAL_MS);
+      return;
+    }
+    // A single request covers the target. If it fails, the usual backoff
+    // retries it.
+    this.#expedited = undefined;
+    this.#lc.info?.(`requesting sync through ${target}`);
+    void this.tick();
   };
 
   async #requestSync(local: LocalWatermark) {

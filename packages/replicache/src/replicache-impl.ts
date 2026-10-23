@@ -952,28 +952,33 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     const {promise, resolve} = resolver();
     closingInstances.set(this.name, promise);
 
-    this.#closeAbortController.abort();
+    // A later instance of this name waits on `promise` in `#open`, so it must
+    // settle even if closing a store throws.
+    try {
+      this.#closeAbortController.abort();
 
-    getBrowserGlobal('document')?.removeEventListener(
-      'visibilitychange',
-      this.#onVisibilityChange,
-    );
+      getBrowserGlobal('document')?.removeEventListener(
+        'visibilitychange',
+        this.#onVisibilityChange,
+      );
 
-    await Promise.race([this.#ready, this.#openFailed.promise]);
-    const closingPromises = [
-      this.memdag.close(),
-      this.perdag.close(),
-      this.#idbDatabases.close(),
-    ];
+      await Promise.race([this.#ready, this.#openFailed.promise]);
+      const closingPromises = [
+        this.memdag.close(),
+        this.perdag.close(),
+        this.#idbDatabases.close(),
+      ];
 
-    this.#pullConnectionLoop.close();
-    this.#pushConnectionLoop.close();
+      this.#pullConnectionLoop.close();
+      this.#pushConnectionLoop.close();
 
-    this.#subscriptions.clear();
+      this.#subscriptions.clear();
 
-    await Promise.all(closingPromises);
-    closingInstances.delete(this.name);
-    resolve();
+      await Promise.all(closingPromises);
+    } finally {
+      closingInstances.delete(this.name);
+      resolve();
+    }
   }
 
   async maybeEndPull(syncHead: Hash, requestID: string): Promise<void> {

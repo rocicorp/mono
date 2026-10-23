@@ -30,9 +30,9 @@
     "@emnapi/core": "1.10.0",
     "@emnapi/runtime": "1.10.0",
     "@types/node": "^22.19.19",
-    "@vitest/browser": "^5.0.0",
-    "@vitest/browser-playwright": "^5.0.0",
-    "@vitest/coverage-v8": "^5.0.0",
+    "@vitest/browser": "^5.0.5",
+    "@vitest/browser-playwright": "^5.0.5",
+    "@vitest/coverage-v8": "^5.0.5",
     "baseline-browser-mapping": "^2.11.29",
     "oxfmt": "^0.74.0",
     "oxlint": "^1.80.0",
@@ -42,7 +42,7 @@
     "tsnapi": "^0.3.3",
     "turbo": "^2.9.14",
     "typescript": "~7.0.2",
-    "vitest": "^5.0.0",
+    "vitest": "^5.0.5",
     "zx": "^8.8.5"
   },
   "engines": {

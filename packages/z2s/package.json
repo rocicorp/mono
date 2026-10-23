@@ -34,7 +34,7 @@
     "pg": "^8.20.0",
     "postgres": "3.4.7",
     "shared": "workspace:*",
-    "vitest": "^5.0.0",
+    "vitest": "^5.0.5",
     "zero-cache": "workspace:*",
     "zero-protocol": "workspace:*",
     "zero-schema": "workspace:*",

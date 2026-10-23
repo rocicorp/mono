@@ -323,7 +323,7 @@ export interface ChangeStreamerService
    * Starts a snapshot reservation to preserve change-log entries while
    * a soon-to-be-subscriber downloads the current replica backup. Once
    * the change-streamer knows that a backup is available
-   * (via {@link trackBackupWatermark}), it sends a confirmation
+   * (i.e. from its backup source), it sends a confirmation
    * SnapshotMessage and reserves the corresponding entries in the change-log
    * until the client with that `taskID` subscribes, or if the snapshot
    * connection terminates.
@@ -339,16 +339,4 @@ export interface ChangeStreamerService
    * Subscribers continue to be served in the meantime.
    */
   drain?(): Promise<void>;
-
-  /**
-   * Informs the change-streamer of the watermark up to which the replica has
-   * been backed up. This serves two purposes:
-   * - It serves as the maximum watermark up to which the change-log can be
-   *   purged. Note that the change-streamer also takes into account the
-   *   positions of its subscribers and snapshot reservations when purging
-   *   changes in the change-log.
-   * - In RMv2, this ACK's the upstream change-source to allow its buffer of
-   *   changes (e.g. the replication_slot) to advance.
-   */
-  trackBackupWatermark(watermark: string): void;
 }

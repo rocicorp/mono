@@ -12,7 +12,7 @@ import {
   litestreamMonitorMetricAttrs,
 } from '../litestream/metrics.ts';
 import {RunningState, UnrecoverableError} from '../running-state.ts';
-import type {BackedUpWatermark} from './backup-monitor.ts';
+import type {BackedUpWatermark, BackupPoller} from './backup-monitor.ts';
 
 export const CHECK_INTERVAL_MS = 10_000;
 
@@ -97,7 +97,7 @@ export type BackupStateVerifier = () => Promise<Date>;
  * {@link WEDGED_SHUTDOWN_GRACE_MS}, the backup is treated as wedged and the
  * process is shut down rather than risk corrupting the backup.
  */
-export class Litestream3PrometheusPoller {
+export class Litestream3PrometheusPoller implements BackupPoller {
   readonly #lc: LogContext;
   readonly #replicaFile: string;
   readonly #backupURL: string;
