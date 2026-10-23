@@ -355,10 +355,9 @@ export async function processMutationWithTx(
   authorizer.reloadPermissions();
 
   if (!errorMode) {
-    const {ops} = mutation.args[0];
-
-    // Validate all table names before processing
-    authorizer.validateTableNames(ops);
+    // Validates table names and keys every op by the replica's primary key,
+    // which is what the authorizer checks.
+    const ops = authorizer.validateOps(mutation.args[0].ops);
 
     const normalizedOps = authorizer.normalizeOps(ops);
     const [canPre, canPost] = await Promise.all([
