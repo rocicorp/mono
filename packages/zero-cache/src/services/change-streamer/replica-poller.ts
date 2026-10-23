@@ -54,7 +54,8 @@ export class ReplicaPoller {
     } catch (e) {
       this.#lc.error?.(`Unable to read watermark from replica`, e);
     } finally {
-      db.close();
+      // The replica's statistics are maintained by the replicator.
+      db.close({optimize: false});
     }
   };
 }

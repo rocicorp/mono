@@ -2,6 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {must} from '../../../../shared/src/must.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
+import {DEFAULT_REPLICA_ANALYSIS_LIMIT} from '../../config/zero-config.ts';
 import type {ColumnSpec, IndexSpec, TableSpec} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import type {RowKey, RowValue} from '../../types/row-key.ts';
@@ -33,8 +34,16 @@ export interface FakeReplicator {
   ): void;
 }
 
-export function fakeReplicator(lc: LogContext, db: Database): FakeReplicator {
-  const messageProcessor = createChangeProcessor(db);
+/**
+ * Replicates transactions through a ChangeProcessor on `db`, whose
+ * `analysis_limit` it sets as the replicator's write worker sets its own.
+ */
+export function fakeReplicator(
+  lc: LogContext,
+  db: Database,
+  analysisLimit = DEFAULT_REPLICA_ANALYSIS_LIMIT,
+): FakeReplicator {
+  const messageProcessor = createChangeProcessor(db, undefined, analysisLimit);
   return {
     processTransaction: (watermark, ...msgs) => {
       messageProcessor.processMessage(lc, [
@@ -54,12 +63,18 @@ export function fakeReplicator(lc: LogContext, db: Database): FakeReplicator {
   };
 }
 
+/**
+ * Creates a 'serving' ChangeProcessor on `db`, after setting the connection's
+ * `analysis_limit` as the replicator's write worker sets its own.
+ */
 export function createChangeProcessor(
   db: Database,
   failures: (lc: LogContext, err: unknown) => void = (_, err) => {
     throw err;
   },
+  analysisLimit = DEFAULT_REPLICA_ANALYSIS_LIMIT,
 ): ChangeProcessor {
+  db.pragma(`analysis_limit = ${analysisLimit}`);
   return new ChangeProcessor(new StatementRunner(db), 'serving', failures);
 }
 
