@@ -39,7 +39,7 @@
     "@types/node": "^22.19.19",
     "esbuild": "0.28.2",
     "oxfmt": "^0.74.0",
-    "vitest": "^5.0.0",
+    "vitest": "^5.0.5",
     "zero-schema": "workspace:*",
     "zero-types": "workspace:*",
     "zql": "workspace:*"
