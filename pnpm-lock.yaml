@@ -1461,12 +1461,6 @@ importers:
       zero-client:
         specifier: workspace:*
         version: link:../zero-client
-      zero-schema:
-        specifier: workspace:*
-        version: link:../zero-schema
-      zql:
-        specifier: workspace:*
-        version: link:../zql
 
   packages/zero-react-native:
     dependencies:
@@ -1477,9 +1471,6 @@ importers:
       oxfmt:
         specifier: ^0.74.0
         version: 0.74.0
-      replicache:
-        specifier: workspace:*
-        version: link:../replicache
       shared:
         specifier: workspace:*
         version: link:../shared
