@@ -1,6 +1,16 @@
 {
   "versionGroups": [
     {
+      "label": "OpenTelemetry API 1.10 splits ESM and CommonJS tracing state, leaving tracers created before NodeSDK.start() as no-ops. Keep the published Zero dependency pinned until this is fixed upstream.",
+      "dependencies": [
+        "@opentelemetry/api"
+      ],
+      "packages": [
+        "**"
+      ],
+      "pinVersion": "1.9.1"
+    },
+    {
       "label": "packages/zql-benchmarks/rn is an Expo app that is deliberately not a pnpm workspace member (see packages/replicache-perf/rn/README.md). It pins the React, TypeScript and Expo versions its React Native release needs, independently of the workspace's.",
       "packages": [
         "zql-benchmarks-rn"
@@ -26,6 +36,16 @@
     }
   ],
   "semverGroups": [
+    {
+      "label": "Pin the tested OpenTelemetry runtime packages and upgrade them together.",
+      "range": "",
+      "dependencies": [
+        "@opentelemetry/*"
+      ],
+      "packages": [
+        "**"
+      ]
+    },
     {
       "range": "~",
       "dependencies": [
