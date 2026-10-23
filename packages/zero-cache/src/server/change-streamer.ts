@@ -362,6 +362,7 @@ export default async function runWorker(
       backupURL = destinationBackupURL;
       waitForFirstBackupBeforeServing = waitForBackupBeforeServing;
       startMetrics.setKind(startTimings?.kind);
+      startMetrics.record('slot_create', startTimings?.slotCreateMs);
       startMetrics.record('fork_wait', startTimings?.forkWaitMs);
       startMetrics.record('restore', startTimings?.restoreMs);
       newBackupLineage = initNewBackupLineage;

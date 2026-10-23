@@ -346,10 +346,11 @@ async function forkOrResumeReplica(
     // can't restore, must initial-sync
     return {replica: undefined, purgeLock: null};
   }
-  const {restoreFrom, replicateTo, slotLSN, slotSession} = result;
+  const {restoreFrom, replicateTo, slotLSN, slotSession, slotCreateMs} = result;
   const timings: InitializeTimings = {
     kind: restoreFrom.id === replicateTo.id ? 'resume' : 'fork',
-    forkWaitMs: performance.now() - forkWaitStart,
+    slotCreateMs,
+    forkWaitMs: performance.now() - forkWaitStart - (slotCreateMs ?? 0),
   };
   // A resumed slot (i.e. of the same replica) that was acked only once
   // transactions were stored in the PG change-log (RMv1.5) cannot have been
@@ -522,11 +523,17 @@ export async function getSourceAndDestinationReplicas(
        * over by the PostgresChangeSource. Destroying it releases the slot.
        */
       slotSession: Readable;
+      /**
+       * The time spent creating the destination replica and slot, if one was
+       * created (even if it was then abandoned for a resumption).
+       */
+      slotCreateMs?: number | undefined;
     }
   | undefined
 > {
   const inactiveSince = new Map<string, number>(); // tracks replica inactivity
   let destination: ReplicationSlotResult<void> | undefined;
+  let slotCreateMs: number | undefined;
   // The position that the source replica's slot must reach to be forked.
   let forkLSN: LSN | undefined;
   const lastLogged = new Map<string, number>();
@@ -581,24 +588,28 @@ export async function getSourceAndDestinationReplicas(
           const {active, confirmedFlushLsn} = replica;
           if (active) {
             // Create a replication slot to fork the active replica.
-            destination ??= await createReplicaAndSlot(
-              lc,
-              sql,
-              'fork-replica-session',
-              shard,
-              epoch,
-              Date.now().toString(), // replicaID
-              slotFailover,
-              {
-                backupPath: null, // set only after the backup has been confirmed
-                backupV5: true, // RMv2 requires backupV5
-                // The slot is not acked until it is taken over, which sets
-                // this. Until then, it is unknown.
-                pgChangeLog: false,
-              },
-              () => promiseVoid,
-              ReplicaStage.Restore,
-            );
+            if (!destination) {
+              const slotCreateStart = performance.now();
+              destination = await createReplicaAndSlot(
+                lc,
+                sql,
+                'fork-replica-session',
+                shard,
+                epoch,
+                Date.now().toString(), // replicaID
+                slotFailover,
+                {
+                  backupPath: null, // set only after the backup has been confirmed
+                  backupV5: true, // RMv2 requires backupV5
+                  // The slot is not acked until it is taken over, which sets
+                  // this. Until then, it is unknown.
+                  pgChangeLog: false,
+                },
+                () => promiseVoid,
+                ReplicaStage.Restore,
+              );
+              slotCreateMs = performance.now() - slotCreateStart;
+            }
             // The source replica acks its slot only once its changes are
             // backed up (and, if it maintains the PG change-log, stored), so
             // its slot reaching the destination slot's position means that
@@ -655,6 +666,7 @@ export async function getSourceAndDestinationReplicas(
               replicateTo,
               slotLSN: destination.slot.consistent_point,
               slotSession: destination.initialSession,
+              slotCreateMs,
             };
           }
         }
@@ -717,6 +729,7 @@ export async function getSourceAndDestinationReplicas(
                 // The slot is inactive, so its position is fixed.
                 slotLSN: replica.confirmedFlushLsn,
                 slotSession: reserved.reservation,
+                slotCreateMs,
               };
             }
           }

@@ -3,9 +3,13 @@ import type {InitializeKind} from '../change-source/common/replica-restore.ts';
 
 /**
  * The phases of a replication-manager's start:
- * - `fork_wait`: selecting the replica to restore from (and creating or
- *   claiming its slot), including the wait for a forked replica to pass the
- *   new slot's position
+ * - `slot_create`: creating the new replica's slot, including retries while
+ *   it is blocked by upstream transactions. This is separate from `fork_wait`
+ *   because the upstream (e.g. a long-running transaction), not zero-cache or
+ *   its capacity, determines how long it takes.
+ * - `fork_wait`: selecting the replica to restore from (and claiming its
+ *   slot), including the wait for a forked replica to pass the new slot's
+ *   position, excluding `slot_create`
  * - `restore`: restoring the replica from its backup
  * - `catch_up`: from initialization to the backup-replicator being caught up
  *   (i.e. its replication lag readiness)
@@ -16,6 +20,7 @@ import type {InitializeKind} from '../change-source/common/replica-restore.ts';
  * upstream), and `catch_up` and `backup_confirm` overlap.
  */
 export type ServerStartPhase =
+  | 'slot_create'
   | 'fork_wait'
   | 'restore'
   | 'catch_up'
@@ -57,7 +62,7 @@ export class ServerStartMetrics {
     getOrCreateGauge('replication', 'server_start', {
       description:
         'The duration of each phase of the replication-manager start ' +
-        '(fork_wait, restore, catch_up, backup_confirm, and the total ' +
+        '(slot_create, fork_wait, restore, catch_up, backup_confirm, and the total ' +
         'from process start to readiness), by the kind of initialization ' +
         '(fork, resume, rmv1, initial_sync).',
       unit: 's',

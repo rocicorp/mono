@@ -127,9 +127,16 @@ export type InitializeKind = 'fork' | 'resume' | 'rmv1' | 'initial_sync';
 export type InitializeTimings = {
   kind: InitializeKind;
   /**
-   * The time spent selecting the replica to fork (or resume) and creating (or
-   * claiming) its slot, i.e. before restoring, including any wait for the
-   * source replica to pass the new slot's position.
+   * The time spent creating the new replica and its slot, including retries
+   * while slot creation is blocked by upstream transactions (which only the
+   * upstream's owner controls). Absent if no slot was created, e.g. when
+   * resuming an orphaned replica without first having prepared a fork.
+   */
+  slotCreateMs?: number | undefined;
+  /**
+   * The time spent selecting the replica to fork (or resume) and claiming its
+   * slot, i.e. before restoring, including any wait for the source replica to
+   * pass the new slot's position. It excludes {@link slotCreateMs}.
    */
   forkWaitMs?: number | undefined;
   /** The time spent restoring the replica from its backup. */
