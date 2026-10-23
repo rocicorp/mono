@@ -57,13 +57,16 @@ export type SubscriberOptions = {
   onBackfillIgnored?: ((columns: string[]) => void) | undefined;
 
   /**
-   * Resolves to whether lag reporting is disabled upstream. If so, a
-   * {@link LAG_REPORTING_DISABLED} status is sent once the subscriber is
-   * aligned, as a stand-in for the lag reports that a subscriber would
-   * otherwise use to determine that it is caught up (e.g. to advertise
-   * readiness to serve traffic).
+   * Resolves, once it is known whether lag reporting is enabled upstream, to
+   * the means of requesting a lag report, or to `undefined` if it is disabled.
+   *
+   * Subscribers use lag reports to determine that they are caught up (e.g. to
+   * advertise readiness to serve traffic). Once the subscriber is aligned, a
+   * report is therefore requested, so that it is received without waiting out
+   * the report interval. If lag reporting is disabled, a
+   * {@link LAG_REPORTING_DISABLED} status is sent as a stand-in instead.
    */
-  lagReportingDisabled?: Promise<boolean> | undefined;
+  lagReports?: Promise<LagReports | undefined> | undefined;
 
   /**
    * Whether the subscriber switches over to another replication-manager
@@ -131,7 +134,7 @@ export class Subscriber {
   readonly #backfills: BackfillState | undefined;
   readonly #onAligned: ((subscriber: Subscriber) => void) | undefined;
   readonly #onBackfillIgnored: ((columns: string[]) => void) | undefined;
-  readonly #lagReportingDisabled: Promise<boolean> | undefined;
+  readonly #lagReports: Promise<LagReports | undefined> | undefined;
   #aligned = false;
   // The watermark to be acked for the subscriber to be caught up, set when
   // it is aligned.
@@ -163,7 +166,7 @@ export class Subscriber {
     this.#backfills = options.backfills;
     this.#onAligned = options.onAligned;
     this.#onBackfillIgnored = options.onBackfillIgnored;
-    this.#lagReportingDisabled = options.lagReportingDisabled;
+    this.#lagReports = options.lagReports;
   }
 
   /**
@@ -672,8 +675,10 @@ export class Subscriber {
             this.#onAligned?.(this);
             this.#caughtUpWatermark = this.#watermark;
             this.#checkCaughtUp();
-            void this.#lagReportingDisabled?.then(disabled => {
-              if (disabled) {
+            void this.#lagReports?.then(lagReports => {
+              if (lagReports) {
+                lagReports.request();
+              } else {
                 this.sendStatus(LAG_REPORTING_DISABLED);
               }
             });
@@ -763,6 +768,15 @@ class ByteBackpressureGate {
     }
   }
 }
+
+/** Requests lag reports from upstream (see {@link SubscriberOptions.lagReports}). */
+export type LagReports = {
+  /**
+   * Requests that a lag report be sent now rather than at the next report
+   * interval. Requests are coalesced upstream, e.g. with a report in flight.
+   */
+  request(): void;
+};
 
 /**
  * Sent to an aligned subscriber when lag reporting is disabled upstream,

@@ -16,6 +16,7 @@ import {isPostgresError, type PostgresDB} from '../../../types/pg.ts';
 import {upstreamSchema, type ShardID} from '../../../types/shards.ts';
 import {orTimeout} from '../../../types/timeout.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
+import {emitForkRequest} from './fork-request.ts';
 import {
   createReplicationSessionFor,
   endSession,
@@ -427,6 +428,17 @@ export async function createReplicaAndSlot<T>(
         lsn: String(toBigInt(slot.consistent_point)),
       });
 
+      if (stage === Restore) {
+        // Expedites the fork, which waits on the source replica's backup of
+        // the new slot's position (see fork-request.ts). Emitted before the
+        // replica's row is inserted, which flushes it, and outside of that
+        // transaction so that a failure to emit it does not fail the fork.
+        await emitForkRequest(lc, sql, shard, {
+          replicaID,
+          slot: slot.slot_name,
+          consistentPoint: slot.consistent_point,
+        });
+      }
       const replica = await runTx(sql, async tx => {
         await createReplica(
           tx,

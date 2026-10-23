@@ -151,13 +151,23 @@ export class SQLiteStore implements Store {
     const {lock, db} = this.#entry;
     // Wait for all readers and writers to finish.
     const writeRelease = await lock.write();
+    try {
+      // An overlapping close() of this store may have finished while this one
+      // was waiting for the lock. Decrementing again would drop a reference
+      // held by another store on the same file and close it underneath that
+      // store.
+      if (this.#closed) {
+        return;
+      }
 
-    // Handle reference counting for shared stores - only close database
-    // when this is the last store instance using it
-    decrementStoreRefCount(this.#filename, db);
+      // Handle reference counting for shared stores - only close database
+      // when this is the last store instance using it
+      decrementStoreRefCount(this.#filename, db);
 
-    this.#closed = true;
-    writeRelease();
+      this.#closed = true;
+    } finally {
+      writeRelease();
+    }
   }
 
   get closed(): boolean {

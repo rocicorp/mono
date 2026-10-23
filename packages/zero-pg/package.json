@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "oxfmt": "^0.74.0",
-    "vitest": "^5.0.0",
+    "vitest": "^5.0.5",
     "zero-cache": "workspace:*",
     "zero-server": "workspace:*"
   },

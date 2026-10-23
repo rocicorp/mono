@@ -9,6 +9,7 @@
 import {compareUTF8} from 'compare-utf8';
 import {assert} from '../../shared/src/asserts.ts';
 import {isPlainObject} from '../../shared/src/deep-merge.ts';
+import {toSorted} from '../../shared/src/iterables.ts';
 import {getOrInsertComputed} from '../../shared/src/map.ts';
 import {must} from '../../shared/src/must.ts';
 import * as v from '../../shared/src/valita.ts';
@@ -653,7 +654,9 @@ function normalizeRelated(
 ): readonly CorrelatedSubquery[] {
   for (let i = 1; i < related.length; i++) {
     if (cmpRelated(related[i - 1], related[i]) > 0) {
-      return related.toSorted(cmpRelated);
+      // Not Array.prototype.toSorted: Hermes (React Native) does not
+      // implement it.
+      return toSorted(related, cmpRelated);
     }
   }
   return related;

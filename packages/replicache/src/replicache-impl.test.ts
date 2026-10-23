@@ -1,6 +1,8 @@
 import type {LogLevel, LogSink} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {describe, expect, onTestFinished, test, vi} from 'vitest';
+import {MemStore} from './kv/mem-store.ts';
+import type {StoreProvider} from './kv/store.ts';
 import {refresh} from './persist/refresh.ts';
 import {ReplicacheImpl} from './replicache-impl.ts';
 import type {ReplicacheOptions, ZeroOption} from './replicache-options.ts';
@@ -101,5 +103,52 @@ describe('ReplicacheImpl', () => {
     expect(rejections).toEqual([]);
 
     await impl.close();
+  });
+
+  test('a store that fails to close does not block reopening the same name', async () => {
+    // `#open` waits on `closingInstances` for a previous instance of the same
+    // name. If that instance's `close()` throws before it clears its entry,
+    // the wait never ends and every later instance of the name hangs in open.
+    const name = 'test-close-failure-does-not-block-reopen';
+    const closeError = new Error('the store could not be closed');
+
+    let failClose = true;
+    const inners: MemStore[] = [];
+    const kvStore: StoreProvider = {
+      create: storeName => {
+        const inner = new MemStore(storeName);
+        inners.push(inner);
+        return {
+          read: () => inner.read(),
+          write: () => inner.write(),
+          close: () => (failClose ? Promise.reject(closeError) : inner.close()),
+          get closed() {
+            return inner.closed;
+          },
+        };
+      },
+      drop: () => Promise.resolve(),
+    };
+
+    const impl = new ReplicacheImpl(
+      {name, kvStore},
+      {enablePullAndPushInOpen: false},
+    );
+    await impl.clientGroupID;
+    await expect(impl.close()).rejects.toBe(closeError);
+
+    failClose = false;
+    let opened = false;
+    const next = new ReplicacheImpl(
+      {name, kvStore},
+      {enablePullAndPushInOpen: false},
+    );
+    void next.clientGroupID.then(() => {
+      opened = true;
+    });
+    await vi.waitFor(() => expect(opened).toBe(true));
+
+    await next.close();
+    await Promise.all(inners.map(inner => inner.close()));
   });
 });

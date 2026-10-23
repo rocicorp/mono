@@ -19,6 +19,7 @@ import {
   restoreReplica,
   type ConstrainingPurgeLock,
   type InitializeResult,
+  type InitializeTimings,
   type RestoreOptions,
   type ResumableBackup,
 } from '../common/replica-restore.ts';
@@ -110,6 +111,7 @@ export async function initializePostgresChangeSource(
       pgChangeLogBehindSlot,
       resumableBackup,
       slotWatermark,
+      timings,
     } = slotPerReplica
       ? await forkOrResumeReplica(
           lc,
@@ -230,6 +232,9 @@ export async function initializePostgresChangeSource(
         backupPath !== (restoredReplica?.backupPath ?? null),
       pgChangeLogBehindSlot,
       newBackupLineage,
+      startTimings: initialSyncedReplica
+        ? {kind: 'initial_sync'}
+        : (timings ?? {kind: slotPerReplica ? 'fork' : 'rmv1'}),
     };
   } finally {
     await db.end();
@@ -251,6 +256,7 @@ type RestoredReplica = {
    * change-log's head for acked keepalives.
    */
   slotWatermark?: string | undefined;
+  timings?: InitializeTimings | undefined;
 };
 
 // RMv1: Selects a replica to restore from and returns it, with the
@@ -289,6 +295,7 @@ async function selectAndRestoreReplica(
       `restoring replica from ${backupURL} (${slot}@${confirmedFlushLsn})`,
       {replicas},
     );
+    const restoreStart = performance.now();
     const resumableBackup = await restoreReplica(
       lc,
       {...litestream, backupURL}, // includes the replica's backup sub-path
@@ -298,9 +305,15 @@ async function selectAndRestoreReplica(
         ? {type: 'fork', baseURL: backupBaseURL}
         : undefined,
     );
-    return {replica, purgeLock, resumableBackup};
+    const restoreMs = performance.now() - restoreStart;
+    return {
+      replica,
+      purgeLock,
+      resumableBackup,
+      timings: {kind: 'rmv1', restoreMs},
+    };
   }
-  return {replica, purgeLock};
+  return {replica, purgeLock, timings: {kind: 'rmv1'}};
 }
 
 // RMv2: Restores from an active replica and creates a new replica / slot
@@ -317,6 +330,7 @@ async function forkOrResumeReplica(
   {litestream, acquirePurgeLock, cleanup}: RestoreOptions,
   gracePeriodMs: number,
 ): Promise<RestoredReplica> {
+  const forkWaitStart = performance.now();
   const result = await getSourceAndDestinationReplicas(
     lc,
     sql,
@@ -324,12 +338,20 @@ async function forkOrResumeReplica(
     epoch,
     slotFailover,
     gracePeriodMs,
+    // The PG change-log is checked against the slot's position (see below)
+    // only when this replication-manager maintains it.
+    acquirePurgeLock !== undefined,
   );
   if (!result) {
     // can't restore, must initial-sync
     return {replica: undefined, purgeLock: null};
   }
-  const {restoreFrom, replicateTo, slotLSN, slotSession} = result;
+  const {restoreFrom, replicateTo, slotLSN, slotSession, slotCreateMs} = result;
+  const timings: InitializeTimings = {
+    kind: restoreFrom.id === replicateTo.id ? 'resume' : 'fork',
+    slotCreateMs,
+    forkWaitMs: performance.now() - forkWaitStart - (slotCreateMs ?? 0),
+  };
   // A resumed slot (i.e. of the same replica) that was acked only once
   // transactions were stored in the PG change-log (RMv1.5) cannot have been
   // acked past a transaction missing from the change-log. Its position past
@@ -355,7 +377,8 @@ async function forkOrResumeReplica(
   // by a replication-manager that acks the slot only once a transaction has
   // been stored in the change-log): the fork waits for the source replica's
   // slot to pass the position after the creation of the new replica, which is
-  // a transaction (in the publication) after the new slot's position.
+  // a transaction (in the publication) after the new slot's position (see
+  // `waitForStoredTxPastSlot` in getSourceAndDestinationReplicas()).
   //
   // For a resumed slot, the slot can also have been acked past the head of a
   // maintained change-log, for keepalives (e.g. for changes outside of the
@@ -382,6 +405,7 @@ async function forkOrResumeReplica(
       `restoring replica from ${backupURL} (${slot}@${confirmedFlushLsn})`,
       {restoreFrom, replicateTo},
     );
+    const restoreStart = performance.now();
     const resumableBackup = await restoreReplica(
       lc,
       {...litestream, backupURL}, // includes the replica's backup sub-path
@@ -391,12 +415,14 @@ async function forkOrResumeReplica(
         ? {type: 'fork', baseURL: backupBaseURL}
         : undefined,
     );
+    timings.restoreMs = performance.now() - restoreStart;
     return {
       replica: replicateTo,
       purgeLock,
       pgChangeLogBehindSlot,
       resumableBackup,
       slotWatermark,
+      timings,
     };
   }
   return {
@@ -404,6 +430,7 @@ async function forkOrResumeReplica(
     purgeLock,
     pgChangeLogBehindSlot,
     slotWatermark,
+    timings,
   };
 }
 
@@ -477,6 +504,13 @@ export async function getSourceAndDestinationReplicas(
   epoch: number,
   slotFailover: boolean,
   gracePeriodMs: number,
+  /**
+   * Whether a fork waits for the source replica's slot to pass a transaction
+   * after the destination slot's position (rather than just the position),
+   * which is necessary for the PG change-log to be resumable from the
+   * destination slot (see forkOrResumeReplica()).
+   */
+  waitForStoredTxPastSlot: boolean,
   pollIntervalMs = REPLICA_POLL_INTERVAL_MS,
 ): Promise<
   | {
@@ -489,12 +523,18 @@ export async function getSourceAndDestinationReplicas(
        * over by the PostgresChangeSource. Destroying it releases the slot.
        */
       slotSession: Readable;
+      /**
+       * The time spent creating the destination replica and slot, if one was
+       * created (even if it was then abandoned for a resumption).
+       */
+      slotCreateMs?: number | undefined;
     }
   | undefined
 > {
   const inactiveSince = new Map<string, number>(); // tracks replica inactivity
   let destination: ReplicationSlotResult<void> | undefined;
-  // The position after the creation of the destination replica.
+  let slotCreateMs: number | undefined;
+  // The position that the source replica's slot must reach to be forked.
   let forkLSN: LSN | undefined;
   const lastLogged = new Map<string, number>();
   const shouldLog = (key: string, intervalMs: number) => {
@@ -548,32 +588,48 @@ export async function getSourceAndDestinationReplicas(
           const {active, confirmedFlushLsn} = replica;
           if (active) {
             // Create a replication slot to fork the active replica.
-            destination ??= await createReplicaAndSlot(
-              lc,
-              sql,
-              'fork-replica-session',
-              shard,
-              epoch,
-              Date.now().toString(), // replicaID
-              slotFailover,
-              {
-                backupPath: null, // set only after the backup has been confirmed
-                backupV5: true, // RMv2 requires backupV5
-                // The slot is not acked until it is taken over, which sets
-                // this. Until then, it is unknown.
-                pgChangeLog: false,
-              },
-              () => promiseVoid,
-              ReplicaStage.Restore,
-            );
-            // The replica row of the destination is inserted in a transaction
-            // (in the publication) after the destination slot's position.
-            // Waiting for the source replica's slot to pass it (rather than
-            // just the destination slot's position) ensures that a source
+            if (!destination) {
+              const slotCreateStart = performance.now();
+              destination = await createReplicaAndSlot(
+                lc,
+                sql,
+                'fork-replica-session',
+                shard,
+                epoch,
+                Date.now().toString(), // replicaID
+                slotFailover,
+                {
+                  backupPath: null, // set only after the backup has been confirmed
+                  backupV5: true, // RMv2 requires backupV5
+                  // The slot is not acked until it is taken over, which sets
+                  // this. Until then, it is unknown.
+                  pgChangeLog: false,
+                },
+                () => promiseVoid,
+                ReplicaStage.Restore,
+              );
+              slotCreateMs = performance.now() - slotCreateStart;
+            }
+            // The source replica acks its slot only once its changes are
+            // backed up (and, if it maintains the PG change-log, stored), so
+            // its slot reaching the destination slot's position means that
+            // the destination can be restored from its backup.
+            //
+            // If the PG change-log is to be resumed from the destination slot,
+            // the fork waits for the source to pass the position after the
+            // creation of the destination replica instead. Its row is
+            // inserted in a transaction (in the publication) after the
+            // destination slot's position, so this ensures that a source
             // replica that maintains the PG change-log has stored a
-            // transaction past the destination slot's position, i.e. that the
-            // change-log can be resumed from the destination slot.
-            forkLSN ??= await currentWalLSN(sql);
+            // transaction past the destination slot's position, rather than
+            // only acked keepalives past it.
+            //
+            // Otherwise, the ack of that transaction (at its commit LSN, which
+            // precedes the position after it) suffices, which the fork request
+            // (see fork-request.ts) prompts the source to make promptly.
+            forkLSN ??= waitForStoredTxPastSlot
+              ? await currentWalLSN(sql)
+              : destination.slot.consistent_point;
             if (toBigInt(confirmedFlushLsn) < toBigInt(forkLSN)) {
               if (shouldLog(`fork:${replica.id}`, PROGRESS_LOG_INTERVAL_MS)) {
                 lc.info?.(
@@ -610,6 +666,7 @@ export async function getSourceAndDestinationReplicas(
               replicateTo,
               slotLSN: destination.slot.consistent_point,
               slotSession: destination.initialSession,
+              slotCreateMs,
             };
           }
         }
@@ -672,6 +729,7 @@ export async function getSourceAndDestinationReplicas(
                 // The slot is inactive, so its position is fixed.
                 slotLSN: replica.confirmedFlushLsn,
                 slotSession: reserved.reservation,
+                slotCreateMs,
               };
             }
           }

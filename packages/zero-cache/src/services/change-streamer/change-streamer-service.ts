@@ -39,6 +39,7 @@ import {
   UnrecoverableError,
 } from '../running-state.ts';
 import {BackfillStateTracker} from './backfill-state-tracker.ts';
+import type {BackupSource} from './backup-monitor.ts';
 import type {PreSerializedBatch} from './broadcast.ts';
 import {serializeChangeStreamDataWithChange} from './change-log-codec.ts';
 import {
@@ -93,7 +94,7 @@ import {
   type TuningOptions as StorerOptions,
 } from './storer.ts';
 import type {LocalReplica} from './subscribe.ts';
-import {Subscriber} from './subscriber.ts';
+import {Subscriber, type LagReports} from './subscriber.ts';
 import {UpstreamAcker} from './upstream-acker.ts';
 
 export type BackupConfig = {
@@ -217,6 +218,14 @@ export type TuningOptions = StorerOptions & {
     | undefined;
   /** Supplied only in `serve` mode. A zero percentage keeps every read on PG. */
   sqliteChangeLogServe?: SQLiteChangeLogServeOptions | undefined;
+  /**
+   * The source of backed-up watermarks (i.e. the `BackupMonitor`), which the
+   * change-streamer tracks from construction, and from which it requests
+   * prompt backups when the change source asks for them (e.g. for a replica
+   * fork). Its lifecycle (e.g. the monitor's run() and stop()) is managed by
+   * the caller. Absent, no backups are tracked.
+   */
+  backupMonitor?: BackupSource | undefined;
 };
 
 /**
@@ -468,6 +477,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   readonly #purgeScheduler: SQLiteChangeLogPurgeScheduler | undefined;
   readonly #comparator: SQLiteChangeLogComparator | undefined;
   readonly #acker: UpstreamAcker;
+  readonly #backupMonitor: BackupSource | undefined;
   readonly #initializer: ChangeLogInitializer;
   readonly #readRouter: SQLiteChangeLogReadRouter | undefined;
 
@@ -528,10 +538,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   );
 
   #latestLagReportCommitTimeMs = 0;
-  // Resolves to whether lag reporting is disabled, once the lag reporter
-  // has been started (or failed to start) in run(). Subscribers use this to
-  // decide whether to send a stand-in signal when they are caught up.
-  readonly #lagReportingDisabled = resolver<boolean>();
+  // Resolves, once the lag reporter has been started (or failed to start) in
+  // run(), to the means of requesting lag reports, or to `undefined` if lag
+  // reporting is disabled. Subscribers request a report when they are caught
+  // up, or send a stand-in signal if it is disabled.
+  readonly #lagReports = resolver<LagReports | undefined>();
   #backupWatermark: string | undefined;
   #pgPurgedWatermark: string = '';
   /**
@@ -793,6 +804,22 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#purgeLock = initialPurgeLock;
     this.#autoReset = autoReset;
     this.#state = new RunningState(this.id, undefined, setTimeoutFn);
+
+    this.#backupMonitor = opts.backupMonitor;
+    if (this.#backupMonitor) {
+      // Backups are tracked from construction rather than from run(): in
+      // RMv1, run() is only called once the server is ready, which waits for
+      // the first backup (see BackupMonitor.firstBackupReceived()).
+      void this.#trackBackups(this.#backupMonitor);
+    }
+  }
+
+  async #trackBackups(monitor: BackupSource) {
+    // The stream ends when the monitor stops. A failed monitor shuts down the
+    // server, as it runs as a service of its own.
+    for await (const {watermark} of monitor.backups()) {
+      this.#trackBackupWatermark(watermark);
+    }
   }
 
   /**
@@ -809,7 +836,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#forwarder.startProgressMonitor();
 
     const lagReportInit = await this.#source.startLagReporter();
-    this.#lagReportingDisabled.resolve(!lagReportInit);
+    this.#lagReports.resolve(
+      lagReportInit
+        ? {request: () => this.#source.requestLagReport?.()}
+        : undefined,
+    );
     if (lagReportInit) {
       // Record the commit time of the initiated lag report (i.e. "head")
       // for the purpose of skipping over any lag reports that are re-streamed
@@ -891,19 +922,25 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
         this.#acker.reset(stream.acks, lastWatermark);
 
-        for await (const change of stream.changes) {
+        streamLoop: for await (const change of stream.changes) {
           this.#acker.trackDownstream(change);
 
           const [type, msg] = change;
-          if (type === 'status' && watermark === null && this.#mayRestart()) {
-            // A restart can happen at a status message outside of a
-            // transaction, e.g. when the replication stream is otherwise idle.
-            // Exiting the iteration cancels the stream.
-            break;
-          }
           switch (type) {
             case 'status':
+              if (msg.syncBackupThrough) {
+                // e.g. a new replica being forked from this one is waiting on
+                // the backup (see fork-request.ts). Requested before a possible
+                // restart at this status, which would otherwise drop it.
+                this.#backupMonitor?.requestSync(msg.syncBackupThrough);
+              }
               if (watermark === null) {
+                if (this.#mayRestart()) {
+                  // A restart can happen at a status message outside of a
+                  // transaction, e.g. when the replication stream is otherwise idle.
+                  // Exiting the iteration cancels the stream.
+                  break streamLoop;
+                }
                 // Allows ownership to be assumed on an idle upstream.
                 storer?.status(change[2].watermark);
               }
@@ -1120,7 +1157,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       downstream,
       {
         wsBatched,
-        lagReportingDisabled: this.#lagReportingDisabled.promise,
+        lagReports: this.#lagReports.promise,
         drainable: mode === 'serving' && ctx.drainable,
         ...this.#backfills.subscriberOptions(lc, ctx),
       },
@@ -1387,7 +1424,17 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     return this.#drainTracker.drain();
   }
 
-  trackBackupWatermark(watermark: string) {
+  /**
+   * Tracks the watermark up to which the replica has been backed up. This
+   * serves two purposes:
+   * - It serves as the maximum watermark up to which the change-log can be
+   *   purged. Note that the change-streamer also takes into account the
+   *   positions of its subscribers and snapshot reservations when purging
+   *   changes in the change-log.
+   * - In RMv2, this ACK's the upstream change-source to allow its buffer of
+   *   changes (e.g. the replication_slot) to advance.
+   */
+  #trackBackupWatermark(watermark: string) {
     this.#backupWatermark = watermark;
     this.#acker.trackBackup(watermark);
     // The durable backup floor is an independent input to each change-log
@@ -1694,8 +1741,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#state.stop(this.#lc, err);
     // Nothing is served once stopped.
     this.#drainTracker.stop();
-    // No-op if already resolved by run().
-    this.#lagReportingDisabled.resolve(false);
+    // No-op if already resolved by run(). Resolving to a requester that does
+    // nothing (rather than to `undefined`) sends nothing to subscribers.
+    this.#lagReports.resolve({request: () => {}});
     this.#stream?.changes.cancel();
     this.#purgeScheduler?.stop();
     this.#comparator?.stop();

@@ -63,6 +63,11 @@ import type {
 } from '../protocol/current/downstream.ts';
 import type {ColumnMetadata, TableMetadata} from './backfill-metadata.ts';
 import {streamBackfill} from './backfill-stream.ts';
+import {
+  forkRequestMessagePrefix,
+  forkRequestSchema,
+  type ParsedForkRequest,
+} from './fork-request.ts';
 import {type ServerContext} from './initial-sync.ts';
 import type {
   Message,
@@ -218,6 +223,10 @@ export class PostgresChangeSource implements ChangeSource {
     return null;
   }
 
+  requestLagReport() {
+    this.#lagReporter?.requestReport();
+  }
+
   async startStream(
     clientWatermark: string,
     backfillRequests: BackfillRequest[] = [],
@@ -301,6 +310,8 @@ export class PostgresChangeSource implements ChangeSource {
       this.#replica,
     );
 
+    const forkRequestPrefix = forkRequestMessagePrefix(this.#shard);
+
     /**
      * Determines if the incoming message is transactional, otherwise handling
      * non-transactional messages with a downstream status message.
@@ -321,6 +332,18 @@ export class PostgresChangeSource implements ChangeSource {
       const status = this.#lagReporter?.checkCurrentLSN(lsn);
       if (status) {
         changes.pushStatus(status);
+      }
+
+      if (
+        msg.tag === 'message' &&
+        !msg.transactional &&
+        msg.prefix === forkRequestPrefix
+      ) {
+        const status = this.#forkRequestStatus(msg, lsn);
+        if (status) {
+          changes.pushStatus(status);
+        }
+        return false;
       }
 
       if (msg.tag === 'keepalive') {
@@ -426,6 +449,40 @@ export class PostgresChangeSource implements ChangeSource {
       changes: changes.asSource(),
       acks: {push: status => acker.ack(status[2].watermark)},
     };
+  }
+
+  /**
+   * Translates a {@link ParsedForkRequest} into a status message that requests a
+   * prompt backup through the new replica's slot position, the ack of which
+   * the fork waits on. The status is at the message's position, which
+   * precedes the transaction that inserts the new replica's row, so
+   * watermarks never move backwards.
+   *
+   * A malformed request (including its `consistentPoint` LSN, which the
+   * schema converts) is ignored, as it only serves to expedite the fork.
+   */
+  #forkRequestStatus(
+    msg: MessageMessage,
+    lsn: bigint,
+  ): DownstreamStatusMessage | undefined {
+    let request: ParsedForkRequest;
+    try {
+      request = parseLogicalMessageContent(this.#lc, msg, forkRequestSchema);
+    } catch {
+      return undefined; // logged by parseLogicalMessageContent()
+    }
+    const {syncBackupThrough} = request;
+    this.#lc.info?.(
+      `received fork request from ${request.replicaID}@${request.slot}. ` +
+        `Requesting backup through ${request.consistentPoint} ` +
+        `(${syncBackupThrough}).`,
+      {request},
+    );
+    return [
+      'status',
+      {ack: false, syncBackupThrough},
+      {watermark: majorVersionToString(lsn)},
+    ];
   }
 
   /**
@@ -811,6 +868,25 @@ export class LagReporter {
     this.#lastAcceptedSendTimeMs = 0;
   }
 
+  /**
+   * Initiates the next report now rather than at its scheduled time, e.g. so
+   * that a subscriber that has just caught up receives a report without
+   * waiting out the report interval.
+   *
+   * This is a no-op while a report is in flight, as its receipt serves the
+   * same purpose, which also coalesces concurrent requests. It is also a no-op
+   * when no report is scheduled (e.g. after {@link stop}), so that a request
+   * never starts reporting on its own.
+   */
+  requestReport() {
+    if (this.#expectingLagReport !== null || this.#timer === undefined) {
+      return;
+    }
+    clearTimeout(this.#timer);
+    this.#timer = undefined;
+    void this.#initiateScheduledReport();
+  }
+
   #scheduleNextReportWithJitter(delayMs: number) {
     const jitter =
       Math.floor(Math.random() * this.#reportIntervalJitterMs) -
@@ -819,15 +895,19 @@ export class LagReporter {
 
     this.#expectingLagReport = null;
     clearTimeout(this.#timer);
-    this.#timer = setTimeout(async () => {
+    this.#timer = setTimeout(() => {
       this.#timer = undefined;
-      try {
-        await this.initiateLagReport();
-      } catch (e) {
-        this.#lc.warn?.(`error initiating lag report`, e);
-        this.#scheduleNextReportWithJitter(this.#reportIntervalMs);
-      }
+      void this.#initiateScheduledReport();
     }, delayMs);
+  }
+
+  async #initiateScheduledReport() {
+    try {
+      await this.initiateLagReport();
+    } catch (e) {
+      this.#lc.warn?.(`error initiating lag report`, e);
+      this.#scheduleNextReportWithJitter(this.#reportIntervalMs);
+    }
   }
 
   #scheduleMissingReportRetry(reportID: string) {

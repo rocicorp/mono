@@ -106,6 +106,41 @@ export type InitializeResult = {
    * litestream state (see {@link ResumableBackup}).
    */
   newBackupLineage: boolean;
+
+  /**
+   * How the replica was initialized, and the durations of its phases, for
+   * the replication-manager's start metrics (see `ServerStartMetrics`).
+   * Absent for change sources that do not report them.
+   */
+  startTimings?: InitializeTimings | undefined;
+};
+
+/**
+ * How a replica was initialized (see {@link InitializeResult.startTimings}):
+ * - `fork`: restored from the backup of a running replica, with a new slot
+ * - `resume`: restored from the backup of an orphaned replica, with its slot
+ * - `rmv1`: restored from the backup of the replica whose slot it takes over
+ * - `initial_sync`: initially synced
+ */
+export type InitializeKind = 'fork' | 'resume' | 'rmv1' | 'initial_sync';
+
+export type InitializeTimings = {
+  kind: InitializeKind;
+  /**
+   * The time spent creating the new replica and its slot, including retries
+   * while slot creation is blocked by upstream transactions (which only the
+   * upstream's owner controls). Absent if no slot was created, e.g. when
+   * resuming an orphaned replica without first having prepared a fork.
+   */
+  slotCreateMs?: number | undefined;
+  /**
+   * The time spent selecting the replica to fork (or resume) and claiming its
+   * slot, i.e. before restoring, including any wait for the source replica to
+   * pass the new slot's position. It excludes {@link slotCreateMs}.
+   */
+  forkWaitMs?: number | undefined;
+  /** The time spent restoring the replica from its backup. */
+  restoreMs?: number | undefined;
 };
 
 /**

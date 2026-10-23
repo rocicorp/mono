@@ -96,7 +96,7 @@
     "react-native": "^0.88.0",
     "shared": "workspace:*",
     "typescript": "~7.0.2",
-    "vitest": "^5.0.0",
+    "vitest": "^5.0.5",
     "xbytes": "^1.9.1"
   },
   "peerDependencies": {
