@@ -1053,7 +1053,14 @@ package final class VirtualizerCore<
       guard rowsAnswerQuery else { return }
       setScrollOffset(offset)
     case .row(let pending):
-      guard landRow(pending) else { return }
+      guard let moved = landRow(pending) else { return }
+      // A host that lays out with its scroll measures the rows it scrolled
+      // to only then: the row may have been lined up by an estimate, and is
+      // lined up again, measured, in the pass that lays the scroll out.
+      if moved, host?.scrollsWithLayout == true {
+        placed = true
+        return
+      }
     }
     placed = true
     if rowsSettled {
@@ -1062,12 +1069,14 @@ package final class VirtualizerCore<
     }
   }
 
-  private func landRow(_ pending: PendingScroll) -> Bool {
+  /// Lines the row up; whether it scrolled to, or nil when the row isn't
+  /// there.
+  private func landRow(_ pending: PendingScroll) -> Bool? {
     if pending.source == .option, pending.id != options.permalinkID {
       setTarget(nil)
-      return false
+      return nil
     }
-    guard let host else { return false }
+    guard let host else { return nil }
     var f = findTarget(host, pending)
     if f == nil, pending.rowKey == nil, let id = pending.id {
       // The row's key, once its own page queries have completed.
@@ -1083,11 +1092,14 @@ package final class VirtualizerCore<
       let missing = rows.permalinkNotFound && rows.lookup?.id == pending.id
       let abandoned = rows.complete && !(pending.id.map(isTargeting) ?? false)
       if missing || abandoned { setTarget(nil) }
-      return false
+      return nil
     }
     let delta = alignDelta(host, f, pending.align)
-    if abs(delta) > 1 { setScrollOffset(host.scrollOffset + delta) }
-    return true
+    guard abs(delta) > 1 else { return false }
+    // Clamped to the content, it can't go all the way.
+    let from = host.scrollOffset
+    setScrollOffset(from + delta)
+    return abs(host.scrollOffset - from) > 1
   }
 
   private func evaluatePaging() {

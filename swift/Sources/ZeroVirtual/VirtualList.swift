@@ -142,6 +142,7 @@
         host.viewportDidResize = { [list] in list.viewportDidResize() }
         host.afterUpdate = { [list] in list.afterUpdate() }
         host.isLanding = { [list] in list.isLanding }
+        host.estimatedRowHeight = { [list] in list.estimatedRowHeight }
         view.rows.scrollToRow = { [list] key in
           if let key = key.base as? K { list.scrollToRow(key: key, align: .auto) }
         }

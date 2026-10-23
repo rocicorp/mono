@@ -51,6 +51,10 @@ final class FrameProbe {
   /// Since the jump began, and whether it has moved yet.
   @ObservationIgnored private var jumpTime = 0.0
   @ObservationIgnored private var jumpMoved = false
+  /// The phase the jump began in, which its frames count in; and whether
+  /// a new phase began before it landed: then it ends with the next frame.
+  @ObservationIgnored private var jumpPhase = ""
+  @ObservationIgnored private var jumpCarried = false
   @ObservationIgnored private var flingStart: (t: Double, moved: Double)?
   @ObservationIgnored private(set) var phase = "start"
   @ObservationIgnored private var wrongByPhase: [(String, Int)] = []
@@ -113,7 +117,17 @@ final class FrameProbe {
   }
 
   func setPhase(_ name: String) {
-    finishJump()
+    // A jump that hasn't moved yet, as when a stalled frame (a slow
+    // simulator's) held its landing back past the phase's end, takes the
+    // next frame, which the new phase can't have moved yet: it's checked as
+    // the jump's, in the jump's phase, and the jump ends with it, moved or
+    // not (a jump to where the list already is never moves).
+    if jump != nil, !jumpMoved, !jumpCarried {
+      jumpCarried = true
+      log("JUMP still landing as \(name) begins")
+    } else {
+      finishJump()
+    }
     log("PHASE \(name)")
     phase = name
     if !wrongByPhase.contains(where: { $0.0 == name }) { wrongByPhase.append((name, 0)) }
@@ -136,6 +150,8 @@ final class FrameProbe {
     jumpStill = 0
     jumpTime = 0
     jumpMoved = false
+    jumpPhase = phase
+    jumpCarried = false
     log("JUMP begin top=\(previous?.ids.first ?? "-")")
   }
 
@@ -255,7 +271,7 @@ final class FrameProbe {
       // Settled half a second after it last moved. Its rows can take longer
       // than that to load (a simulator's can), so it waits for its first
       // move; a jump to where the list already is never moves.
-      if (jumpMoved && jumpStill >= 0.5) || jumpTime >= 5 { finishJump() }
+      if jumpCarried || (jumpMoved && jumpStill >= 0.5) || jumpTime >= 5 { finishJump() }
       return
     }
     // Rows, not the header or the footer, which the checks below place.
@@ -394,7 +410,9 @@ final class FrameProbe {
     }
     for f in frames.dropFirst() where !same(f, first) && !same(f, last) {
       bad += 1
-      flag(f, "jump frame neither where it was (\(first.ids.first ?? "-")) nor where it lands")
+      flag(
+        f, "jump frame neither where it was (\(first.ids.first ?? "-")) nor where it lands",
+        phase: jumpPhase)
     }
     log(
       "JUMP end frames=\(frames.count) wrong=\(bad) from \(first.ids.first ?? "-")…\(first.ids.last ?? "-") to \(last.ids.first ?? "-")…\(last.ids.last ?? "-")"
@@ -408,7 +426,8 @@ final class FrameProbe {
     return a.rows.allSatisfy { abs($0.value.minY - b.rows[$0.key]!.minY) <= 0.5 }
   }
 
-  private func flag(_ s: Sample, _ why: String, _ before: Sample? = nil) {
+  private func flag(_ s: Sample, _ why: String, _ before: Sample? = nil, phase: String? = nil) {
+    let phase = phase ?? self.phase
     wrong += 1
     if let i = wrongByPhase.firstIndex(where: { $0.0 == phase }) { wrongByPhase[i].1 += 1 }
     let rows = s.ids.prefix(2).map { "\($0)@\(fmt(s.rows[$0]!.minY))" }.joined(separator: " ")

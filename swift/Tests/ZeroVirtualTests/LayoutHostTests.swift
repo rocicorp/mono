@@ -13,6 +13,8 @@ final class LayoutScrollView {
   let h: Harness
   let viewportHeight: Double
   var heights: [String: Double] = [:]
+  /// How many times each row was measured.
+  var measures: [String: Int] = [:]
   /// The heights of the views above and below the rows.
   var header = 0.0
   var footer = 0.0
@@ -32,8 +34,11 @@ final class LayoutScrollView {
       return (s.items.map { (AnyHashable($0.key), $0.index) }, s.spaceBefore, s.spaceAfter)
     }
     host.measure = { [unowned self] key in
-      self.heights[key.base as! String] ?? self.h.view.rowHeight
+      let key = key.base as! String
+      self.measures[key, default: 0] += 1
+      return self.heights[key] ?? self.h.view.rowHeight
     }
+    host.estimatedRowHeight = { [unowned self] in self.h.core.options.estimatedRowHeight }
     host.header = { [unowned self] in self.header }
     host.footer = { [unowned self] in self.footer }
     host.didScroll = { [unowned self] in self.h.core.didScroll() }
@@ -334,9 +339,12 @@ final class LayoutScrollView {
           return
         }
         let offset = view.scrollOffset
-        view.userScroll(offset - 100)
-        #expect(
-          view.rowTop(key) == top + (offset - view.scrollOffset), "fling \(flings) at \(offset)")
+        let target = max(0, offset - 100)
+        view.userScroll(target)
+        // What's on screen moves by the fling alone: near the start, rows
+        // above measured taller than estimated are taken up by a scroll in
+        // the same pass.
+        #expect(view.rowTop(key) == top + (offset - target), "fling \(flings) at \(offset)")
         view.settle(holding: key)
         // At the top, no space stands above the first row.
         if view.scrollOffset == 0, h.core.snapshot.items.first?.key == "r0" {
@@ -357,5 +365,113 @@ final class LayoutScrollView {
     #expect(h.core.snapshot.items.first?.key == "r0")
     #expect(view.scrollOffset == 0)
     #expect(h.core.snapshot.spaceBefore == 0)
+  }
+
+  @Test("only the rows near the viewport are measured")
+  func measuresNearRows() {
+    let h = Harness(rowCount: 1000) { $0.anchoring = .manual }
+    let view = LayoutScrollView(h)
+    view.settle()
+    let items = h.core.snapshot.items
+    #expect(items.count >= 100)
+    // 20 rows on screen, and a viewport's height of them below.
+    let measured = Set(view.measures.keys)
+    #expect(measured == Set((0..<41).map { "r\($0)" }))
+    #expect(view.host.rowFrames().count == items.count)
+  }
+
+  @Test("scrolling down measures the rows coming near, and the rows on screen move with the scroll")
+  func measuresAsItScrolls() {
+    let h = Harness(rowCount: 1000) { $0.anchoring = .manual }
+    let view = LayoutScrollView(h)
+    for i in 0..<1000 where i % 3 == 0 { view.heights["r\(i)"] = 60 }
+    view.settle()
+    for _ in 0..<30 {
+      let key = h.core.firstVisibleItem()!.key
+      let top = try! #require(view.rowTop(key))
+      view.measures = [:]
+      view.userScroll(view.scrollOffset + 150)
+      #expect(view.rowTop(key) == top - 150)
+      // What it measured is near the viewport, and takes in what's on it.
+      let offset = view.scrollOffset
+      for f in view.host.rowFrames() {
+        let near = f.maxY >= offset - 400 && f.minY <= offset + 800
+        let onScreen = f.maxY > offset && f.minY < offset + 400
+        let measured = view.measures[f.key.base as! String] != nil
+        #expect(!measured || near, "\(f.key) measured at \(f.minY), the viewport at \(offset)")
+        #expect(!onScreen || measured, "\(f.key) on screen and not measured")
+      }
+      view.settle(holding: h.core.firstVisibleItem()?.key)
+    }
+  }
+
+  @Test("rows above the viewport measured taller than estimated don't move what's on screen")
+  func measuredTallerAbove() {
+    // At the start, where the rows above are taken up by a scroll, and in
+    // mid-list, where the space before the rows takes them up.
+    for scrolled in [0.0, 6000] {
+      let h = Harness(rowCount: 1000) { $0.anchoring = .manual }
+      let view = LayoutScrollView(h)
+      for i in 0..<1000 { view.heights["r\(i)"] = 60 }
+      view.settle()
+      for _ in 0..<40 where view.scrollOffset < scrolled {
+        view.userScroll(view.scrollOffset + 300)
+        view.settle()
+      }
+      // A jump over rows it doesn't measure.
+      let first = h.core.firstVisibleItem()!.index
+      let to = h.core.snapshot.items.last!.index - 10
+      #expect(to - first > 45)
+      h.core.scrollToRow(key: "r\(to)", align: .start)
+      view.settle()
+      #expect(view.rowTop("r\(to)") == 0)
+      // Past the rows measured below where it was.
+      let skipped = "r\(first + 16)"
+      #expect(view.measures[skipped] == nil)
+
+      // Scrolling up, the rows above come near and come out 3× their
+      // estimate.
+      for _ in 0..<60 where view.measures[skipped] == nil {
+        let key = h.core.firstVisibleItem()!.key
+        let top = try! #require(view.rowTop(key))
+        let offset = view.scrollOffset
+        view.userScroll(offset - 100)
+        #expect(view.rowTop(key) == top + 100, "\(key) after a scroll from \(offset)")
+        view.settle(holding: key)
+      }
+      #expect(view.measures[skipped] != nil)
+    }
+  }
+
+  @Test("jumps to rows not measured yet land on them")
+  func jumpsToUnmeasuredRows() {
+    let alignments: [VirtualScrollAlignment] = [.start, .center, .end, .auto]
+    for align in alignments {
+      for byID in [false, true] {
+        let h = Harness(rowCount: 1000) { $0.anchoring = .manual }
+        let view = LayoutScrollView(h)
+        for i in 0..<1000 { view.heights["r\(i)"] = i % 2 == 0 ? 60 : 35 }
+        view.settle()
+        #expect(view.measures["r80"] == nil)
+        if byID {
+          h.core.scrollToItem("r80", align: align)
+        } else {
+          h.core.scrollToRow(key: "r80", align: align)
+        }
+        view.settle()
+        let top = try! #require(view.rowTop("r80"))
+        let expected: Double =
+          switch align {
+          case .start: 0
+          case .center: (view.viewportHeight - 60) / 2
+          // Below the viewport, `.auto` lines its bottom up with the
+          // viewport's.
+          case .end, .auto: view.viewportHeight - 60
+          }
+        #expect(abs(top - expected) <= 1, "\(align) by id: \(byID)")
+        h.scheduler.advance(by: 200)
+        view.settle(holding: "r80")
+      }
+    }
   }
 }

@@ -188,7 +188,7 @@
         for cell in cells.values { cell.height = nil }
         header?.height = nil
         footer?.height = nil
-        host.invalidate()
+        host.invalidateHeights()
       }
       let r = host.layout(offset: offset, viewport: viewport)
       if !shown, !r.frames.isEmpty, !host.isLanding() { shown = true }
@@ -487,8 +487,13 @@
         constraint.isActive = true
         defer { constraint.isActive = false }
         // Laid out at the width first: a wrapping label wraps at the width
-        // it was laid out at, and its height follows.
-        view.setFrameSize(NSSize(width: width, height: view.frame.height))
+        // it was laid out at, and its height follows. A new view, 0 high, at
+        // its fitting height: resized from 0 high where the list's offset is
+        // between pixels, as when it's measured mid-scroll, its autoresizing
+        // subviews come out that fraction of a point above it, which a 1x
+        // display rounds to a whole one, for the view's life.
+        let height = view.frame.height > 0 ? view.frame.height : view.fittingSize.height
+        view.setFrameSize(NSSize(width: width, height: height))
         view.layoutSubtreeIfNeeded()
         return Double(view.fittingSize.height)
       #endif

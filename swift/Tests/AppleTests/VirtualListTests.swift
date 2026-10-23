@@ -238,7 +238,7 @@
       try await t.run(5) { state().key == id(5) }
       #expect(state().key == id(5))
       #expect(state().shown[id(5)] == true)
-      try await t.run(0.2) { false }
+      try await t.run(5) { highlighted(id(5)) }
       try expectHighlight(on: id(5))
 
       // Again: the app hears of it, to open the row again.
@@ -255,7 +255,7 @@
         try await t.run(5) { state().key == id(7) }
         #expect(state().shown[id(5)] == false)
         #expect(state().shown[id(7)] == true)
-        try await t.run(0.2) { false }
+        try await t.run(5) { highlighted(id(7)) }
         try expectHighlight(on: id(7))
       #else
         try await keys(t)
@@ -281,7 +281,7 @@
         #expect(state().shown[id(15)] == false)
         #expect(state().shown[id(5)] == false)
         #expect(state().shown[id(14)] == true)
-        try await t.run(0.2) { false }
+        try await t.run(5) { highlighted(id(14)) }
         try expectHighlight(on: id(14))
       }
 
@@ -314,6 +314,15 @@
     func tap(_ key: String) throws {
       let f = try frame(key)
       view.select(at: (f.minY + f.maxY) / 2)
+    }
+
+    /// The highlight is shown behind the row's frame. It's placed in the
+    /// view's next layout pass, which a slow runner can take a while to run.
+    func highlighted(_ key: String) -> Bool {
+      guard let f = try? frame(key) else { return false }
+      let h = view.highlight
+      return !h.isHidden && abs(Double(h.frame.minY) - f.minY) <= 0.5
+        && abs(Double(h.frame.maxY) - f.maxY) <= 0.5
     }
 
     /// The highlight stands behind the row's frame.
