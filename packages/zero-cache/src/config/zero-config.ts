@@ -105,6 +105,11 @@ export const shardOptions = {
   },
 };
 
+export const DEFAULT_REPLICA_ANALYSIS_LIMIT = 1000;
+
+// SQLite keeps the low 31 bits of `PRAGMA analysis_limit`.
+const MAX_REPLICA_ANALYSIS_LIMIT = 0x7fffffff;
+
 const replicaOptions = {
   file: {
     type: v.string().optional(() => 'zero.db'),
@@ -122,6 +127,41 @@ const replicaOptions = {
       `since the last VACUUM (or initial-sync). The VACUUM operation is heavyweight`,
       `and requires double the size of the db in disk space. If unspecified, VACUUM`,
       `operations are not performed.`,
+    ],
+  },
+
+  analysisLimit: {
+    type: v
+      .number()
+      .assert(
+        value =>
+          Number.isSafeInteger(value) &&
+          value >= 0 &&
+          value <= MAX_REPLICA_ANALYSIS_LIMIT,
+        `must be an integer between 0 and ${MAX_REPLICA_ANALYSIS_LIMIT}`,
+      )
+      .optional(() => DEFAULT_REPLICA_ANALYSIS_LIMIT),
+    desc: [
+      `The number of rows of each index that ANALYZE samples when the replicator gathers the`,
+      `replica's query planner statistics: at startup, and after a replicated schema change.`,
+      `ANALYZE still counts every index in full; the per-key averages come from the sample,`,
+      `which can misjudge an index led by a column with few distinct values in a large table,`,
+      `such as a soft-delete flag, so that SQLite scans that index instead of seeking a more`,
+      `selective one.`,
+      ``,
+      `Set to {bold 0} to read every row, which also gathers SQLite's {bold sqlite_stat4}`,
+      `histograms. Each pass then reads every row of the tables it analyzes. After a schema`,
+      `change, those are the tables with an index that has no statistics, such as one the`,
+      `change created, and can include a table ten times larger or smaller than when its`,
+      `statistics were gathered; replication waits for the pass. SQLite also plans a statement`,
+      `again when a value it compares with a column those histograms describe changes.`,
+      ``,
+      `The replica records the limit its statistics were gathered under. At its first startup`,
+      `under another limit, the replicator analyzes every table, in one transaction, before`,
+      `it is ready; statistics an earlier zero-cache gathered, which it did not record, are`,
+      `kept under a limit of 1000. A view-syncer restores the replication-manager's replica,`,
+      `so set the same limit on both: a view-syncer under another limit analyzes every table`,
+      `whenever it restores one.`,
     ],
   },
 };

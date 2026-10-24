@@ -158,7 +158,9 @@ export async function handleInspect(
 
         let permissions;
         if (legacyQuery) {
-          using db = new Database(lc, config.replica.file);
+          using db = new Database(lc, config.replica.file, {
+            readonly: true,
+          });
           const dbRunner = new StatementRunner(db);
           const loaded = loadPermissions(lc, dbRunner, config.app.id, config);
           if (loaded.permissions) {

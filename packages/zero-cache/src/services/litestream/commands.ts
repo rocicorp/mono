@@ -365,7 +365,8 @@ async function restoreOnce(
         restoreForked(lc, stdout);
       return {restored: true, backupURL, result, reusedExisting, forked};
     } finally {
-      db.close();
+      // The replica's statistics are maintained by the replicator.
+      db.close({optimize: false});
     }
   } finally {
     try {
@@ -563,7 +564,8 @@ function openValidReplica(
     lc.error?.('Error while validating restored replica', e);
     return undefined;
   } finally {
-    db?.close();
+    // The replica's statistics are maintained by the replicator.
+    db?.close({optimize: false});
   }
 }
 
