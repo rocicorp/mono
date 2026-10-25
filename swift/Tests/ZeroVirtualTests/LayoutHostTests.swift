@@ -269,6 +269,27 @@ final class LayoutScrollView {
     #expect(view.scrollOffset == offset)
   }
 
+  @Test("stuck to the bottom of a list opened at its last row, a scroll up moves the rows by it")
+  func scrollUpFromTheBottom() {
+    let h = Harness(rowCount: 400, rowHeight: 80) {
+      $0.anchoring = .manual
+      $0.permalinkID = "r399"
+      $0.stickToBottom = true
+      $0.minPageSize = 20
+    }
+    let view = LayoutScrollView(h)
+    for i in 0..<400 { view.heights["r\(i)"] = [62.3, 180.6, 38.5, 121.0, 76.0][i % 5] }
+    view.settle()
+    h.scheduler.advance(by: 200)
+    view.settle()
+    #expect(view.bottomGap == 0)
+    // The core's scrolls past the bottom stay where they are: the user's
+    // next scroll is the user's, not taken back to the bottom.
+    let top = try! #require(view.rowTop("r396"))
+    view.userScroll(view.scrollOffset - 20.5)
+    #expect(view.rowTop("r396") == top + 20.5)
+  }
+
   @Test("scrolls to a row not loaded yet")
   func scrollToItemFarBelow() {
     let h = Harness(rowCount: 200) { $0.anchoring = .manual }

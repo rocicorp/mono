@@ -719,10 +719,17 @@ package final class VirtualizerCore<
   @discardableResult
   private func setScrollOffset(_ offset: Double) -> Bool {
     guard let host, host.scrollOffset.rounded() != offset.rounded() else { return false }
+    let from = host.scrollOffset
     programmaticScroll = true
     writing = true
     host.scroll(to: offset)
     writing = false
+    guard host.scrollOffset != from else {
+      // Clamped to where it was: no scroll, and the user's next one isn't
+      // ours.
+      programmaticScroll = false
+      return false
+    }
     if depth == 0, scrollDuringWrite {
       scrollDuringWrite = false
       onScroll()
