@@ -1,5 +1,11 @@
 # zero-swift
 
+## 0.4.6
+
+### Patch Changes
+
+- 803090d: Add `Zero.mutationOutcomes` and `Zero.addMutationOutcomeListener(_:)`, which report the server's outcome of every mutation once, including mutations replayed after a disconnect, whose `server` already settled with `.zeroError`.
+
 ## 0.4.5
 
 ### Patch Changes
