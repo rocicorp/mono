@@ -21,6 +21,8 @@ public final class Zero<Context: Sendable> {
   /// The views and preloads to move to a new client.
   private var views: [WeakView] = []
   private var preloads: [PreloadRecord] = []
+  private var outcomeListeners: [(id: Int, listener: (MutationServerOutcome) -> Void)] = []
+  private var nextOutcomeListenerID = 0
   #if canImport(Darwin)
     private var lifecycle: AppLifecycle?
   #endif
@@ -77,6 +79,45 @@ public final class Zero<Context: Sendable> {
       engine.onClientStateNotFound = { [weak self] in self?.replaceClient() }
     }
     engine.onUpdateNeeded = { [weak self] reason in self?.connection.updateNeeded = reason }
+    engine.onMutationOutcome = { [weak self] outcome in
+      for (_, l) in self?.outcomeListeners ?? [] { l(outcome) }
+    }
+  }
+
+  /// Calls `listener` with the server's outcome of each mutation this
+  /// client makes from now on, once per mutation, as the server reports it.
+  ///
+  /// Unlike a mutation's `server` result, it hears the outcome of a
+  /// mutation sent again after the connection came back: `server` settles
+  /// with `.zeroError` when the client gives up connecting
+  /// (`disconnectTimeoutMs`), and the mutation is replayed when it
+  /// reconnects. A mutation still pending when the app quits is replayed
+  /// when it next launches, but its outcome isn't reported.
+  ///
+  /// Use it for a single place that shows rejections, instead
+  /// of each `server` result, so a rejection isn't shown twice. Swift only:
+  /// the JS client has no counterpart.
+  @discardableResult
+  public func addMutationOutcomeListener(
+    _ listener: @escaping (MutationServerOutcome) -> Void
+  ) -> () -> Void {
+    let id = nextOutcomeListenerID
+    nextOutcomeListenerID += 1
+    outcomeListeners.append((id, listener))
+    return { [weak self] in self?.outcomeListeners.removeAll { $0.id == id } }
+  }
+
+  /// The server's outcomes of the mutations this client makes, as
+  /// ``addMutationOutcomeListener(_:)`` hears them, until the iterating
+  /// task is cancelled.
+  public var mutationOutcomes: AsyncStream<MutationServerOutcome> {
+    let (stream, continuation) = AsyncStream<MutationServerOutcome>.makeStream()
+    let id = nextOutcomeListenerID
+    _ = addMutationOutcomeListener { continuation.yield($0) }
+    continuation.onTermination = { [weak self] _ in
+      Task { @MainActor in self?.outcomeListeners.removeAll { $0.id == id } }
+    }
+    return stream
   }
 
   /// Replaces the client, which can't sync any longer, by a new one on the

@@ -148,6 +148,16 @@ is written or sent.
   Freeing one still recurses: in a release build 1,500 levels fit in a
   512 KB stack (a macOS test or cooperative thread), but a debug build
   overflows one when it frees objects nested more than about 1,000 deep.
+- **Mutation outcomes after a disconnect (Swift only).** As in JS, when
+  the connection drops before the server answers a mutation, its `server`
+  settles with `.zeroError` and doesn't settle again after the mutation is
+  replayed. JS has no way to learn the replay's result. Swift adds
+  ``Zero/mutationOutcomes`` and ``Zero/addMutationOutcomeListener(_:)``,
+  which report the server's outcome of every mutation once, with its
+  mutator name and arguments, including mutations replayed after their
+  `server` gave up (but not mutations from before the app last launched).
+  To show a rejection, use either the stream or `server`,
+  not both, or the user sees it twice.
 - **Storage.** The replica is a SQLite database per user and URL, not
   IndexedDB. One process uses it at a time; there are no tabs to share it
   with.

@@ -49,6 +49,13 @@ final class MutationTracker {
   private var clientID: String?
   private var largestOutstandingMutationID: Double = 0
   private var currentMutationID: Double = 0
+  /// The mutations sent to the server whose outcome hasn't been reported,
+  /// by mutation ID. Unlike `outstanding`, they stay when the connection
+  /// gives up on them: they're sent again on reconnect, and their outcome
+  /// is reported then.
+  private var unreported: [Double: (name: String, args: JSONValue?)] = [:]
+  /// Hears each mutation's outcome from the server once.
+  var onOutcome: ((MutationServerOutcome) -> Void)?
 
   private let ackMutations: (MutationID) -> Void
   private let onFatalError: (ConnectionError) -> Void
@@ -77,8 +84,11 @@ final class MutationTracker {
     return (nextEphemeralID, server)
   }
 
-  func mutationIDAssigned(_ ephemeralID: Int, _ mutationID: Double) {
+  func mutationIDAssigned(
+    _ ephemeralID: Int, _ mutationID: Double, name: String, args: JSONValue?
+  ) {
     guard let entry = entry(ephemeralID) else { return }
+    unreported[mutationID] = (name, args)
     entry.mutationID = mutationID
     ephemeralIDsByMutationID[mutationID] = ephemeralID
     largestOutstandingMutationID = max(largestOutstandingMutationID, mutationID)
@@ -87,6 +97,7 @@ final class MutationTracker {
   /// Rejects a mutation the client could not run. It was not stored.
   func rejectMutation(_ ephemeralID: Int, _ error: any Error) {
     guard let entry = entry(ephemeralID) else { return }
+    if let mid = entry.mutationID { unreported[mid] = nil }
     settle(ephemeralID, entry, .failure(ApplicationError.wrapping(error)))
   }
 
@@ -172,6 +183,10 @@ final class MutationTracker {
     }
     if lastMutationID == currentMutationID { return }
     currentMutationID = lastMutationID
+    // Applied without a result of their own: they succeeded.
+    for mid in unreported.keys.filter({ $0 <= lastMutationID }).sorted() {
+      report(mid, .success(nil))
+    }
     while head < order.count {
       let id = order[head]
       if let entry = outstanding[id] {
@@ -205,29 +220,24 @@ final class MutationTracker {
     guard clientID == self.clientID else {
       throw ConnectionError.client(.internal, message: "received mutation for the wrong client")
     }
-    guard let ephemeralID = ephemeralIDsByMutationID[mid], let entry = entry(ephemeralID) else {
-      return
-    }
     let kind = error.error.stringValue ?? ""
     if kind == "alreadyProcessed" { return }
+    let failure: any Error
     if kind == "app" {
-      settle(
-        ephemeralID, entry,
-        .failure(
-          ApplicationError(
-            error.message?.stringValue ?? "Unknown application error: app",
-            details: error.details)))
+      failure = ApplicationError(
+        error.message?.stringValue ?? "Unknown application error: app", details: error.details)
     } else {
       let message =
         kind == "oooMutation"
         ? "Server reported an out-of-order mutation"
         : "Unknown fallback error with mutation ID \(JSNumber.format(mid)): \(kind)"
-      settle(
-        ephemeralID, entry,
-        .failure(
-          ConnectionError.server(
-            .basic(BasicErrorBody(kind: .invalidPush, message: message, origin: .server)))))
+      failure = ConnectionError.server(
+        .basic(BasicErrorBody(kind: .invalidPush, message: message, origin: .server)))
     }
+    if let ephemeralID = ephemeralIDsByMutationID[mid], let entry = entry(ephemeralID) {
+      settle(ephemeralID, entry, .failure(failure))
+    }
+    report(mid, .failure(failure))
     if kind == "oooMutation" {
       onFatalError(
         .server(
@@ -242,10 +252,23 @@ final class MutationTracker {
     guard clientID == self.clientID else {
       throw ConnectionError.client(.internal, message: "received mutation for the wrong client")
     }
-    guard let ephemeralID = ephemeralIDsByMutationID[mid], let entry = entry(ephemeralID) else {
-      return
+    if let ephemeralID = ephemeralIDsByMutationID[mid], let entry = entry(ephemeralID) {
+      settle(ephemeralID, entry, .success(data))
     }
-    settle(ephemeralID, entry, .success(data))
+    report(mid, .success(data))
+  }
+
+  /// Reports the outcome of mutation `mid`, the first time the server gives
+  /// one.
+  private func report(_ mid: Double, _ result: Result<JSONValue?, any Error>) {
+    guard let m = unreported.removeValue(forKey: mid) else { return }
+    let outcome: MutationOutcome =
+      switch result {
+      case .success(let data): .success(data: data)
+      case .failure(let error): Engine.outcome(error)
+      }
+    onOutcome?(
+      MutationServerOutcome(mutationID: Int(mid), name: m.name, args: m.args, outcome: outcome))
   }
 
   private func settle(_ ephemeralID: Int, _ entry: Entry, _ result: Result<JSONValue?, any Error>) {

@@ -293,6 +293,21 @@ public enum MutationOutcome: Sendable, Hashable {
   }
 }
 
+/// The server's outcome of a mutation this client made, reported by
+/// ``Zero/mutationOutcomes`` and ``Zero/addMutationOutcomeListener(_:)``.
+/// Swift only: the JS client has no counterpart.
+public struct MutationServerOutcome: Sendable, Hashable {
+  /// The mutation's ID, counted per client from 1.
+  public var mutationID: Int
+  /// The mutator's name, such as `issue.create`.
+  public var name: String
+  /// The mutator's arguments.
+  public var args: JSONValue?
+  /// `.success` or `.appError`, with the server's data or message; or
+  /// `.zeroError` when the server reported a mutation it couldn't process.
+  public var outcome: MutationOutcome
+}
+
 /// What `zero.mutate` returns: the outcome of the optimistic run on the
 /// client, and the server's.
 @MainActor

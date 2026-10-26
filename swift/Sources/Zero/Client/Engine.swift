@@ -213,6 +213,7 @@ final class Engine {
       ackMutations: { [weak self] id in self?.sendIfConnected(.ackMutationResponses(id)) },
       onFatalError: { [weak self] error in self?.disconnect(error) })
     mutationTracker.setClientID(clientID)
+    mutationTracker.onOutcome = { [weak self] outcome in self?.onMutationOutcome?(outcome) }
     context = QueryContext(
       branch: ivmMain,
       addCustomQuery: { [weak self] ast, id, ttl, got in
@@ -1017,6 +1018,8 @@ final class Engine {
   /// What `Zero` does when the app must be updated to sync, besides calling
   /// `ZeroOptions.onUpdateNeeded`.
   var onUpdateNeeded: ((UpdateNeededReason) -> Void)?
+  /// Hears the server's outcome of each mutation this client made.
+  var onMutationOutcome: ((MutationServerOutcome) -> Void)?
 
   private func clientStateNotFound() {
     if let onClientStateNotFound {
@@ -1186,7 +1189,7 @@ final class Engine {
     let mutationID = store.nextMutationID(for: clientID)
     let write = KVWrite(store.main)
     let branch = ivmMain.fork()
-    mutationTracker.mutationIDAssigned(ephemeralID, mutationID)
+    mutationTracker.mutationIDAssigned(ephemeralID, mutationID, name: name, args: args ?? .null)
     let tx = Transaction(
       clientID: clientID, mutationID: Int(mutationID), reason: .optimistic, token: token,
       write: write, branch: branch, schema: schema)

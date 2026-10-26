@@ -122,6 +122,67 @@ import ZeroTesting
     #expect(try await zero.run(zql.issue).map(\.title) == ["t"])
   }
 
+  /// The outcomes stream hears each mutation's server outcome once,
+  /// including those of mutations replayed after `server` gave up on them.
+  @Test func reportsServerOutcomesOfMutationsReplayedAfterADisconnect() async throws {
+    let zero = try makeZero()
+    var outcomes: [MutationServerOutcome] = []
+    _ = zero.addMutationOutcomeListener { outcomes.append($0) }
+    func connect() throws -> MockSocket {
+      scheduler.runDueTimers()
+      let socket = try #require(sockets.sockets.last)
+      socket.receive(text: #"["connected",{"wsid":"w"}]"#)
+      scheduler.runDueTimers()
+      return socket
+    }
+    func poke(_ socket: MockSocket, _ base: String, _ cookie: String, _ part: String) {
+      socket.receive(text: #"["pokeStart",{"pokeID":"\#(cookie)","baseCookie":\#(base)}]"#)
+      socket.receive(text: #"["pokePart",{"pokeID":"\#(cookie)",\#(part)}]"#)
+      socket.receive(text: #"["pokeEnd",{"pokeID":"\#(cookie)","cookie":"\#(cookie)"}]"#)
+      scheduler.runDueTimers()
+    }
+    let cid = zero.clientID
+
+    let first = try connect()
+    let one = zero.mutate(Self.create(CreateIssue(id: "i1", title: "one")))
+    scheduler.runDueTimers()
+    poke(first, "null", "01", #""lastMutationIDChanges":{"\#(cid)":1}"#)
+    #expect(try await one.server.value == .success(data: nil))
+
+    // The server goes away with two mutations unconfirmed, and the client
+    // gives up on it.
+    let two = zero.mutate(Self.create(CreateIssue(id: "i2", title: "two")))
+    let three = zero.mutate(Self.create(CreateIssue(id: "i3", title: "three")))
+    scheduler.runDueTimers()
+    first.serverClose()
+    for _ in 0..<70 { scheduler.advance(by: 1_000) }
+    guard case .zeroError = try await two.server.value else {
+      Testing.Issue.record("the server result of a mutation the client gave up on")
+      return
+    }
+    guard case .zeroError = try await three.server.value else { return }
+
+    // It comes back: the two are replayed, and it rejects one.
+    scheduler.advance(by: 5_000)
+    let second = try connect()
+    poke(
+      second, #""01""#, "02",
+      #""lastMutationIDChanges":{"\#(cid)":3},"mutationsPatch":[{"op":"put","mutation":{"id":{"clientID":"\#(cid)","id":2},"result":{"error":"app","message":"taken"}}}]"#
+    )
+    #expect(
+      outcomes == [
+        MutationServerOutcome(
+          mutationID: 1, name: "issue.create", args: ["id": "i1", "title": "one"],
+          outcome: .success(data: nil)),
+        MutationServerOutcome(
+          mutationID: 2, name: "issue.create", args: ["id": "i2", "title": "two"],
+          outcome: .appError(message: "taken", details: nil)),
+        MutationServerOutcome(
+          mutationID: 3, name: "issue.create", args: ["id": "i3", "title": "three"],
+          outcome: .success(data: nil)),
+      ])
+  }
+
   @Test func anUnregisteredMutatorFailsWithoutWritingOrPushing() async throws {
     let zero = try makeZero()
     scheduler.runDueTimers()
