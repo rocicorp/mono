@@ -53,21 +53,20 @@
 
   /// How a row's view is made and measured: hosted SwiftUI
   /// (`HostedRowViews`), or the app's own (`AppRowViews`). The rest of the
-  /// layout is the same for both.
+  /// layout is the same for both: views of rows that leave are kept, hidden,
+  /// for rows that come, as a collection view's cells are.
   @MainActor
   protocol RowViews: AnyObject {
-    /// Views of rows that leave are kept, hidden, for rows that come.
-    var reusesViews: Bool { get }
     /// The view showing `item` in `state`: `view` shown anew (the row's
-    /// own when its row or state changed, or, when views are reused, one a
-    /// row left), or a new one when it's nil.
+    /// own when its row or state changed, or one a row left), or a new one
+    /// when it's nil.
     func view(
       for item: RowsItem, _ state: RowState, reusing view: PlatformView?, in layout: RowsLayout
     )
       -> PlatformView
     /// The view's height at `width`.
     func height(of view: PlatformView, width: Double) -> Double
-    /// The view's row left and the view isn't reused.
+    /// The view is no longer kept.
     func discard(_ view: PlatformView)
   }
 
@@ -89,8 +88,10 @@
     let views: any RowViews
     var source = RowsSource()
     private var cells: [AnyHashable: RowCell] = [:]
-    /// Views rows left, hidden, for other rows (when `views` reuses them).
+    /// Views rows left, hidden, for other rows: as many as `spareViews`
+    /// kept, the rest released a few a frame.
     private var pool: [PlatformView] = []
+    private var releasing = false
     private var width = 0.0
     /// Changes with each snapshot: rows are compared with their cells' then.
     private var generation = 0
@@ -99,6 +100,14 @@
     /// a jump: its first frame is where the jump lands, not where it starts.
     private(set) var shown = false
     var addView: (PlatformView) -> Void = { _ in }
+    /// Runs work at the start of the next frame: the view's display link.
+    var nextFrame: (@escaping @MainActor () -> Void) -> Void = { work in
+      DispatchQueue.main.async { MainActor.assumeIsolated(work) }
+    }
+    /// The views kept for rows that come, beyond which the rest are
+    /// released, and how many a frame.
+    static let spareViews = 16
+    static let releasedPerFrame = 2
 
     /// The views above and below the rows.
     var header: RowsAccessory? {
@@ -138,6 +147,7 @@
       host.measure = { [unowned self] key in measure(key) }
       host.header = { [unowned self] in height(of: header) }
       host.footer = { [unowned self] in height(of: footer) }
+      host.nextFrame = { [unowned self] work in nextFrame(work) }
     }
 
     /// A new snapshot to draw.
@@ -196,14 +206,10 @@
       for (key, cell) in cells where !live.contains(key) {
         cells[key] = nil
         seen[key] = nil
-        if views.reusesViews {
-          cell.view.isHidden = true
-          pool.append(cell.view)
-        } else {
-          cell.view.removeFromSuperview()
-          views.discard(cell.view)
-        }
+        cell.view.isHidden = true
+        pool.append(cell.view)
       }
+      releaseSpares()
       var accessories: [(view: PlatformView, minY: Double, maxY: Double)] = []
       if let header { accessories.append((header.view, 0, host.headerHeight)) }
       if let footer {
@@ -214,6 +220,26 @@
         r.frames.compactMap { f in cells[f.key].map { ($0, f.minY, f.maxY) } }, r.contentHeight,
         r.offset, accessories, selected.map { ($0.minY, $0.maxY) }
       )
+    }
+
+    /// Releases a few of the views beyond `spareViews` in the next frame,
+    /// not in the pass: a view's teardown is as slow as its making.
+    private func releaseSpares() {
+      guard !releasing, pool.count > Self.spareViews else { return }
+      releasing = true
+      nextFrame { [weak self] in
+        guard let self else { return }
+        releasing = false
+        let n = min(Self.releasedPerFrame, pool.count - Self.spareViews)
+        guard n > 0 else { return }
+        // The ones left longest ago: the latest are reused first.
+        for view in pool.prefix(n) {
+          view.removeFromSuperview()
+          views.discard(view)
+        }
+        pool.removeFirst(n)
+        releaseSpares()
+      }
     }
 
     /// The header and the footer are hidden while the rows are: until the
@@ -293,7 +319,7 @@
         }
         return measure(cell)
       }
-      let reused = views.reusesViews ? pool.popLast() : nil
+      let reused = pool.popLast()
       let view = views.view(for: item, state(key), reusing: reused, in: self)
       if view !== reused {
         if let reused { pool.append(reused) }
@@ -343,9 +369,10 @@
     fileprivate func isEqual(to other: Any) -> Bool { (other as? Self) == self }
   }
 
-  /// SwiftUI rows, each in its own hosting controller. A row's controller
-  /// isn't reused for another row: it would show the row it had until its
-  /// next layout.
+  /// SwiftUI rows, each in a hosting controller, reused for the rows that
+  /// come as a collection view reuses a cell. A reused controller's view has
+  /// the row's key for its identity, as a `List`'s row has its id: state in
+  /// the row's view belongs to its row, and starts anew in another.
   @MainActor
   final class HostedRowViews: RowViews {
     #if canImport(UIKit)
@@ -357,8 +384,6 @@
     private var controllers: [ObjectIdentifier: Controller] = [:]
 
     init(row: @escaping (Any, Bool) -> AnyView) { self.row = row }
-
-    var reusesViews: Bool { false }
 
     func view(
       for item: RowsItem, _ state: RowState, reusing view: PlatformView?, in layout: RowsLayout
@@ -386,7 +411,8 @@
           } action: { [weak layout] h in
             // The row changed height on its own, as a view inside it loaded.
             layout?.row(key, laidOutAt: h)
-          })
+          }
+          .id(key))
       return controller.view
     }
 
@@ -448,8 +474,6 @@
 
     init(make: @escaping (Any, Bool, PlatformView?) -> PlatformView) { self.make = make }
 
-    var reusesViews: Bool { true }
-
     func view(
       for item: RowsItem, _ state: RowState, reusing view: PlatformView?, in layout: RowsLayout
     )
@@ -502,6 +526,57 @@
     func discard(_ view: PlatformView) {}
   }
 
+  /// Runs work at the start of the next frame, from the view's display link,
+  /// which runs only while there's work.
+  @MainActor
+  final class FrameLink: NSObject {
+    private weak var view: PlatformView?
+    private var link: CADisplayLink?
+    private var work: [@MainActor () -> Void] = []
+
+    init(view: PlatformView) { self.view = view }
+
+    func next(_ work: @escaping @MainActor () -> Void) {
+      self.work.append(work)
+      guard link == nil else { return }
+      #if canImport(UIKit)
+        let link = CADisplayLink(target: self, selector: #selector(frame))
+      #else
+        // Out of a window, there are no frames: the main queue's next turn.
+        guard let view, view.window != nil else {
+          DispatchQueue.main.async { [weak self] in self?.frame() }
+          return
+        }
+        let link = view.displayLink(target: self, selector: #selector(frame))
+      #endif
+      link.add(to: .main, forMode: .common)
+      self.link = link
+    }
+
+    @objc private func frame() {
+      let work = self.work
+      self.work = []
+      for w in work { w() }
+      if self.work.isEmpty {
+        link?.invalidate()
+        link = nil
+      }
+    }
+
+    #if !canImport(UIKit)
+      /// The view moved to another window, or out of one: its link, the old
+      /// window's, no longer runs.
+      func viewDidMoveToWindow() {
+        guard let link else { return }
+        link.invalidate()
+        self.link = nil
+        let work = self.work
+        self.work = []
+        for w in work { next(w) }
+      }
+    #endif
+  }
+
   #if canImport(UIKit)
     /// A scroll view that lays out the rows itself: their frames, the
     /// header's and the footer's, its content size and its offset, all in
@@ -509,6 +584,7 @@
     final class RowsScrollView: UIScrollView, UIGestureRecognizerDelegate {
       let rows: RowsLayout
       private var laying = false
+      private lazy var frameLink = FrameLink(view: self)
       /// Behind the selected row.
       let highlight = UIView()
       private lazy var tap = UITapGestureRecognizer(target: self, action: #selector(tapped))
@@ -524,6 +600,7 @@
         tap.cancelsTouchesInView = false
         tap.delegate = self
         rows.host.setNeedsLayout = { [weak self] in self?.setNeedsLayout() }
+        rows.nextFrame = { [weak self] in self?.frameLink.next($0) }
         rows.addView = { [weak self] view in self?.addSubview(view) }
       }
 
@@ -624,6 +701,7 @@
       let rows: RowsLayout
       let document = RowsDocumentView()
       private var laying = false
+      private lazy var frameLink = FrameLink(view: self)
       /// Behind the selected row.
       let highlight = RowsHighlightView()
       private lazy var click = NSClickGestureRecognizer(target: self, action: #selector(clicked))
@@ -645,6 +723,7 @@
             self, selector: #selector(clipChanged), name: name, object: contentView)
         }
         rows.host.setNeedsLayout = { [weak self] in self?.document.needsLayout = true }
+        rows.nextFrame = { [weak self] in self?.frameLink.next($0) }
         rows.addView = { [weak self] view in self?.document.addSubview(view) }
       }
 
@@ -724,6 +803,11 @@
         guard let key = rows.key(at: y) else { return }
         window?.makeFirstResponder(document)
         rows.userSelect(key)
+      }
+
+      override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        frameLink.viewDidMoveToWindow()
       }
 
       override func viewWillMove(toWindow newWindow: NSWindow?) {

@@ -184,6 +184,34 @@
       #endif
     }
 
+    /// A row with state of its own: set on the first row only.
+    struct MarkedRow: View {
+      let id: String
+      let seen: Seen
+      @State private var marked = false
+
+      var body: some View {
+        let _ = marked ? seen.texts.insert(id) : nil
+        Text(id).frame(height: 30).onAppear { if id == VirtualListTests.id(0) { marked = true } }
+      }
+    }
+
+    // A row's view is reused for the rows that come, as a `List`'s are; its
+    // state stays with its row.
+    @Test func aRowsStateDoesNotGoToTheRowReusingItsView() async throws {
+      let (zero, list) = try makeList()
+      let seen = Seen()
+      let window = show(VirtualList(list) { MarkedRow(id: $0.row.id, seen: seen) })
+      try await run(30) { seen.texts.contains(Self.id(0)) }
+      for i in stride(from: 20, through: 120, by: 20) {
+        list.scrollToItem(Self.id(i), align: .end)
+        try await run(30) { list.lastVisibleItem()?.key == Self.id(i) }
+      }
+      try await run(0.5) { false }
+      #expect(seen.texts == [Self.id(0)])
+      withExtendedLifetime((zero, window)) {}
+    }
+
     @Test func scrollsToARowFarBelow() async throws {
       let (zero, list) = try makeList()
       let window = show(VirtualList(list) { Text($0.row.text).frame(height: 30) })

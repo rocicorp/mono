@@ -25,6 +25,10 @@ final class LayoutScrollView {
   /// Each drawn row's top, from the viewport's top, as of the last pass.
   private var drawn: [AnyHashable: Double] = [:]
   private var unsubscribe: (() -> Void)?
+  /// What the host asked to run at the start of the next frame.
+  var nextFrame: [@MainActor () -> Void] = []
+  /// The time: a frame takes 1/60 s, making a row 1 ms.
+  var clock = 0.0
 
   init(_ h: Harness, viewportHeight: Double = 400) {
     self.h = h
@@ -35,6 +39,8 @@ final class LayoutScrollView {
     }
     host.measure = { [unowned self] key in
       let key = key.base as! String
+      // Making a row's view takes the time; its height is kept.
+      if self.measures[key] == nil { self.clock += 0.001 }
       self.measures[key, default: 0] += 1
       return self.heights[key] ?? self.h.view.rowHeight
     }
@@ -45,6 +51,8 @@ final class LayoutScrollView {
     host.viewportDidResize = { [unowned self] in self.h.core.viewportDidResize() }
     host.afterUpdate = { [unowned self] in self.h.core.afterUpdate() }
     host.isLanding = { [unowned self] in self.h.core.isLanding }
+    host.nextFrame = { [unowned self] in self.nextFrame.append($0) }
+    host.now = { [unowned self] in self.clock }
     unsubscribe = h.core.subscribe { [unowned self] in self.host.invalidate() }
     h.core.attach(host)
   }
@@ -62,7 +70,19 @@ final class LayoutScrollView {
     for f in r.frames { drawn[f.key] = f.minY - r.offset }
   }
 
-  /// Passes until the query and the layout stop changing. With `holding`,
+  /// The next frame starts: runs what the host asked to run then; whether
+  /// there was any.
+  @discardableResult
+  func frameDrawn() -> Bool {
+    clock += 1.0 / 60
+    let work = nextFrame
+    nextFrame = []
+    for w in work { w() }
+    return !work.isEmpty
+  }
+
+  /// Passes, the frames drawn between them, until the query and the layout
+  /// stop changing. With `holding`,
   /// that row, while drawn, is drawn in the same place on every pass.
   func settle(holding key: String? = nil, sourceLocation: SourceLocation = #_sourceLocation) {
     let top = key.flatMap(rowTop)
@@ -72,7 +92,8 @@ final class LayoutScrollView {
       if let key, let top, let now = rowTop(key) {
         #expect(now == top, "\(key) drawn moved", sourceLocation: sourceLocation)
       }
-      if (h.queryKey(h.core.queryInputs), offset, h.core.snapshot.spaceBefore) == before,
+      if !frameDrawn(),
+        (h.queryKey(h.core.queryInputs), offset, h.core.snapshot.spaceBefore) == before,
         h.core.snapshot.complete
       {
         return
@@ -83,6 +104,7 @@ final class LayoutScrollView {
 
   /// The user scrolls to `y`, within the content, and the view lays out.
   func userScroll(_ y: Double) {
+    clock += 1.0 / 60
     offset = max(0, min(y, host.contentHeight - viewportHeight))
     pass()
   }
@@ -493,6 +515,77 @@ final class LayoutScrollView {
         h.scheduler.advance(by: 200)
         view.settle(holding: "r80")
       }
+    }
+  }
+}
+
+@MainActor
+@Suite("Layout host, rows made over frames") struct LayoutHostBudgetTests {
+  @Test(
+    "a page's rows off screen are measured in later frames, the rows on screen in the pass that shows them"
+  )
+  func spreadsNewRows() {
+    let h = Harness(rowCount: 1000) { $0.anchoring = .manual }
+    let view = LayoutScrollView(h)
+    for i in 0..<1000 { view.heights["r\(i)"] = i % 3 == 0 ? 50 : 30 }
+    view.settle()
+    for _ in 0..<40 {
+      let key = h.core.firstVisibleItem()!.key
+      let top = try! #require(view.rowTop(key))
+      let known = Set(view.measures.keys)
+      view.userScroll(view.scrollOffset + 150)
+      #expect(view.rowTop(key) == top - 150)
+      let offset = view.scrollOffset
+      var newOff = 0
+      for f in view.host.rowFrames() {
+        let k = f.key.base as! String
+        let onScreen = f.maxY > offset && f.minY < offset + 400
+        if onScreen { #expect(view.measures[k] != nil, "\(k) on screen and not measured") }
+        if !onScreen, view.measures[k] != nil, !known.contains(k) { newOff += 1 }
+      }
+      #expect(newOff == 0, "\(newOff) new rows off screen in the scroll's pass")
+      // The frames after it measure the rest within reach, as many as the
+      // frame's budget (4 ms, a row taking 1 ms) starts, nothing on screen
+      // moving.
+      let held = h.core.firstVisibleItem()!.key
+      let heldTop = try! #require(view.rowTop(held))
+      for _ in 0..<40 where view.frameDrawn() {
+        let before = view.measures.count
+        view.pass()
+        let made = view.measures.count - before
+        #expect(made <= 5, "\(made) rows in a frame")
+        #expect(view.rowTop(held) == heldTop, "\(held) moved as rows off screen were measured")
+      }
+      for f in view.host.rowFrames() where f.maxY >= offset - 400 && f.minY <= offset + 800 {
+        #expect(view.measures[f.key.base as! String] != nil, "\(f.key) near and never measured")
+      }
+    }
+  }
+
+  @Test("scrolling up, the new rows measured off screen are the ones just above it")
+  func measuresNearestRowsFirst() {
+    let h = Harness(rowCount: 1000) { $0.anchoring = .manual }
+    let view = LayoutScrollView(h)
+    for i in 0..<1000 { view.heights["r\(i)"] = i % 3 == 0 ? 50 : 30 }
+    view.settle()
+    for _ in 0..<30 {
+      view.userScroll(view.scrollOffset + 300)
+      view.settle()
+    }
+    for _ in 0..<10 {
+      // Up by more than the reach above the screen: every row above the
+      // screen, within reach, is new.
+      view.measures = [:]
+      view.userScroll(view.scrollOffset - 600)
+      let offset = view.scrollOffset
+      let above = view.host.rowFrames().filter { $0.maxY <= offset && $0.maxY >= offset - 400 }
+        .map { (key: $0.key.base as! String, distance: offset - $0.maxY) }
+      let made = above.filter { view.measures[$0.key] != nil }.map(\.distance)
+      let waiting = above.filter { view.measures[$0.key] == nil }.map(\.distance)
+      if let farthest = made.max(), let nearest = waiting.min() {
+        #expect(farthest <= nearest, "a row \(farthest) above measured before one \(nearest) above")
+      }
+      view.settle()
     }
   }
 }

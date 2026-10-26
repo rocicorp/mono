@@ -95,6 +95,8 @@ final class FrameProbe {
 
   /// The rows on screen in the last frame, top to bottom.
   var visible: [String] { previous?.ids ?? [] }
+  /// A jump began and hasn't settled.
+  var jumping: Bool { jump != nil }
   func top(of id: String) -> Double? { previous?.rows[id]?.minY }
   func bottom(of id: String) -> Double? { previous?.rows[id]?.maxY }
   var viewportHeight: Double {

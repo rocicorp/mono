@@ -25,7 +25,7 @@ enum ProbeScript {
 
     probe.setPhase("latest")
     toLatest()
-    await sleep(1.5)
+    await landed()
 
     // Far up, then Latest: with a message received while away, and without.
     for round in 0..<6 {
@@ -42,7 +42,7 @@ enum ProbeScript {
         await sleep(1)
       }
       toLatest()
-      await sleep(1.5)
+      await landed()
     }
     probe.finish()
   }
@@ -103,6 +103,14 @@ enum ProbeScript {
 
   static func deepest() -> Int {
     probe.visible.compactMap { Int($0.dropFirst()) }.max() ?? 0
+  }
+
+  /// A jump's window settles before the next phase drives the list: until
+  /// it has, the jump owns the position, and a drive would be undone. A
+  /// stalled frame (a slow simulator's) can take the whole wait.
+  static func landed() async {
+    await sleep(1.5)
+    await until(10) { !probe.jumping }
   }
 
   static func until(_ seconds: Double, _ done: () -> Bool) async {
