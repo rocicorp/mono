@@ -20,7 +20,6 @@
   },
   "devDependencies": {
     "oxfmt": "^0.74.0",
-    "replicache": "workspace:*",
     "shared": "workspace:*"
   },
   "packageManager": "pnpm@11.11.0"

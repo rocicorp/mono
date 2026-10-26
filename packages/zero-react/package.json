@@ -32,9 +32,7 @@
     "react": "^19.3.1",
     "shared": "workspace:*",
     "vitest": "^5.0.5",
-    "zero-client": "workspace:*",
-    "zero-schema": "workspace:*",
-    "zql": "workspace:*"
+    "zero-client": "workspace:*"
   },
   "peerDependencies": {
     "react": "^19.3.1",
