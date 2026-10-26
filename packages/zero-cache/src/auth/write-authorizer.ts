@@ -71,10 +71,14 @@ export interface WriteAuthorizer {
   normalizeOps(ops: CRUDOp[]): Exclude<CRUDOp, UpsertOp>[];
 
   /**
-   * Validates that all table names in the operations exist in the schema.
+   * Validates that all table names in the operations exist in the schema and
+   * returns the operations with `primaryKey` replaced by the table's primary
+   * key from the replica. The client-supplied `primaryKey` is not trusted: the
+   * authorizer checks the row identified by the replica's primary key, so the
+   * writes must target that same row.
    * @throws Error if any table name is invalid
    */
-  validateTableNames(ops: CRUDOp[]): void;
+  validateOps(ops: CRUDOp[]): CRUDOp[];
 }
 
 export class WriteAuthorizerImpl implements WriteAuthorizer {
@@ -261,12 +265,14 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     });
   }
 
-  validateTableNames(ops: CRUDOp[]): void {
-    for (const op of ops) {
-      if (!this.#tableSpecs.has(op.tableName)) {
+  validateOps(ops: CRUDOp[]): CRUDOp[] {
+    return ops.map(op => {
+      const tableSpec = this.#tableSpecs.get(op.tableName);
+      if (!tableSpec) {
         throw new Error(`Table '${op.tableName}' is not a valid table.`);
       }
-    }
+      return {...op, primaryKey: tableSpec.tableSpec.primaryKey};
+    });
   }
 
   #canInsert(phase: Phase, authData: JWTPayload | undefined, op: InsertOp) {

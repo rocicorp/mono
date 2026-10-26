@@ -276,6 +276,18 @@ class PushWorker {
     string,
     {wsID: string; downstream: Subscription<Downstream>}
   >;
+  /**
+   * For each client, the wsID of its socket whose push most recently failed.
+   * Pushes queued behind the failed one on that socket are not sent: they
+   * start past the failed mutation, so the API server could only reject them
+   * as out of order. The socket is failed (or was already replaced), and the
+   * client re-sends every unacknowledged mutation on its next socket.
+   *
+   * An entry is kept until the socket can no longer queue pushes (it closed or
+   * the client reconnected) and the queue has been drained since, so it is not
+   * removed while pushes from the failed socket may still be queued.
+   */
+  readonly #failedSockets = new Map<string, string>();
 
   readonly #customMutations = getOrCreateCounter(
     'mutation',
@@ -338,10 +350,24 @@ class PushWorker {
 
   async run() {
     for (;;) {
+      // Failed sockets that can no longer queue pushes. Everything they queued
+      // is in the next drain, so they are forgotten once it has been handled.
+      const closedSockets = [...this.#failedSockets].filter(
+        ([clientID, wsID]) =>
+          !this.#connContextManager.getConnectionContext({clientID, wsID}),
+      );
       const task = await this.#queue.dequeue();
       const rest = this.#queue.drain();
       const [pushes, terminate] = combinePushes([task, ...rest]);
       for (const push of pushes) {
+        const {clientID, wsID} = push.connCtx;
+        if (this.#failedSockets.get(clientID) === wsID) {
+          this.#lc.debug?.(
+            'Not sending push queued behind a failed push on the same socket; the client re-sends it on its next socket',
+            {clientID, wsID, mutations: push.push.mutations.length},
+          );
+          continue;
+        }
         const parentContext = push.push.traceparent
           ? propagation.extract(ROOT_CONTEXT, {
               traceparent: push.push.traceparent,
@@ -350,7 +376,13 @@ class PushWorker {
         const response = await context.with(parentContext, () =>
           this.#processPush(push),
         );
-        await this.#fanOutResponses(response);
+        await this.#fanOutResponses(push.connCtx, response);
+      }
+
+      for (const [clientID, wsID] of closedSockets) {
+        if (this.#failedSockets.get(clientID) === wsID) {
+          this.#failedSockets.delete(clientID);
+        }
       }
 
       if (terminate) {
@@ -360,11 +392,18 @@ class PushWorker {
   }
 
   /**
-   * 1. If the entire `push` fails, we send the error to relevant clients.
+   * 1. If the entire `push` fails, we send the error to `origin`, the
+   *  connection the push was sent on.
    * 2. If the push succeeds, we look for any mutation failure that should cause the connection to terminate
-   *  and terminate the connection for those clients.
+   *  and terminate `origin`.
+   *
+   * Only `origin` is failed, even when the push carried other clients'
+   * mutations (the client group's commit chain includes other tabs' pending
+   * mutations). A client tracks what it has sent per socket, so the gap a
+   * failed push leaves is on `origin` alone. Other clients send their own
+   * mutations on their own sockets, and see any lasting error there.
    */
-  #fanOutResponses(response: MutateResponse) {
+  #fanOutResponses(origin: ConnectionContext, response: MutateResponse) {
     const connectionTerminations: (() => void)[] = [];
 
     // if the entire push failed, send that to the client.
@@ -376,19 +415,8 @@ class PushWorker {
         'The server behind ZERO_MUTATE_URL returned a push error.',
         response,
       );
-      // TODO(0xcadams): Fanout is keyed only by clientID here. If a response arrives
-      // after reconnect or re-auth, `#clients.get(clientID)` may point at a
-      // newer wsID/revision and fail the replacement downstream instead.
-      const groupedMutationIDs = groupBy(
-        response.mutationIDs ?? [],
-        m => m.clientID,
-      );
-      for (const [clientID, mutationIDs] of groupedMutationIDs) {
-        const client = this.#clients.get(clientID);
-        if (!client) {
-          continue;
-        }
-
+      const mutationIDs = response.mutationIDs ?? [];
+      if (mutationIDs.length > 0) {
         // We do not resolve mutations on the client if the push fails
         // as those mutations will be retried.
         if ('error' in response) {
@@ -426,22 +454,15 @@ class PushWorker {
                           : 'An unknown error occurred while pushing to the API server',
                   };
 
-          this.#failDownstream(client.downstream, pushFailedBody);
+          this.#failOrigin(origin, pushFailedBody);
         } else {
-          this.#failDownstream(client.downstream, response);
+          this.#failOrigin(origin, response);
         }
       }
     } else {
       // Look for mutations results that should cause us to terminate the connection
-      // TODO(0xcadams): Same stale-routing issue as above: fatal mutation results are
-      // still mapped to the current downstream by clientID only.
       const groupedMutations = groupBy(response.mutations, m => m.id.clientID);
-      for (const [clientID, mutations] of groupedMutations) {
-        const client = this.#clients.get(clientID);
-        if (!client) {
-          continue;
-        }
-
+      for (const mutations of groupedMutations.values()) {
         let failure: PushFailedBody | undefined;
         let i = 0;
         for (; i < mutations.length; i++) {
@@ -478,14 +499,29 @@ class PushWorker {
         }
 
         if (failure) {
-          connectionTerminations.push(() =>
-            this.#failDownstream(client.downstream, failure),
-          );
+          connectionTerminations.push(() => this.#failOrigin(origin, failure));
         }
       }
     }
 
     connectionTerminations.forEach(cb => cb());
+  }
+
+  /**
+   * Fails `origin` after a push sent on it failed, and records it in
+   * `#failedSockets` so the pushes it queued behind that one are not sent.
+   *
+   * If the client has reconnected since sending the push, the old socket is
+   * already gone and the client re-sends its mutations on the new one. Failing
+   * the new socket would put the client in its error state, rejecting its
+   * outstanding mutations, for a failure it has already recovered from.
+   */
+  #failOrigin(origin: ConnectionContext, errorBody: PushFailedBody): void {
+    this.#failedSockets.set(origin.clientID, origin.wsID);
+    const client = this.#clients.get(origin.clientID);
+    if (client?.wsID === origin.wsID) {
+      this.#failDownstream(client.downstream, errorBody);
+    }
   }
 
   async #processPush(entry: PusherEntry): Promise<MutateResponse> {
