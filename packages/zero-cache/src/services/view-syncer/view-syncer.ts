@@ -182,6 +182,11 @@ export interface ViewSyncer {
 
   readonly queryCount: number;
   readonly rowCount: number;
+  /**
+   * The time its queries took to hydrate, which its client group's
+   * reconnect costs the view-syncer it lands on.
+   */
+  readonly hydrationTimeMs: number;
   readonly createdAtMs: number;
   readonly servedVersion: string | null;
   readonly servingLagEligible: boolean;
@@ -1134,6 +1139,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   get queryCount(): number {
     return this.#pipelines.initialized() ? this.#pipelines.queries().size : 0;
+  }
+
+  get hydrationTimeMs(): number {
+    return this.#totalHydrationTimeMs();
   }
 
   pipelineHashes(): readonly PipelineHashInfo[] {

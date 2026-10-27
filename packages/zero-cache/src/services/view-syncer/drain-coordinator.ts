@@ -5,7 +5,7 @@ type DrainListener = () => void;
 
 // The target (additional) utilization to impose on the server
 // that receives the drained connections.
-const TARGET_UTILIZATION = 0.6;
+export const TARGET_UTILIZATION = 0.6;
 
 /**
  * There are two types of drains:

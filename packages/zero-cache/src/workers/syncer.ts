@@ -34,7 +34,10 @@ import type {
   SingletonService,
 } from '../services/service.ts';
 import type {ConnectionContextManager} from '../services/view-syncer/connection-context-manager.ts';
-import {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
+import {
+  DrainCoordinator,
+  TARGET_UTILIZATION,
+} from '../services/view-syncer/drain-coordinator.ts';
 import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
 import type {ClientGroupStatusMessage, Worker} from '../types/processes.ts';
 import type {Subscription} from '../types/subscription.ts';
@@ -518,6 +521,21 @@ export class Syncer implements SingletonService {
         total += vs.queryCount;
       }
       result.observe(total);
+    });
+
+    getOrCreateGauge('sync', 'drain-time', {
+      description:
+        'How long a graceful shutdown would take to release every client ' +
+        'group, pacing their disconnects by their hydration times as drain() ' +
+        'does. A pod drains its workers in parallel, so its drain takes the ' +
+        'longest of theirs.',
+      unit: 's',
+    }).addCallback(result => {
+      let hydrationTimeMs = 0;
+      for (const vs of this.#viewSyncers.getServices()) {
+        hydrationTimeMs += vs.hydrationTimeMs;
+      }
+      result.observe(hydrationTimeMs / TARGET_UTILIZATION / 1000);
     });
 
     getOrCreateGauge(
