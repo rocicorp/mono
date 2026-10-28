@@ -28,6 +28,9 @@ auditConfig:
     # sprintf-js 1.0.3, via argparse 1 (js-yaml 3 in Docusaurus,
     # @tantaman/api-extractor in zql-viz). No 1.1.4 on npm yet.
     - GHSA-hp3w-g68c-fv3c
+    # deepmerge >=4.2.0 <=4.3.1, via @expo/config (Expo devDependencies). No
+    # 4.3.2 on npm yet.
+    - GHSA-gcqx-w48m-w2h4
 
 minimumReleaseAgeExclude:
   - '@rocicorp/zero-virtual@0.7.0'
