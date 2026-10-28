@@ -28,6 +28,7 @@ export class HttpService implements Service {
   readonly #init: (fastify: FastifyInstance) => void | Promise<void>;
 
   #ready = false;
+  #failReadinessChecks = false;
   #failHealthChecks = false;
 
   constructor(
@@ -59,7 +60,7 @@ export class HttpService implements Service {
   // run() is the lifecycle method called by the ServiceRunner.
   async start(): Promise<string> {
     this.#fastify.get('/', (_req, res) => {
-      if (this.#failHealthChecks) {
+      if (this.#failReadinessChecks || this.#failHealthChecks) {
         res.code(503).send('Draining');
       } else if (this.#ready) {
         res.send('OK');
@@ -96,6 +97,12 @@ export class HttpService implements Service {
   failHealthChecks() {
     this._lc.info?.(`${this.id}: failing health checks to self drain`);
     this.#failHealthChecks = true;
+  }
+
+  /** Withdraws readiness while keeping liveness and existing traffic healthy. */
+  failReadinessChecks() {
+    this._lc.info?.(`${this.id}: failing readiness checks to drain`);
+    this.#failReadinessChecks = true;
   }
 
   /**

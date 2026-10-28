@@ -906,6 +906,24 @@ export const zeroOptions = {
     desc: [`The port for sync connections.`],
   },
 
+  shutdownDelayMs: {
+    type: v
+      .number()
+      .assert(value => value >= 0, 'must be nonnegative')
+      .optional(() => 0),
+    desc: [
+      `On {bold SIGTERM} or {bold SIGINT}, immediately fail readiness checks at "/",`,
+      `then wait this many milliseconds before closing the listener and draining clients.`,
+      `Liveness checks at "/keepalive" remain healthy during this delay unless the server`,
+      `has already requested its own restart. This gives load balancers time to stop routing`,
+      `new connections, including sticky reconnects, to the outgoing server.`,
+      ``,
+      `The default of 0 preserves immediate draining. Set this to exceed readiness probe`,
+      `detection and routing propagation time. The container termination grace period must`,
+      `cover this delay plus the client drain and any pre-stop hooks.`,
+    ],
+  },
+
   selfDrainDelayMs: {
     type: v.number().optional(() => 0),
     desc: [

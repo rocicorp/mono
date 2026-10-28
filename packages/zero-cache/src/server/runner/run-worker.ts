@@ -55,7 +55,6 @@ export async function runWorker(
 
   const defaultTaskID = await getTaskID(lc);
   const config = normalizeZeroConfig(lc, cfg, env, defaultTaskID);
-  const processes = new ProcessManager(lc, parent ?? process);
 
   const {port, keepaliveTimeoutMs, lazyStartup, selfDrainDelayMs} = config;
   const serverVersion = getServerVersion(config);
@@ -73,6 +72,9 @@ export async function runWorker(
     {port, keepaliveTimeoutMs},
     startZeroCache,
     () => printStartupMessage(env),
+  );
+  const processes = new ProcessManager(lc, parent ?? process, () =>
+    dispatcher.drain(),
   );
   const selfDrain = new SelfDrain(lc, parent ?? process, {
     delayMs: selfDrainDelayMs,

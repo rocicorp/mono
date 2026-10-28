@@ -19,6 +19,8 @@ export class ZeroDispatcher extends HttpService {
   readonly id = 'zero-dispatcher';
   readonly #getWorker: () => Promise<Worker>;
   readonly #onStart: (() => void) | undefined;
+  readonly #shutdownDelayMs: number;
+  #draining: Promise<void> | undefined;
 
   constructor(
     config: NormalizedZeroConfig,
@@ -47,6 +49,21 @@ export class ZeroDispatcher extends HttpService {
     });
     this.#getWorker = getWorker;
     this.#onStart = onStart;
+    this.#shutdownDelayMs = config.shutdownDelayMs;
+  }
+
+  // Shared with ProcessManager so the listener and its workers remain available
+  // until readiness withdrawal has propagated to the load balancer.
+  drain(): Promise<void> {
+    return (this.#draining ??= this.#prepareToDrain());
+  }
+
+  async #prepareToDrain(): Promise<void> {
+    this.failReadinessChecks();
+    if (this.#shutdownDelayMs > 0) {
+      this._lc.info?.(`waiting ${this.#shutdownDelayMs} ms before draining`);
+      await this._state.sleep(this.#shutdownDelayMs);
+    }
   }
 
   protected override _onStart() {

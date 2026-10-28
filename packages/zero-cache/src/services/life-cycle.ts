@@ -117,18 +117,25 @@ export class ProcessManager {
   readonly #exitImpl: (code: number) => never;
   readonly #start = Date.now();
   readonly #ready: Promise<void>[] = [];
+  readonly #beforeDrain: (() => Promise<void>) | undefined;
 
   #runningState = new RunningState('process-manager');
   #drainStart = 0;
+  #drainStarted = false;
 
-  constructor(lc: LogContext, proc: EventEmitter) {
+  constructor(
+    lc: LogContext,
+    proc: EventEmitter,
+    beforeDrain?: () => Promise<void>,
+  ) {
     this.#lc = lc.withContext('component', 'process-manager');
+    this.#beforeDrain = beforeDrain;
 
     // Propagate `SIGTERM` and `SIGINT` to all user-facing workers,
     // initiating a graceful shutdown. The parent process will
     // exit once all user-facing workers have exited ...
     for (const signal of GRACEFUL_SHUTDOWN) {
-      proc.on(signal, () => this.#startDrain(signal));
+      proc.on(signal, () => void this.#startDrain(signal));
     }
 
     // ... which will result in sending `SIGTERM` to the remaining workers.
@@ -165,8 +172,8 @@ export class ProcessManager {
   }
 
   async shutdown() {
-    if (this.#drainStart === 0) {
-      this.#startDrain(GRACEFUL_SHUTDOWN[0]);
+    if (!this.#drainStarted) {
+      void this.#startDrain(GRACEFUL_SHUTDOWN[0]);
     }
     await this.#runningState.stopped();
   }
@@ -177,14 +184,31 @@ export class ProcessManager {
     void this.#lc.flush().finally(() => this.#exitImpl(code));
   }
 
-  #startDrain(signal: GracefulShutdownSignal) {
+  async #startDrain(signal: GracefulShutdownSignal) {
+    if (this.#drainStarted || !this.#runningState.shouldRun()) {
+      return;
+    }
+    this.#drainStarted = true;
     if (this.#all.size === 0) {
       // Shutdown if a signal is received before any subprocesses are added.
       this.#lc.info?.(`exiting on ${signal}`);
       this.#exit(0);
+      return;
     }
     this.#lc.info?.(`initiating drain (${signal})`);
     this.#drainStart = Date.now();
+    if (this.#beforeDrain) {
+      try {
+        await this.#beforeDrain();
+      } catch (e) {
+        this.#lc.warn?.('error preparing to drain', e);
+      }
+      // A forceful signal or worker failure can end the process while the
+      // readiness delay is pending. Do not send another signal afterwards.
+      if (!this.#runningState.shouldRun()) {
+        return;
+      }
+    }
     if (this.#userFacing.size) {
       this.#kill(this.#userFacing, signal);
     } else {
