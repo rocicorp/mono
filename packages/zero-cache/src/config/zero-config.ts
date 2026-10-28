@@ -144,8 +144,6 @@ const perUserMutationLimit = {
   },
 };
 
-export type RateLimit = Config<typeof perUserMutationLimit>;
-
 const authOptions = {
   jwk: {
     type: v.string().optional(),

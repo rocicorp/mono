@@ -26,13 +26,6 @@ function* mapIter<T, U>(
   }
 }
 
-export function first<T>(stream: Iterable<T>): T | undefined {
-  const it = stream[Symbol.iterator]();
-  const {value} = it.next();
-  it.return?.();
-  return value;
-}
-
 export function* once<T>(stream: Iterable<T>): Iterable<T> {
   const it = stream[Symbol.iterator]();
   const {value} = it.next();

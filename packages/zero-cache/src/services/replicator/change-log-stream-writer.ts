@@ -24,7 +24,7 @@ export type ChangeLogStreamTransactionStats = {
   readonly cookieMutations: readonly CookieOpTag[];
 };
 
-export class ChangeLogStreamInvariantError extends Error {
+class ChangeLogStreamInvariantError extends Error {
   override readonly name = 'ChangeLogStreamInvariantError';
 }
 

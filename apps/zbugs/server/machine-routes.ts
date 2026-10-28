@@ -31,7 +31,7 @@ function parseIssueID(idStr: string) {
 // per-user relationships (viewState, notificationState) and the comment
 // preload: the markdown view has no per-user state, and comments are fetched
 // separately below. Uses the same applyIssuePermissions gate as issueDetail.
-export function issueForMdQuery(
+function issueForMdQuery(
   idField: 'shortID' | 'id',
   idValue: string | number,
   role: Role | undefined,

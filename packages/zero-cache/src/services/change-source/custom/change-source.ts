@@ -198,7 +198,7 @@ class CustomChangeSource implements ChangeSource {
  * at initial sync time is the `replicaVersion` (and starting
  * version for all initially-synced rows).
  */
-export async function initialSync(
+async function initialSync(
   lc: LogContext,
   shard: ShardConfig,
   tx: Database,

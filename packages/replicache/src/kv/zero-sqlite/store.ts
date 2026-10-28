@@ -7,11 +7,10 @@ import type {
 } from '../sqlite-store.ts';
 import {dropStore, SQLiteStore} from '../sqlite-store.ts';
 import type {StoreProvider} from '../store.ts';
-export {safeFilename} from '../sqlite-store.ts';
 
 export type ZeroSQLiteStoreOptions = SQLiteStoreOptions;
 
-export function dropZeroSQLiteStore(
+function dropZeroSQLiteStore(
   name: string,
   opts?: ZeroSQLiteStoreOptions,
 ): Promise<void> {

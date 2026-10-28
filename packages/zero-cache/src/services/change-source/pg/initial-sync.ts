@@ -832,7 +832,7 @@ export function verifyShadowReplica(
  * expression, or `null` if the table is published without a filter.
  */
 
-export function publicationRowFilter(table: PublishedTableSpec): string | null {
+function publicationRowFilter(table: PublishedTableSpec): string | null {
   const rowFilters = Object.values(table.publications).map(
     ({rowFilter}) => rowFilter,
   );

@@ -406,7 +406,7 @@ function queryPatchOpToReplicachePatchOp(
   }
 }
 
-export function mutationPatchOpToReplicachePatchOp(
+function mutationPatchOpToReplicachePatchOp(
   op: MutationPatch,
 ): PatchOperationInternal {
   switch (op.op) {

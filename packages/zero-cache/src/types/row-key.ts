@@ -2,15 +2,10 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {stringify, type JSONValue} from '../../../shared/src/bigint-json.ts';
 import {getOrInsertComputed} from '../../../shared/src/map.ts';
 
-export type ColumnType = {readonly typeOid: number};
-export type RowKeyType = Readonly<Record<string, ColumnType>>;
 export type RowKey = Readonly<Record<string, JSONValue>>;
 
 export type RowID = Readonly<{schema: string; table: string; rowKey: RowKey}>;
 
-// Aliased for documentation purposes when dealing with full rows vs row keys.
-// The actual structure of the objects is the same.
-export type RowType = RowKeyType;
 export type RowValue = RowKey;
 
 /**

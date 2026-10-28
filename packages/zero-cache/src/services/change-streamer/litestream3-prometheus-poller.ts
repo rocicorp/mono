@@ -14,13 +14,13 @@ import {
 import {RunningState, UnrecoverableError} from '../running-state.ts';
 import type {BackedUpWatermark, BackupPoller} from './backup-monitor.ts';
 
-export const CHECK_INTERVAL_MS = 10_000;
+const CHECK_INTERVAL_MS = 10_000;
 
 /**
  * Allowance for clock skew between the machine reporting litestream metrics
  * and the timestamps reported by the backup destination (e.g. S3).
  */
-export const BACKUP_VERIFICATION_SLACK_MS = 60_000;
+const BACKUP_VERIFICATION_SLACK_MS = 60_000;
 
 /**
  * How long the actual backup state may remain *continuously* behind the
@@ -63,13 +63,6 @@ const GiB = 1024 ** 3;
  */
 export const INITIAL_BACKUP_GRACE_MS_PER_UNIT = 60 * 60_000; // 1 hour ...
 const INITIAL_BACKUP_GRACE_UNIT_BYTES = 50 * GiB; // ... per 50 GiB
-
-/**
- * How often the BackupMonitor re-checks whether the first restorable backup has
- * appeared while a view-syncer holds a snapshot reservation open during a cold
- * start.
- */
-export const RESTORABLE_BACKUP_POLL_INTERVAL_MS = 10_000;
 
 /**
  * Returns the time of the most recent object actually uploaded to the

@@ -45,7 +45,7 @@ export type TableCRUD<S extends TableSchema> = {
 
 export type CRUDKind = keyof TableCRUD<TableSchema>;
 
-export const CRUD_KINDS = ['insert', 'upsert', 'update', 'delete'] as const;
+const CRUD_KINDS = ['insert', 'upsert', 'update', 'delete'] as const;
 
 export type DeleteID<S extends TableSchema> = Expand<PrimaryKeyFields<S>>;
 
@@ -209,7 +209,7 @@ export type CRUDMutator<
   ['~']: Expand<CRUDMutatorTypes<TSchema, TTable, TKind, TArgs>>;
 };
 
-export type CRUDMutatorTypes<
+type CRUDMutatorTypes<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TKind extends keyof TableMutator<TSchema['tables'][TTable]>,
@@ -229,4 +229,4 @@ export type CRUDMutateRequest<
 };
 
 // oxlint-disable-next-line no-explicit-any
-export type AnyCRUDMutateRequest = CRUDMutateRequest<any, any, CRUDKind, any>;
+type AnyCRUDMutateRequest = CRUDMutateRequest<any, any, CRUDKind, any>;

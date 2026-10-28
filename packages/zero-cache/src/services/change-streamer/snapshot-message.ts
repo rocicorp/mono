@@ -40,10 +40,6 @@ export const statusSchema = v.object({
   replicaSize: v.number().optional(),
 });
 
-export type SnapshotStatus = v.Infer<typeof statusSchema>;
-
-export const statusMessageSchema = v.tuple([v.literal('status'), statusSchema]);
-
-export const snapshotMessageSchema = v.union(statusMessageSchema);
+const statusMessageSchema = v.tuple([v.literal('status'), statusSchema]);
 
 export type SnapshotMessage = v.Infer<typeof statusMessageSchema>;

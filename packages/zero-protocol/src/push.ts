@@ -80,7 +80,7 @@ export const pushErrorSchema = v.union(
   zeroPusherErrorSchema,
 );
 
-export const pushResponseBodySchema = v.union(pushOkSchema, pushErrorSchema);
+const pushResponseBodySchema = v.union(pushOkSchema, pushErrorSchema);
 
 export const pushResponseSchema = v.union(
   pushResponseBodySchema,
@@ -99,7 +99,6 @@ export const ackMutationResponsesMessageSchema = v.tuple([
 export type PushBody = v.Infer<typeof pushBodySchema>;
 export type PushMessage = v.Infer<typeof pushMessageSchema>;
 export type PushResponseBody = v.Infer<typeof pushResponseBodySchema>;
-export type PushResponse = v.Infer<typeof pushResponseSchema>;
 export type PushResponseMessage = v.Infer<typeof pushResponseMessageSchema>;
 export type MutationResponse = v.Infer<typeof mutationResponseSchema>;
 /**
@@ -107,6 +106,3 @@ export type MutationResponse = v.Infer<typeof mutationResponseSchema>;
  */
 export type PushError = v.Infer<typeof pushErrorSchema>;
 export type PushOk = v.Infer<typeof pushOkSchema>;
-export type AckMutationMessage = v.Infer<
-  typeof ackMutationResponsesMessageSchema
->;

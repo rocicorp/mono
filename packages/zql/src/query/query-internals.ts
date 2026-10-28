@@ -100,25 +100,3 @@ export function asQueryInternals<
   );
   return query as unknown as QueryInternals<TTable, TSchema, TReturn>;
 }
-
-export function isQueryInternals<
-  TTable extends keyof TSchema['tables'] & string,
-  TSchema extends ZeroSchema,
-  TReturn,
->(obj: unknown): obj is QueryInternals<TTable, TSchema, TReturn> {
-  return typeof obj === 'object' && obj !== null && queryInternalsTag in obj;
-}
-
-export function asQuery<
-  TTable extends keyof TSchema['tables'] & string,
-  TSchema extends ZeroSchema,
-  TReturn,
->(
-  queryInternals: QueryInternals<TTable, TSchema, TReturn>,
-): Query<TTable, TSchema, TReturn> {
-  assert(queryInternalsTag in queryInternals, 'Expected query internals tag');
-  return queryInternals as unknown as Query<TTable, TSchema, TReturn>;
-}
-
-// oxlint-disable-next-line no-explicit-any
-export type AnyQueryInternals = QueryInternals<string, ZeroSchema, any>;

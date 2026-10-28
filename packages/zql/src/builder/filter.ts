@@ -10,7 +10,7 @@ import {simplifyCondition} from '../query/expression.ts';
 import {getLikePredicate} from './like.ts';
 
 export type NonNullValue = Exclude<Value, null | undefined>;
-export type SimplePredicate = (rhs: Value) => boolean;
+type SimplePredicate = (rhs: Value) => boolean;
 export type SimplePredicateNoNull = (rhs: NonNullValue) => boolean;
 
 export type NoSubqueryCondition =

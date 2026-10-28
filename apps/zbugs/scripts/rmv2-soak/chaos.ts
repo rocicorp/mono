@@ -51,7 +51,7 @@ export type ChaosAction = {
   readonly run: (ctx: ChaosContext, out: MutableOutcome) => Promise<void>;
 };
 
-export type MutableOutcome = {
+type MutableOutcome = {
   /** When the action started; the lower bound for its own event window. */
   startedMs: number;
   notes: string[];

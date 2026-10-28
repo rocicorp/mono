@@ -14,7 +14,7 @@ import type {AnyTransaction, Transaction} from './custom.ts';
 // defineMutator
 // ----------------------------------------------------------------------------
 
-export type MutatorDefinitionTypes<
+type MutatorDefinitionTypes<
   TInput extends ReadonlyJSONValue | undefined,
   TOutput,
   TContext,

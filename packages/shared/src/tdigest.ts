@@ -450,30 +450,6 @@ export class TDigest {
   }
 }
 
-// Calculate number of bytes needed for a tdigest of size c,
-// where c is the compression value
-export function byteSizeForCompression(comp: number): number {
-  const c = comp | 0;
-  // // A centroid is 2 float64s, so we need 16 bytes for each centroid
-  // float_size := 8
-  // centroid_size := 2 * float_size
-
-  // // Unprocessed and processed can grow up to length c
-  // unprocessed_size := centroid_size * c
-  // processed_size := unprocessed_size
-
-  // // the cumulative field can also be of length c, but each item is a single float64
-  // cumulative_size := float_size * c // <- this could also be unprocessed_size / 2
-
-  // return unprocessed_size + processed_size + cumulative_size
-
-  // // or, more succinctly:
-  // return float_size * c * 5
-
-  // or even more succinctly
-  return c * 40;
-}
-
 function isSorted(values: Float64Array): boolean {
   for (let i = 1; i < values.length; i++) {
     if (values[i] < values[i - 1]) {

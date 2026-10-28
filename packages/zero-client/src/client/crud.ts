@@ -140,7 +140,7 @@ function makeEntityCRUDMutate<S extends TableSchema>(
  * Creates the `{insert, upsert, update, delete}` object for use inside a
  * batch.
  */
-export function makeBatchCRUDMutate<S extends TableSchema>(
+function makeBatchCRUDMutate<S extends TableSchema>(
   tableName: string,
   schema: Schema,
   ops: CRUDOp[],
@@ -194,7 +194,7 @@ export type WithCRUD<MD extends MutatorDefs> = MD & {
   [CRUD_MUTATION_NAME]: CRUDMutator;
 };
 
-export type CRUDMutate = (crudArg: CRUDMutationArg) => Promise<void>;
+type CRUDMutate = (crudArg: CRUDMutationArg) => Promise<void>;
 
 export type CRUDMutator = (
   tx: WriteTransaction,

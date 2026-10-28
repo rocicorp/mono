@@ -11,7 +11,7 @@ import {upQueriesPatchSchema} from './queries-patch.ts';
  * syncing lots of queries which are no longer desired by the client.
  */
 
-export const connectedBodySchema = v.object({
+const connectedBodySchema = v.object({
   wsid: v.string(),
   timestamp: v.number().optional(),
 });
@@ -52,7 +52,6 @@ export const initConnectionMessageSchema = v.tuple([
   initConnectionBodySchema,
 ]);
 
-export type ConnectedBody = v.Infer<typeof connectedBodySchema>;
 export type ConnectedMessage = v.Infer<typeof connectedMessageSchema>;
 export type InitConnectionBody = v.Infer<typeof initConnectionBodySchema>;
 export type InitConnectionMessage = v.Infer<typeof initConnectionMessageSchema>;

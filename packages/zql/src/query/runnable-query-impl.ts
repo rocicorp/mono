@@ -64,7 +64,7 @@ export function newRunnableQuery<
   return created;
 }
 
-export class RunnableQueryImpl<
+class RunnableQueryImpl<
   TTable extends keyof TSchema['tables'] & string,
   TSchema extends Schema,
   TReturn = PullRow<TTable, TSchema>,

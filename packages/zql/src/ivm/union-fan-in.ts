@@ -298,7 +298,7 @@ function* mapNodes(
   }
 }
 
-export function* mergeFetches(
+function* mergeFetches(
   fetches: Iterable<Node | 'yield'>[],
   comparator: (l: Node, r: Node) => number,
 ): IterableIterator<Node | 'yield'> {

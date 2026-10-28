@@ -11,7 +11,7 @@ import {publishedSchema, publishedSchemaQuery} from './published.ts';
 //
 // Increment this when changing the format of the contents of the "ddl" events.
 // This will allow old / incompatible code to detect the change and abort.
-export const PROTOCOL_VERSION = 1;
+const PROTOCOL_VERSION = 1;
 
 // In protocol v2 (planned, not yet emitted), "ddlStart" events that are not
 // associated with a schema change will be context-only, omitting the
@@ -29,7 +29,7 @@ const triggerEvent = v.object({
   context: v.object({query: v.string()}).rest(v.string()),
 });
 
-export const ddlEventSchema = triggerEvent.extend({
+const ddlEventSchema = triggerEvent.extend({
   version: versionSchema,
   event: v.object({tag: v.string()}),
   // Maps the OID of each published table to the `attnum`s of published

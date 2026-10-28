@@ -3,7 +3,7 @@ import * as v from '../../shared/src/valita.ts';
 import {astSchema} from './ast.ts';
 import {transformFailedBodySchema} from './error.ts';
 
-export const transformRequestBodySchema = v.array(
+const transformRequestBodySchema = v.array(
   v.object({
     id: v.string(),
     name: v.string(),
@@ -18,7 +18,7 @@ export const transformedQuerySchema = v.object({
   ast: astSchema,
 });
 
-export const appErroredQuerySchema = v.object({
+const appErroredQuerySchema = v.object({
   error: v.literal('app'),
   id: v.string(),
   name: v.string(),
@@ -26,7 +26,7 @@ export const appErroredQuerySchema = v.object({
   message: v.string().optional(),
   details: jsonSchema.optional(),
 });
-export const parseErroredQuerySchema = v.object({
+const parseErroredQuerySchema = v.object({
   error: v.literal('parse'),
   id: v.string(),
   name: v.string(),
@@ -39,7 +39,7 @@ export const erroredQuerySchema = v.union(
 );
 export type ErroredQuery = v.Infer<typeof erroredQuerySchema>;
 
-export const transformResponseBodySchema = v.array(
+const transformResponseBodySchema = v.array(
   v.union(transformedQuerySchema, erroredQuerySchema),
 );
 export type TransformResponseBody = v.Infer<typeof transformResponseBodySchema>;
@@ -55,7 +55,6 @@ export const transformErrorMessageSchema = v.tuple([
   v.literal('transformError'),
   v.array(erroredQuerySchema),
 ]);
-export type TransformErrorMessage = v.Infer<typeof transformErrorMessageSchema>;
 
 const transformFailedMessageSchema = v.tuple([
   v.literal('transformFailed'),

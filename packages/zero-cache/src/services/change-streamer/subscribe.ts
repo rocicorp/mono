@@ -46,14 +46,14 @@ export type SnapshotStatus = v.Infer<typeof snapshotStatusSchema>;
  * replica (i.e. one that was serving, see `RestoreAdmission`) from one that
  * is restoring onto an empty disk.
  */
-export const localReplicaSchema = v.object({
+const localReplicaSchema = v.object({
   replicaVersion: v.string(),
   watermark: v.string(),
 });
 
 export type LocalReplica = v.Infer<typeof localReplicaSchema>;
 
-export const reserveSnapshotMessageSchema = v.tuple([
+const reserveSnapshotMessageSchema = v.tuple([
   v.literal('reserve-snapshot'),
   v.object({
     taskID: v.string(),
@@ -71,7 +71,7 @@ export const reserveSnapshotMessageSchema = v.tuple([
  * Parsed in `passthrough` mode so a forthcoming, orthogonal change can add
  * arbitrary table/column/backfill state without a protocol bump.
  */
-export const subscribeContextSchema = v.object({
+const subscribeContextSchema = v.object({
   /** Task ID, links the subscription to a preceding snapshot reservation. */
   taskID: v.string(),
   /** Subscriber id (debugging only). */
@@ -96,7 +96,7 @@ export const subscribeContextSchema = v.object({
 
 export type SubscribeContext = v.Infer<typeof subscribeContextSchema>;
 
-export const startSubscriptionMessageSchema = v.tuple([
+const startSubscriptionMessageSchema = v.tuple([
   v.literal('start-subscription'),
   subscribeContextSchema,
 ]);
@@ -118,7 +118,7 @@ export type SubscribeUpstream = v.Infer<typeof subscribeUpstreamSchema>;
  * `replicaSize?`) but under a distinct `'reserved'` tag so it does not collide
  * with the change stream's `['status', …]` message.
  */
-export const reservedMessageSchema = v.tuple([
+const reservedMessageSchema = v.tuple([
   v.literal('reserved'),
   snapshotStatusSchema,
 ]);

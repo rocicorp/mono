@@ -18,7 +18,7 @@ import {rowSchema, type Row} from './data.ts';
 
 export const SUBQ_PREFIX = 'zsubq_';
 
-export const selectorSchema = v.string();
+const selectorSchema = v.string();
 export const toStaticParam = Symbol();
 export const planIdSymbol = Symbol('planId');
 
@@ -28,13 +28,6 @@ const orderingElementSchema = v.readonly(
 
 export const orderingSchema = v.readonlyArray(orderingElementSchema);
 export type System = 'permissions' | 'client' | 'test';
-
-export const primitiveSchema = v.union(
-  v.string(),
-  v.number(),
-  v.boolean(),
-  v.null(),
-);
 
 export const equalityOpsSchema = v.literalUnion('=', '!=', 'IS', 'IS NOT');
 
@@ -47,7 +40,7 @@ export const likeOpsSchema = v.literalUnion(
   'NOT ILIKE',
 );
 
-export const inOpsSchema = v.literalUnion('IN', 'NOT IN');
+const inOpsSchema = v.literalUnion('IN', 'NOT IN');
 
 export const simpleOperatorSchema = v.union(
   equalityOpsSchema,
@@ -107,7 +100,7 @@ const conditionValueSchema = v.union(
 
 export type Parameter = v.Infer<typeof parameterReferenceSchema>;
 
-export const simpleConditionSchema: v.Type<SimpleCondition> = v.readonlyObject({
+const simpleConditionSchema: v.Type<SimpleCondition> = v.readonlyObject({
   type: v.literal('simple'),
   op: simpleOperatorSchema,
   left: conditionValueSchema,

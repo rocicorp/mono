@@ -5,7 +5,7 @@ import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {MutationID} from '../../../zero-protocol/src/mutation-id.ts';
 import {primaryKeyValueSchema} from '../../../zero-protocol/src/primary-key.ts';
 
-export const DESIRED_QUERIES_KEY_PREFIX = 'd/';
+const DESIRED_QUERIES_KEY_PREFIX = 'd/';
 export const GOT_QUERIES_KEY_PREFIX = 'g/';
 export const ENTITIES_KEY_PREFIX = 'e/';
 export const MUTATIONS_KEY_PREFIX = 'm/';

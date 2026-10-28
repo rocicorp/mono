@@ -15,7 +15,7 @@ import type {SubscriptionState} from '../../replicator/schema/replication-state.
 import type {ChangeSource} from '../change-source.ts';
 import type {InitCleanup} from './init-cleanup.ts';
 
-export interface PurgeLock {
+interface PurgeLock {
   release(): Promise<void>;
 }
 

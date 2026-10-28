@@ -11,17 +11,13 @@ export const changeSourceReportSchema = v.object({
   nextSendTimeMs: v.number(),
 });
 
-export const replicationTimingsSchema = changeSourceTimingsSchema.extend({
+const replicationTimingsSchema = changeSourceTimingsSchema.extend({
   replicateTimeMs: v.number(),
 });
 
-export const replicationReportSchema = v.object({
+const replicationReportSchema = v.object({
   lastTimings: replicationTimingsSchema.optional(),
   nextSendTimeMs: v.number(),
 });
 
-export type ChangeSourceTimings = v.Infer<typeof changeSourceTimingsSchema>;
-export type ChangeSourceReport = v.Infer<typeof changeSourceReportSchema>;
-
-export type ReplicationTimings = v.Infer<typeof replicationTimingsSchema>;
 export type ReplicationReport = v.Infer<typeof replicationReportSchema>;

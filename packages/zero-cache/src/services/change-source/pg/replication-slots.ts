@@ -95,7 +95,7 @@ export const CREATE_REPLICATION_SLOT_TIMEOUT_MS = 60_000;
 const SERVER_LOCK_TIMEOUT_MS = CREATE_REPLICATION_SLOT_TIMEOUT_MS - 1_000;
 
 /** Thrown when the client-side timeout for creating a slot is reached. */
-export class SlotCreationTimeoutError extends Error {
+class SlotCreationTimeoutError extends Error {
   readonly name = 'SlotCreationTimeoutError';
 }
 

@@ -36,7 +36,7 @@ function mustInject<K extends keyof ProvidedContext>(key: K) {
 // Set by ./test/pg-container-setup.ts
 const CONNECTION_URI = mustInject('pgConnectionString');
 
-export type OnNoticeFn = (n: postgres.Notice) => void;
+type OnNoticeFn = (n: postgres.Notice) => void;
 
 export type TestDBOptions = {
   onNotice?: OnNoticeFn;

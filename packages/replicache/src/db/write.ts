@@ -348,7 +348,7 @@ export async function newWriteSnapshotDD31(
   );
 }
 
-export async function updateIndexes(
+async function updateIndexes(
   lc: LogContext,
   map: BTreeRead,
   indexes: Map<string, IndexWrite>,
@@ -393,7 +393,7 @@ export async function updateIndexes(
   await Promise.all(ps);
 }
 
-export function readIndexesForWrite(
+function readIndexesForWrite(
   commit: Commit<CommitMeta>,
   dagWrite: DagWrite,
   formatVersion: FormatVersion,

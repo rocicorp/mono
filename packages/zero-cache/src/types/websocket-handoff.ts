@@ -45,7 +45,7 @@ export type WebSocketHandoffHandler = (
  * receiving requests, or a parent Worker process
  * that is handing off requests to this process.
  */
-export function createWebSocketHandoffHandler<P>(
+function createWebSocketHandoffHandler<P>(
   lc: LogContext,
   handoff: WebSocketHandoff<P>,
   serverOptions?: ServerOptions,

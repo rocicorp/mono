@@ -68,7 +68,7 @@ export async function startMinio(config: SoakConfig): Promise<void> {
   await waitForMinio(config, 120_000);
 }
 
-export async function waitForMinio(
+async function waitForMinio(
   config: SoakConfig,
   timeoutMs: number,
 ): Promise<void> {
@@ -91,7 +91,7 @@ export async function waitForMinio(
   throw new Error(`minio did not become healthy: ${String(lastError)}`);
 }
 
-export function s3Client(config: SoakConfig): S3Client {
+function s3Client(config: SoakConfig): S3Client {
   return new S3Client({
     endpoint: config.s3Endpoint,
     region: config.s3Region,
@@ -115,7 +115,7 @@ export function s3Client(config: SoakConfig): S3Client {
  * s3://<bucket>/<generation>`. The configured path is therefore not a prefix
  * of anything, and the soak owns the whole bucket instead.
  */
-export function backupBucket(backupURL: string): string {
+function backupBucket(backupURL: string): string {
   const url = new URL(backupURL);
   if (url.protocol !== 's3:') {
     throw new Error(`expected an s3:// backup URL, got ${backupURL}`);

@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 
-export type TimeUnit = 's' | 'm' | 'h' | 'd' | 'y';
+type TimeUnit = 's' | 'm' | 'h' | 'd' | 'y';
 
 /**
  * Time To Live. This is used for query expiration.
@@ -16,10 +16,8 @@ export type TimeUnit = 's' | 'm' | 'h' | 'd' | 'y';
  */
 export type TTL = `${number}${TimeUnit}` | 'forever' | 'none' | number;
 
-export const DEFAULT_TTL: TTL = '5m';
 export const DEFAULT_TTL_MS = 1_000 * 60 * 5;
 
-export const DEFAULT_PRELOAD_TTL: TTL = 'none';
 export const DEFAULT_PRELOAD_TTL_MS = 0;
 
 export const MAX_TTL: TTL = '10m';

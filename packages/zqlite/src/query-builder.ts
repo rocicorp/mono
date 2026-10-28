@@ -181,7 +181,7 @@ function constraintsRejectNull(
   return multiConstraints?.some(mc => mc.length > 0 && field in mc[0]) === true;
 }
 
-export function constraintsToSQL(
+function constraintsToSQL(
   constraint: Constraint | undefined,
   columns: Record<string, SchemaValue>,
 ) {
@@ -256,7 +256,7 @@ export function multiConstraintToSQL(
   return sql`${colList} IN (VALUES ${sql.join(rows, sql`,`)})`;
 }
 
-export function orderByToSQL(order: Ordering, reverse: boolean): SQLQuery {
+function orderByToSQL(order: Ordering, reverse: boolean): SQLQuery {
   if (reverse) {
     return sql`ORDER BY ${sql.join(
       order.map(

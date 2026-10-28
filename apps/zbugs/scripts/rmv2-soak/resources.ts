@@ -22,7 +22,7 @@ import type {SoakLog} from './logs.ts';
  *    is that test.
  */
 
-export type SlotSample = {
+type SlotSample = {
   readonly slotName: string;
   readonly active: boolean;
   readonly retainedBytes: number;
@@ -103,7 +103,7 @@ export function sqlitePageUsage(
   }
 }
 
-export async function readSlots(
+async function readSlots(
   sql: postgres.Sql,
   slotPrefix: string,
 ): Promise<SlotSample[]> {

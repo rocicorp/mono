@@ -34,7 +34,7 @@ const listContextParams = z.object({
 });
 export type ListContextParams = z.infer<typeof listContextParams>;
 
-export const issueRowSortSchema = z.readonly(
+const issueRowSortSchema = z.readonly(
   z.object({
     id: z.string(),
     created: z.number(),
@@ -389,7 +389,7 @@ function alwaysFalse<
   return q.where(({or}) => or());
 }
 
-export function buildListQuery(args: ListQueryArgs) {
+function buildListQuery(args: ListQueryArgs) {
   const {
     issueQuery = builder.issue,
     limit,
@@ -490,6 +490,6 @@ export function buildListQuery(args: ListQueryArgs) {
   return applyIssuePermissions(q, role);
 }
 
-export type Issues = QueryResultType<typeof queries.issueListV2>;
+type Issues = QueryResultType<typeof queries.issueListV2>;
 
 export type Issue = Issues[number];

@@ -22,7 +22,7 @@ const SIMPLE_ESCAPES: Readonly<Record<string, string>> = {
   v: '\v',
 };
 
-export const unsupportedPredicateReasons = [
+const unsupportedPredicateReasons = [
   'unpublished-column',
   'unsupported-type',
   'unsupported-operator',

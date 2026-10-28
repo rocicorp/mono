@@ -147,7 +147,7 @@ export async function apply(
   }
 }
 
-export function mergeUpdate(
+function mergeUpdate(
   op: Extract<PatchOperationInternal, {op: 'update'}>,
   existing: ReadonlyJSONObject | undefined,
 ) {

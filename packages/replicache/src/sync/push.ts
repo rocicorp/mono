@@ -33,7 +33,7 @@ export const PUSH_VERSION_DD31 = 1;
 /**
  * Mutation describes a single mutation done on the client.
  */
-export type MutationV1 = {
+type MutationV1 = {
   readonly id: number;
   readonly name: string;
   readonly args: ReadonlyJSONValue;

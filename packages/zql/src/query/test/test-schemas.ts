@@ -161,7 +161,7 @@ const labelRelationships = relationships(label, ({many}) => ({
   ),
 }));
 
-export const schemaOptions = {
+const schemaOptions = {
   tables: [issue, user, comment, revision, label, issueLabel],
   relationships: [
     issueRelationships,
@@ -193,11 +193,9 @@ export const revisionSchema = schema.tables.revision;
 export const userSchema = schema.tables.user;
 
 export type Issue = Row<typeof issueSchema>;
-export type Comment = Row<typeof commentSchema>;
 export type IssueLabel = Row<typeof issueLabelSchema>;
 export type Label = Row<typeof labelSchema>;
 export type Revision = Row<typeof revisionSchema>;
-export type User = Row<typeof userSchema>;
 
 export const createTableSQL = /*sql*/ `
 CREATE TABLE IF NOT EXISTS "issues" (

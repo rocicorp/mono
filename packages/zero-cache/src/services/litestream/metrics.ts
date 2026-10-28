@@ -133,13 +133,6 @@ export function litestreamRestoreDuration() {
   );
 }
 
-export function litestreamRestoreWaitDuration() {
-  return litestreamDurationHistogram(
-    'litestream.restore.wait_duration',
-    'Time spent waiting for the replication-manager snapshot status before restoring.',
-  );
-}
-
 export function litestreamRestoreProcessDuration() {
   return litestreamDurationHistogram(
     'litestream.restore.process_duration',

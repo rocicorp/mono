@@ -1705,7 +1705,7 @@ function getTableDifference(
   return null;
 }
 
-export function relationDifferent(a: PublishedTableSpec, b: PostgresRelation) {
+function relationDifferent(a: PublishedTableSpec, b: PostgresRelation) {
   if (a.oid !== b.relationOid || a.schema !== b.schema || a.name !== b.name) {
     return true;
   }

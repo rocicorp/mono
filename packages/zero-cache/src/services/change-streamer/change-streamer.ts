@@ -201,7 +201,7 @@ export type SubscriberContext = {
  * The StatusMessage payload for now is empty, but can be extended to
  * include meta-level information in the future.
  */
-export const statusSchema = v.object({
+const statusSchema = v.object({
   tag: v.literal('status'),
 
   lagReport: v
@@ -243,15 +243,7 @@ export const statusSchema = v.object({
 
 export type Status = v.Infer<typeof statusSchema>;
 
-export const statusMessageSchema = v.tuple([v.literal('status'), statusSchema]);
-
-/**
- * A StatusMessage will be immediately sent on a (v2+) subscription to
- * indicate that the subscription is valid (i.e. starting at the requested
- * watermark). Invalid subscriptions will instead result in a
- * SubscriptionError as the first message.
- */
-export type StatusMessage = v.Infer<typeof statusMessageSchema>;
+const statusMessageSchema = v.tuple([v.literal('status'), statusSchema]);
 
 const subscriptionErrorSchema = v.object({
   type: v.number(), // ErrorType
@@ -264,8 +256,6 @@ const subscriptionErrorSchema = v.object({
   replicaVersion: v.string().optional(),
 });
 
-export type SubscriptionError = v.Infer<typeof subscriptionErrorSchema>;
-
 const errorSchema = v.tuple([v.literal('error'), subscriptionErrorSchema]);
 
 export const downstreamSchema = v.union(
@@ -273,8 +263,6 @@ export const downstreamSchema = v.union(
   changeStreamDataSchema,
   errorSchema,
 );
-
-export type Error = v.Infer<typeof errorSchema>;
 
 export function errorTypeToReadableName(val: ErrorType) {
   switch (val) {

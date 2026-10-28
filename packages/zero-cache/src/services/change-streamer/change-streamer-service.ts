@@ -137,7 +137,7 @@ export type SQLiteCatchupOptions = {
   notReadyWarnThresholdMs?: number | undefined;
 };
 
-export type SQLiteChangeLogServeOptions = {
+type SQLiteChangeLogServeOptions = {
   /** Stable percentage of eligible serving tasks routed to SQLite. */
   readPercent: number;
   /**

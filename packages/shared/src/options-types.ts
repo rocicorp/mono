@@ -37,7 +37,7 @@ export type WrappedOptionType = {
   hidden?: boolean;
 };
 
-export type Option = OptionType | WrappedOptionType;
+type Option = OptionType | WrappedOptionType;
 
 // Related Options can be grouped.
 export type Group = Record<string, Option>;

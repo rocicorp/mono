@@ -1,20 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {ident} from 'pg-format';
 import type postgres from 'postgres';
-import {
-  type JSONObject,
-  type JSONValue,
-  stringify,
-} from '../../../../../../shared/src/bigint-json.ts';
-import {stringCompare} from '../../../../../../shared/src/string-compare.ts';
-import {normalizedKeyOrder, type RowKey} from '../../../../types/row-key.ts';
 import {cvrSchema, type ShardID} from '../../../../types/shards.ts';
-import {
-  type RowID,
-  type RowRecord,
-  versionFromString,
-  versionString,
-} from '../types.ts';
 
 // For readability in the sql statements.
 function schema(shard: ShardID) {
@@ -24,15 +11,6 @@ function schema(shard: ShardID) {
 function createSchema(shard: ShardID) {
   return `CREATE SCHEMA IF NOT EXISTS ${schema(shard)};`;
 }
-
-export type InstancesRow = {
-  clientGroupID: string;
-  version: string;
-  lastActive: number;
-  replicaVersion: string | null;
-  owner: string | null;
-  grantedAt: number | null;
-};
 
 function createInstancesTable(shard: ShardID) {
   return `
@@ -46,19 +24,6 @@ CREATE TABLE ${schema(shard)}.instances (
 );
 `;
 }
-
-export function compareInstancesRows(a: InstancesRow, b: InstancesRow) {
-  return stringCompare(a.clientGroupID, b.clientGroupID);
-}
-
-export type ClientsRow = {
-  clientGroupID: string;
-  clientID: string;
-  /** @deprecated */
-  patchVersion: string;
-  /** @deprecated */
-  deleted: boolean | null;
-};
 
 function createClientsTable(shard: ShardID) {
   // patchVersion and deleted are not used. Remove after all readers are migrated.
@@ -81,24 +46,6 @@ CREATE INDEX client_patch_version
   ON ${schema(shard)}.clients ("patchVersion");
 `;
 }
-export function compareClientsRows(a: ClientsRow, b: ClientsRow) {
-  const clientGroupIDComp = stringCompare(a.clientGroupID, b.clientGroupID);
-  if (clientGroupIDComp !== 0) {
-    return clientGroupIDComp;
-  }
-  return stringCompare(a.clientID, b.clientID);
-}
-
-export type QueriesRow = {
-  clientGroupID: string;
-  queryHash: string;
-  clientAST: JSONValue;
-  patchVersion: string | null;
-  transformationHash: string | null;
-  transformationVersion: string | null;
-  internal: boolean | null;
-  deleted: boolean | null;
-};
 
 function createQueriesTable(shard: ShardID) {
   return `
@@ -124,26 +71,6 @@ CREATE INDEX queries_patch_version
   ON ${schema(shard)}.queries ("patchVersion" NULLS FIRST);
 `;
 }
-
-export function compareQueriesRows(a: QueriesRow, b: QueriesRow) {
-  const clientGroupIDComp = stringCompare(a.clientGroupID, b.clientGroupID);
-  if (clientGroupIDComp !== 0) {
-    return clientGroupIDComp;
-  }
-  return stringCompare(a.queryHash, b.queryHash);
-}
-
-export type DesiresRow = {
-  clientGroupID: string;
-  clientID: string;
-  queryHash: string;
-  patchVersion: string;
-  deleted: boolean | null;
-  ttl: number | null;
-  inactivatedAt: number | null;
-  /** @deprecated */
-  expiresAt?: number | null;
-};
 
 function createDesiresTable(shard: ShardID) {
   return `
@@ -179,79 +106,6 @@ CREATE INDEX desires_expires_at
 CREATE INDEX desires_inactivated_at
   ON ${schema(shard)}.desires ("inactivatedAt");
 `;
-}
-
-export function compareDesiresRows(a: DesiresRow, b: DesiresRow) {
-  const clientGroupIDComp = stringCompare(a.clientGroupID, b.clientGroupID);
-  if (clientGroupIDComp !== 0) {
-    return clientGroupIDComp;
-  }
-  const clientIDComp = stringCompare(a.clientID, b.clientID);
-  if (clientIDComp !== 0) {
-    return clientIDComp;
-  }
-  return stringCompare(a.queryHash, b.queryHash);
-}
-
-export type RowsRow = {
-  clientGroupID: string;
-  schema: string;
-  table: string;
-  rowKey: JSONObject;
-  rowVersion: string;
-  patchVersion: string;
-  refCounts: {[queryHash: string]: number} | null;
-};
-
-export function rowsRowToRowID(rowsRow: RowsRow): RowID {
-  return {
-    schema: rowsRow.schema,
-    table: rowsRow.table,
-    rowKey: rowsRow.rowKey as Record<string, JSONValue>,
-  };
-}
-
-export function rowsRowToRowRecord(rowsRow: RowsRow): RowRecord {
-  return {
-    id: rowsRowToRowID(rowsRow),
-    rowVersion: rowsRow.rowVersion,
-    patchVersion: versionFromString(rowsRow.patchVersion),
-    refCounts: rowsRow.refCounts,
-  };
-}
-
-export function rowRecordToRowsRow(
-  clientGroupID: string,
-  rowRecord: RowRecord,
-): RowsRow {
-  return {
-    clientGroupID,
-    schema: rowRecord.id.schema,
-    table: rowRecord.id.table,
-    rowKey: rowRecord.id.rowKey as Record<string, JSONValue>,
-    rowVersion: rowRecord.rowVersion,
-    patchVersion: versionString(rowRecord.patchVersion),
-    refCounts: rowRecord.refCounts,
-  };
-}
-
-export function compareRowsRows(a: RowsRow, b: RowsRow) {
-  const clientGroupIDComp = stringCompare(a.clientGroupID, b.clientGroupID);
-  if (clientGroupIDComp !== 0) {
-    return clientGroupIDComp;
-  }
-  const schemaComp = stringCompare(a.schema, b.schema);
-  if (schemaComp !== 0) {
-    return schemaComp;
-  }
-  const tableComp = stringCompare(b.table, b.table);
-  if (tableComp !== 0) {
-    return tableComp;
-  }
-  return stringCompare(
-    stringifySorted(a.rowKey as RowKey),
-    stringifySorted(b.rowKey as RowKey),
-  );
 }
 
 /**
@@ -300,7 +154,7 @@ CREATE INDEX row_ref_counts ON ${schema(shard)}.rows
  * `cvr.rows` TABLE needs to be updated without affecting the
  * `SELECT ... FOR UPDATE` lock when `cvr.instances` is updated.
  */
-export function createRowsVersionTable(shard: ShardID) {
+function createRowsVersionTable(shard: ShardID) {
   return `
 CREATE TABLE ${schema(shard)}."rowsVersion" (
   "clientGroupID" TEXT PRIMARY KEY,
@@ -308,11 +162,6 @@ CREATE TABLE ${schema(shard)}."rowsVersion" (
 );
 `;
 }
-
-export type RowsVersionRow = {
-  clientGroupID: string;
-  version: string;
-};
 
 function createTables(shard: ShardID) {
   return (
@@ -333,8 +182,4 @@ export async function setupCVRTables(
 ) {
   lc.info?.(`Setting up CVR tables`);
   await db.unsafe(createTables(shard));
-}
-
-function stringifySorted(r: RowKey) {
-  return stringify(normalizedKeyOrder(r));
 }

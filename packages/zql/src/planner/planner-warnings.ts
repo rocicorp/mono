@@ -51,7 +51,7 @@ type TableRead = {
  * read scans the whole table. This is typically a relationship whose foreign
  * key is not indexed.
  */
-export type MissingIndexWarning = TableRead & {
+type MissingIndexWarning = TableRead & {
   readonly type: 'missing-index';
   /**
    * The columns the rows are found by: the columns a join binds and the
@@ -67,7 +67,7 @@ export type MissingIndexWarning = TableRead & {
  * sorts all of the matching rows before returning the first one. A limit does
  * not reduce the rows read.
  */
-export type FullSortWarning = TableRead & {
+type FullSortWarning = TableRead & {
   readonly type: 'full-sort';
   readonly orderBy: Ordering;
   /** The estimated number of rows each read sorts. */
@@ -79,7 +79,7 @@ export type FullSortWarning = TableRead & {
  * rows. Only reported when every table the query reads has statistics, since
  * the estimates are guesses otherwise.
  */
-export type HighCostWarning = {
+type HighCostWarning = {
   readonly type: 'high-cost';
   readonly table: string;
   /** The estimated number of rows the plan processes. */

@@ -409,15 +409,6 @@ export type ZeroOptions<
       context: C;
     });
 
-/**
- * @deprecated Use {@link ZeroOptions} instead.
- */
-export type ZeroAdvancedOptions<
-  S extends BaseDefaultSchema,
-  MD extends CustomMutatorDefs | undefined,
-  Context extends BaseDefaultContext,
-> = ZeroOptions<S, MD, Context>;
-
 type UpdateNeededReasonBase = {
   message?: string;
 };

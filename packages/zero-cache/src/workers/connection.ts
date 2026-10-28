@@ -725,7 +725,7 @@ export function sendError(
   send(lc, ws, ['error', errorBody], 'ignore-backpressure');
 }
 
-export function findProtocolError(error: unknown): ProtocolError | undefined {
+function findProtocolError(error: unknown): ProtocolError | undefined {
   if (isProtocolError(error)) {
     return error;
   }

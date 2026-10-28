@@ -63,8 +63,8 @@ import {initViewSyncerSchema} from './schema/init.ts';
 import {Snapshotter} from './snapshotter.ts';
 import {type SyncContext, ViewSyncerService} from './view-syncer.ts';
 
-export const APP_ID = 'this_app';
-export const SHARD_NUM = 2;
+const APP_ID = 'this_app';
+const SHARD_NUM = 2;
 export const SHARD = {appID: APP_ID, shardNum: SHARD_NUM};
 export const YIELD_THRESHOLD_MS = 200;
 
@@ -93,7 +93,7 @@ export const ON_FAILURE = (e: unknown) => {
   throw e;
 };
 
-export const queryConfig: ZeroConfig['query'] = {
+const queryConfig: ZeroConfig['query'] = {
   url: ['http://my-pull-endpoint.dev/api/zero/pull'],
   forwardCookies: true,
 };
@@ -364,7 +364,7 @@ export const USERS_QUERY: AST = {
   orderBy: [['id', 'asc']],
 };
 
-export const issues = table('issues')
+const issues = table('issues')
   .columns({
     id: string(),
     title: string(),
@@ -374,26 +374,26 @@ export const issues = table('issues')
     json: json(),
   })
   .primaryKey('id');
-export const comments = table('comments')
+const comments = table('comments')
   .columns({
     id: string(),
     issueID: string(),
     text: string(),
   })
   .primaryKey('id');
-export const issueLabels = table('issueLabels')
+const issueLabels = table('issueLabels')
   .columns({
     issueID: string(),
     labelID: string(),
   })
   .primaryKey('issueID', 'labelID');
-export const labels = table('labels')
+const labels = table('labels')
   .columns({
     id: string(),
     name: string(),
   })
   .primaryKey('id');
-export const users = table('users')
+const users = table('users')
   .columns({
     id: string(),
     name: string(),
@@ -422,7 +422,7 @@ export type AuthData = {
   role: 'user' | 'admin';
   iat: number;
 };
-export const canSeeIssue = (
+const canSeeIssue = (
   authData: AuthData,
   eb: ExpressionBuilder<'issues', Schema>,
 ) => eb.cmpLit(authData.role, '=', 'admin');
@@ -499,7 +499,7 @@ export function addQuery(
   return changeDesiredQueries(vs, ctx, [{op: 'put', hash, ast, ttl}]);
 }
 
-export function removeQuery(
+function removeQuery(
   vs: ViewSyncerService,
   ctx: SyncContext,
   hash: string,
@@ -610,7 +610,7 @@ type SetupOptions = Readonly<{
   queryFetchMode?: 'none' | 'empty-validation' | undefined;
 }>;
 
-export type QueryFetchCall = {
+type QueryFetchCall = {
   kind: 'validation' | 'transform';
   url: string;
   headers: Headers;

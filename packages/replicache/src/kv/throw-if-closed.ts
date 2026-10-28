@@ -12,14 +12,6 @@ export function throwIfStoreClosed(store: {readonly closed: boolean}): void {
   }
 }
 
-export function throwIfTransactionClosed(transaction: {
-  readonly closed: boolean;
-}): void {
-  if (transaction.closed) {
-    throw transactionError();
-  }
-}
-
 export function transactionIsClosedRejection() {
   return Promise.reject(transactionError());
 }

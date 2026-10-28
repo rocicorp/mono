@@ -266,7 +266,7 @@ export abstract class QueryDelegateBase implements QueryDelegate {
 }
 
 // oxlint-disable-next-line require-await
-export async function runImpl<
+async function runImpl<
   TTable extends keyof TSchema['tables'] & string,
   TSchema extends Schema,
   TReturn,
@@ -311,7 +311,7 @@ export async function runImpl<
   return ret;
 }
 
-export function preloadImpl<
+function preloadImpl<
   TTable extends keyof TSchema['tables'] & string,
   TSchema extends Schema,
   TReturn,
@@ -367,7 +367,7 @@ export function preloadImpl<
   };
 }
 
-export function materializeImpl<
+function materializeImpl<
   TTable extends keyof TSchema['tables'] & string,
   TSchema extends Schema,
   TReturn,

@@ -91,7 +91,7 @@ export function ctidToProgressMark(ctid: string): string {
 }
 
 /** The inverse of {@link ctidToProgressMark}, as a `tid` literal. */
-export function progressMarkToCtid(mark: string): string {
+function progressMarkToCtid(mark: string): string {
   const match = CTID_MARK_RE.exec(mark);
   assert(match, () => `invalid ctid progress mark: ${mark}`);
   return `(${Number(match[1])},${Number(match[2])})`;

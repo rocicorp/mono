@@ -1034,7 +1034,7 @@ function getUniqueIndexes(
   );
 }
 
-export function toSQLiteTypes(
+function toSQLiteTypes(
   columns: readonly string[],
   row: Row,
   columnTypes: Record<string, SchemaValue>,

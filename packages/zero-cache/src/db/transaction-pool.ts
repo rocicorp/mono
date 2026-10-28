@@ -13,7 +13,7 @@ type Mode = Enum<typeof Mode>;
 
 type MaybePromise<T> = Promise<T> | T;
 
-export type Statement =
+type Statement =
   | postgres.PendingQuery<(postgres.Row & Iterable<postgres.Row>)[]>
   | postgres.PendingQuery<postgres.Row[]>;
 
@@ -654,7 +654,7 @@ export function importSnapshot(snapshotID: string): {
  * aborting transactions after a previous one fails). Subclassing this Error
  * will result in lowering the log level from `error` to `debug`.
  */
-export class ControlFlowError extends Error {
+class ControlFlowError extends Error {
   constructor(cause?: unknown) {
     super();
     this.cause = cause;

@@ -357,7 +357,7 @@ export interface SnapshotReserver {
   }>;
 }
 
-export interface SubscriptionStarter {
+interface SubscriptionStarter {
   subscribe(
     ctx: SubscriberContext,
   ): Promise<Source<Sized<SubscribeDownstream>>>;
@@ -508,7 +508,7 @@ export class ChangeStreamerHttpClient
 
 type RequestHeaders = Pick<IncomingMessage, 'url' | 'headers'>;
 
-export function getSubscriberContext(req: RequestHeaders): SubscriberContext {
+function getSubscriberContext(req: RequestHeaders): SubscriberContext {
   const url = new URL(req.url ?? '', req.headers.origin ?? 'http://localhost');
   const protocolVersion = checkProtocolVersion(url.pathname);
   const params = new URLParams(url);

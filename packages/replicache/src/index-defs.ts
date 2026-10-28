@@ -25,7 +25,7 @@ export type IndexDefinition = {
   readonly allowEmpty?: boolean | undefined;
 };
 
-export const indexDefinitionSchema: valita.Type<IndexDefinition> =
+const indexDefinitionSchema: valita.Type<IndexDefinition> =
   valita.readonlyObject({
     prefix: valita.string().optional(),
     jsonPointer: valita.string(),
@@ -67,10 +67,4 @@ export function indexDefinitionsEqual(
     }
   }
   return true;
-}
-
-export function assertIndexDefinitions(
-  value: unknown,
-): asserts value is IndexDefinitions {
-  valita.assert(value, indexDefinitionsSchema);
 }

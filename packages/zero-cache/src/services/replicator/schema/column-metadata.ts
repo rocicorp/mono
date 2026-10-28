@@ -350,7 +350,7 @@ export function metadataToLiteTypeString(metadata: ColumnMetadata): string {
  *
  * Uses the same logic as liteTypeString() and mapPostgresToLiteColumn() via shared helpers.
  */
-export function pgColumnSpecToMetadata(spec: ColumnSpec): ColumnMetadata {
+function pgColumnSpecToMetadata(spec: ColumnSpec): ColumnMetadata {
   return {
     upstreamType: spec.dataType,
     isNotNull: spec.notNull ?? false,

@@ -73,7 +73,7 @@ export function handleTransformRequest<S extends Schema>(
  * Parsed query params accepted by {@link handleQueryRequest} when the
  * incoming request URL has already been handled by your framework.
  */
-export type QuerySearchParams = URLSearchParams | Record<string, string>;
+type QuerySearchParams = URLSearchParams | Record<string, string>;
 
 export type HandleQueryRequestArgs<S extends Schema> = {
   /** Callback that transforms each requested query into a `Query`. */
@@ -335,7 +335,7 @@ export type QueryRequestHandler = (
 /** @deprecated Use `QueryRequestHandler` instead. */
 export type TransformQueryFunction = QueryRequestHandler;
 
-export type LegacyQueryRequestHandler = (
+type LegacyQueryRequestHandler = (
   name: string,
   args: readonly ReadonlyJSONValue[],
 ) => MaybePromise<{query: AnyQuery} | AnyQuery>;

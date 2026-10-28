@@ -585,7 +585,6 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 }
 
 type Hash = string;
-export type Column = string;
 export type RefCounts = Record<Hash, number>;
 
 type RowPatchInfo = {

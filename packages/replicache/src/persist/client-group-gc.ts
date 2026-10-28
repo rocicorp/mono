@@ -45,7 +45,7 @@ export function initClientGroupGC(
  * pending mutations. If it is false, it will remove client groups even when they
  * have pending mutations.
  */
-export function gcClientGroups(
+function gcClientGroups(
   dagStore: Store,
   enableMutationRecovery: boolean,
 ): Promise<ClientGroupMap> {

@@ -56,8 +56,6 @@ export const createIssueArgsSchema = z.object({
   projectID: z.string(),
 });
 
-export type CreateIssueArgs = z.infer<typeof createIssueArgsSchema>;
-
 export const updateIssueArgsSchema = z.object({
   id: z.string(),
   title: z.optional(z.string()),
@@ -68,16 +66,12 @@ export const updateIssueArgsSchema = z.object({
   modified: z.number(),
 });
 
-export type UpdateIssueArgs = z.infer<typeof updateIssueArgsSchema>;
-
 const addCommentArgsSchema = z.object({
   id: z.string(),
   issueID: z.string(),
   body: z.string(),
   created: z.number(),
 });
-
-export type AddCommentArgs = z.infer<typeof addCommentArgsSchema>;
 
 const notificationTypeSchema = z.enum(['subscribe', 'unsubscribe']);
 

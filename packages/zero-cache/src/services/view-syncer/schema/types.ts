@@ -10,7 +10,7 @@ import {
 import {ttlClockSchema} from '../ttl-clock.ts';
 import type {QueriesRow} from './cvr.ts';
 
-export const cvrVersionSchema = v.object({
+const cvrVersionSchema = v.object({
   /**
    * The database `stateVersion` with which the rows in the CVR are consistent.
    */
@@ -90,9 +90,6 @@ export function cookieToVersion(cookie: string | null): NullableCVRVersion {
 
 // Last Active tracking.
 
-export const cvrIDSchema = v.object({id: v.string()});
-export type CvrID = v.Infer<typeof cvrIDSchema>;
-
 const cvrRecordSchema = v.object({
   /**
    * CVR records store the CVRVersion at which the record was last patched into
@@ -108,7 +105,7 @@ const cvrRecordSchema = v.object({
   patchVersion: cvrVersionSchema,
 });
 
-export const clientRecordSchema = v.object({
+const clientRecordSchema = v.object({
   /** The client ID, of which there can be multiple for a client group view. */
   id: v.string(),
 
@@ -118,7 +115,7 @@ export const clientRecordSchema = v.object({
 
 export type ClientRecord = v.Infer<typeof clientRecordSchema>;
 
-export const baseQueryRecordSchema = v.object({
+const baseQueryRecordSchema = v.object({
   /** The client-specified ID used to identify this query. Typically a hash. */
   id: v.string(),
 
@@ -164,7 +161,7 @@ export const baseQueryRecordSchema = v.object({
  * invalidation / update logic for row contents, but not in the desired/got or
  * size-based quota logic for client-requested queries.
  */
-export const internalQueryRecordSchema = baseQueryRecordSchema.extend({
+const internalQueryRecordSchema = baseQueryRecordSchema.extend({
   type: v.literal('internal'),
   ast: astSchema,
 });
@@ -209,7 +206,7 @@ const externalQueryRecordSchema = baseQueryRecordSchema.extend({
   patchVersion: cvrVersionSchema.optional(),
 });
 
-export const clientQueryRecordSchema = externalQueryRecordSchema.extend({
+const clientQueryRecordSchema = externalQueryRecordSchema.extend({
   type: v.literal('client'),
 
   /** The original AST as supplied by the client. */
@@ -218,7 +215,7 @@ export const clientQueryRecordSchema = externalQueryRecordSchema.extend({
 
 export type ClientQueryRecord = v.Infer<typeof clientQueryRecordSchema>;
 
-export const customQueryRecordSchema = externalQueryRecordSchema.extend({
+const customQueryRecordSchema = externalQueryRecordSchema.extend({
   type: v.literal('custom'),
   name: v.string(),
   args: v.readonly(v.array(jsonSchema)),
@@ -226,7 +223,7 @@ export const customQueryRecordSchema = externalQueryRecordSchema.extend({
 
 export type CustomQueryRecord = v.Infer<typeof customQueryRecordSchema>;
 
-export const queryRecordSchema = v.union(
+const queryRecordSchema = v.union(
   clientQueryRecordSchema,
   customQueryRecordSchema,
   internalQueryRecordSchema,
@@ -234,7 +231,7 @@ export const queryRecordSchema = v.union(
 
 export type QueryRecord = v.Infer<typeof queryRecordSchema>;
 
-export const rowIDSchema = v.object({
+const rowIDSchema = v.object({
   schema: v.string(),
   table: v.string(),
   rowKey: v.record(jsonValueSchema),
@@ -242,7 +239,7 @@ export const rowIDSchema = v.object({
 
 export type RowID = v.Infer<typeof rowIDSchema>;
 
-export const rowRecordSchema = cvrRecordSchema.extend({
+const rowRecordSchema = cvrRecordSchema.extend({
   id: rowIDSchema,
   rowVersion: v.string(), // '_0_version' of the row
   // query hashes => refCount, or `null` for a row that was removed from the
@@ -252,33 +249,12 @@ export const rowRecordSchema = cvrRecordSchema.extend({
 
 export type RowRecord = v.Infer<typeof rowRecordSchema>;
 
-export const patchSchema = v.object({
+const patchSchema = v.object({
   type: v.literalUnion('row', 'query'),
   op: v.literalUnion('put', 'del'),
 });
 
-export const putRowPatchSchema = patchSchema.extend({
-  type: v.literal('row'),
-  op: v.literal('put'),
-  id: rowIDSchema,
-  rowVersion: v.string(), // '_0_version' of the row
-});
-
-export type PutRowPatch = v.Infer<typeof putRowPatchSchema>;
-
-export const delRowPatchSchema = patchSchema.extend({
-  type: v.literal('row'),
-  op: v.literal('del'),
-  id: rowIDSchema,
-});
-
-export type DelRowPatch = v.Infer<typeof delRowPatchSchema>;
-
-export const rowPatchSchema = v.union(putRowPatchSchema, delRowPatchSchema);
-
-export type RowPatch = v.Infer<typeof rowPatchSchema>;
-
-export const queryPatchSchema = patchSchema.extend({
+const queryPatchSchema = patchSchema.extend({
   type: v.literal('query'),
   id: v.string(),
   clientID: v.string().optional(), // defined for "desired", undefined for "got"
@@ -288,10 +264,6 @@ export type QueryPatch = v.Infer<typeof queryPatchSchema>;
 
 export type PutQueryPatch = QueryPatch & {op: 'put'};
 export type DelQueryPatch = QueryPatch & {op: 'del'};
-
-export const metadataPatchSchema = queryPatchSchema;
-
-export type MetadataPatch = v.Infer<typeof metadataPatchSchema>;
 
 export function versionString(v: CVRVersion) {
   // The separator (e.g. ":") needs to be lexicographically greater than the
@@ -374,5 +346,5 @@ export function queryRecordToQueryRow(
   }
 }
 
-export const maybeVersionString = (v: CVRVersion | undefined) =>
+const maybeVersionString = (v: CVRVersion | undefined) =>
   v ? versionString(v) : null;

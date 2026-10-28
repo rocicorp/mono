@@ -29,7 +29,7 @@ export const schemaValueSchema = v.readonlyObject({
   optional: v.boolean().optional(),
 });
 
-export const tableSchemaSchema: v.Type<TableSchema> = v.readonlyObject({
+const tableSchemaSchema: v.Type<TableSchema> = v.readonlyObject({
   name: v.string(),
   serverName: v.string().optional(),
   columns: v.record(schemaValueSchema),

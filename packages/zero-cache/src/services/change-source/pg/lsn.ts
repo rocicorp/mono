@@ -3,7 +3,6 @@ import {
   majorVersionToString,
   stateVersionFromString,
 } from '../../../types/state-version.ts';
-import type {Change} from '../protocol/current/data.ts';
 
 /**
  * Parsing and conversion utilities for the pg_lsn Type, which represents
@@ -16,8 +15,6 @@ import type {Change} from '../protocol/current/data.ts';
  * invalidation index, and row version in the tables of the sync replica.
  */
 export type LSN = string;
-
-export type RecordType = Change['tag'];
 
 export function toBigInt(lsn: LSN): bigint {
   const parts = lsn.split('/');

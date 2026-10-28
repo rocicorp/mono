@@ -32,10 +32,6 @@ export function setBenchKVStore(
   benchKVStore = kvStore;
 }
 
-export function getBenchKVStore(): 'mem' | 'idb' | StoreProvider | undefined {
-  return benchKVStore;
-}
-
 function benchKVStoreProvider(): StoreProvider {
   return getKVStoreProvider(new LogContext(), benchKVStore);
 }
@@ -91,7 +87,7 @@ export function setPopulateValues(values: readonly TestDataObject[]): void {
   populateValues = values;
 }
 
-export async function populate(
+async function populate(
   tx: WriteTransaction,
   {numKeys}: {numKeys: number},
 ): Promise<void> {
@@ -193,7 +189,7 @@ export function sleep(ms: number): Promise<void> {
   return new Promise<void>(resolve => setTimeout(resolve, ms));
 }
 
-export function* rangeIter(end: number): Generator<number> {
+function* rangeIter(end: number): Generator<number> {
   for (let i = 0; i < end; i++) yield i;
 }
 
@@ -205,7 +201,7 @@ export function sampleSize<T>(arr: Iterable<T>, n: number): T[] {
   return shuffle(arr).slice(0, n);
 }
 
-export function shuffle<T>(arr: Iterable<T>): T[] {
+function shuffle<T>(arr: Iterable<T>): T[] {
   const shuffled = [...arr];
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));

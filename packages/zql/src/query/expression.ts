@@ -230,7 +230,7 @@ function isParameterReference(
   );
 }
 
-export const TRUE: Condition = {
+const TRUE: Condition = {
   type: 'and',
   conditions: [],
 };
@@ -268,7 +268,7 @@ export function simplifyCondition(c: Condition): Condition {
   };
 }
 
-export function flatten(
+function flatten(
   type: 'and' | 'or',
   conditions: readonly Condition[],
 ): Condition[] {
@@ -307,7 +307,7 @@ const negateOperatorMap = {
   ['NOT EXISTS']: 'EXISTS',
 } as const;
 
-export function negateOperator<OP extends keyof typeof negateOperatorMap>(
+function negateOperator<OP extends keyof typeof negateOperatorMap>(
   op: OP,
 ): (typeof negateOperatorMap)[OP] {
   return must(negateOperatorMap[op]);

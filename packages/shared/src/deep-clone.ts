@@ -6,7 +6,7 @@ export function deepClone(value: ReadonlyJSONValue): JSONValue {
   return internalDeepClone(value, seen);
 }
 
-export function internalDeepClone(
+function internalDeepClone(
   value: ReadonlyJSONValue,
   seen: Array<ReadonlyJSONValue>,
 ): JSONValue {

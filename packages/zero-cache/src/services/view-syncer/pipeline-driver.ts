@@ -111,11 +111,11 @@ type RowOp<Op extends Omit<ChangeType, ChangeType.CHILD>> = {
   readonly row: Row;
 };
 
-export type RowAdd = RowOp<ChangeType.ADD>;
+type RowAdd = RowOp<ChangeType.ADD>;
 
-export type RowRemove = RowOp<ChangeType.REMOVE>;
+type RowRemove = RowOp<ChangeType.REMOVE>;
 
-export type RowEdit = RowOp<ChangeType.EDIT>;
+type RowEdit = RowOp<ChangeType.EDIT>;
 
 export type RowChange = RowAdd | RowRemove | RowEdit;
 

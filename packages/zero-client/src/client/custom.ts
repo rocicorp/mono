@@ -172,7 +172,7 @@ export class TransactionImpl<
   }
 }
 
-export function getZeroTxData(repTx: WriteTransaction): ZeroTxData {
+function getZeroTxData(repTx: WriteTransaction): ZeroTxData {
   const txData = must(
     (repTx as WriteTransactionImpl)[zeroData],
     'zero was not set on replicache internal options!',

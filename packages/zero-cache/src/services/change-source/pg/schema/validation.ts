@@ -11,8 +11,6 @@ import {
 import {ZERO_VERSION_COLUMN_NAME} from '../../../replicator/schema/constants.ts';
 import type {PublishedTableWithReplicaIdentity} from './published.ts';
 
-export const ALLOWED_APP_ID_CHARACTERS = /^[a-z0-9_]+$/;
-
 const ALLOWED_TABLE_CHARS = /^[A-Za-z_]+[A-Za-z0-9_-]*$/;
 
 // Dots are allowed in column names since there is no need for

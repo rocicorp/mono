@@ -11,13 +11,12 @@ import {must} from './must.ts';
 import type {
   Config,
   Group,
-  Option,
   Options,
   WrappedOptionType,
 } from './options-types.ts';
 import * as v from './valita.ts';
 
-export type {Config, Group, Option, Options, WrappedOptionType};
+export type {Config, Group, Options};
 
 type Primitive = number | string | boolean;
 type Value = Primitive | Array<Primitive>;
@@ -460,7 +459,7 @@ export function flagToEnv(prefix: string, flag: string): string {
   return toSnakeCase(prefix + flag).toUpperCase();
 }
 
-export function parseBoolean(optionName: string, input: string) {
+function parseBoolean(optionName: string, input: string) {
   const bool = input.toLowerCase();
   if (['true', '1'].includes(bool)) {
     return true;

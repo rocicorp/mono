@@ -14,7 +14,6 @@ import type {NameMapper} from '../../zero-schema/src/name-mapper.ts';
 import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {ExpressionBuilder} from '../../zql/src/query/expression.ts';
-import type {Query} from '../../zql/src/query/query.ts';
 import {newExpressionBuilder} from '../../zql/src/query/static-query.ts';
 
 export const ANYONE_CAN = [
@@ -38,11 +37,7 @@ export const ANYONE_CAN_DO_ANYTHING = {
 
 export const NOBODY_CAN = [];
 
-export type Anchor = 'authData' | 'preMutationRow';
-
-export type Queries<TSchema extends Schema> = {
-  [K in keyof TSchema['tables']]: Query<K & string, TSchema>;
-};
+type Anchor = 'authData' | 'preMutationRow';
 
 export type PermissionRule<
   TAuthDataShape,
@@ -314,8 +309,7 @@ function baseTracker(anchor: Anchor) {
   );
 }
 
-export const authDataRef = baseTracker('authData');
-export const preMutationRowRef = baseTracker('preMutationRow');
+const authDataRef = baseTracker('authData');
 export function staticParam(
   anchorClass: 'authData' | 'preMutationRow',
   field: string | string[],

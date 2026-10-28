@@ -1,5 +1,4 @@
 import {throwInvalidType} from '../../shared/src/asserts.ts';
-import {skipAssertJSONValue} from '../../shared/src/config.ts';
 import {hasOwn} from '../../shared/src/has-own.ts';
 import type {
   ReadonlyJSONObject,
@@ -111,30 +110,6 @@ function deepFreezeObject(v: ReadonlyJSONObject, seen: object[]): void {
       }
     }
   }
-}
-
-export function assertFrozenJSONValue(
-  v: unknown,
-): asserts v is FrozenJSONValue {
-  if (skipFrozenAsserts || skipAssertJSONValue) {
-    return;
-  }
-
-  switch (typeof v) {
-    case 'boolean':
-    case 'number':
-    case 'string':
-      return;
-    case 'object':
-      if (v === null) {
-        return;
-      }
-
-      if (isDeepFrozen(v, [])) {
-        return;
-      }
-  }
-  throwInvalidType(v, 'JSON value');
 }
 
 export function assertDeepFrozen<V>(v: V): asserts v is Readonly<V> {

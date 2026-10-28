@@ -329,7 +329,7 @@ export async function processMutation(
   return result;
 }
 
-export async function processMutationWithTx(
+async function processMutationWithTx(
   lc: LogContext,
   tx: PostgresTransaction,
   authData: JWTPayload | undefined,
@@ -402,7 +402,7 @@ export async function processMutationWithTx(
   await Promise.all(tasks.map(task => task()));
 }
 
-export function getInsertSQL(
+function getInsertSQL(
   tx: postgres.TransactionSql,
   create: InsertOp,
 ): postgres.PendingQuery<postgres.Row[]> {
@@ -412,7 +412,7 @@ export function getInsertSQL(
   `;
 }
 
-export function getUpsertSQL(
+function getUpsertSQL(
   tx: postgres.TransactionSql,
   set: UpsertOp,
 ): postgres.PendingQuery<postgres.Row[]> {

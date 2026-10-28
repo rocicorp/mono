@@ -3,17 +3,17 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 export const APP_ROOT = fileURLToPath(new URL('../..', import.meta.url));
-export const REPO_ROOT = fileURLToPath(new URL('../../../..', import.meta.url));
+const REPO_ROOT = fileURLToPath(new URL('../../../..', import.meta.url));
 
 export const ZERO_CACHE_MAIN = join(
   REPO_ROOT,
   'packages/zero-cache/src/server/runner/main.ts',
 );
-export const LITESTREAM_CONFIG_V3 = join(
+const LITESTREAM_CONFIG_V3 = join(
   REPO_ROOT,
   'packages/zero-cache/src/services/litestream/config.yml',
 );
-export const LITESTREAM_CONFIG_V5 = join(
+const LITESTREAM_CONFIG_V5 = join(
   REPO_ROOT,
   'packages/zero-cache/src/services/litestream/config-v5.yml',
 );
@@ -24,7 +24,7 @@ export const DOCKER_DIR = join(APP_ROOT, 'docker');
  * The change-log mode ladder. `serve` is the subject of the soak; the others
  * are the rollback rungs that chaos actions C10-C12 walk back down.
  */
-export type ChangeLogMode = 'off' | 'write' | 'compare' | 'serve';
+type ChangeLogMode = 'off' | 'write' | 'compare' | 'serve';
 
 export type ChangeLogSettings = {
   readonly mode: ChangeLogMode;
@@ -79,7 +79,7 @@ export function taskIDFor(index: number | 'rm'): string {
   return index === 'rm' ? 'rm' : `vs-${index}`;
 }
 
-export function nodeDir(config: SoakConfig, node: string): string {
+function nodeDir(config: SoakConfig, node: string): string {
   const dir = join(config.root, node);
   mkdirSync(dir, {recursive: true});
   return dir;
@@ -98,7 +98,7 @@ export function vsPort(config: SoakConfig, index: number): number {
   return config.vsBasePort + index * 10;
 }
 
-export function otlpEndpoint(config: SoakConfig, node: string): string {
+function otlpEndpoint(config: SoakConfig, node: string): string {
   return `http://127.0.0.1:${config.otlpPort}/v1/metrics/${node}`;
 }
 

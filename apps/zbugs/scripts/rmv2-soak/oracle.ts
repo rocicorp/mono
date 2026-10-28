@@ -33,14 +33,14 @@ import {sleep} from './infra.ts';
  * that heals.
  */
 
-export type RowDiff = {
+type RowDiff = {
   readonly key: string;
   readonly column?: string | undefined;
   readonly pg?: string | undefined;
   readonly replica?: string | undefined;
 };
 
-export type TableDiff = {
+type TableDiff = {
   readonly table: string;
   /** The columns the multiset is keyed by, or `*` for whole-row keying. */
   readonly key: string;
@@ -51,7 +51,7 @@ export type TableDiff = {
   readonly mismatched: RowDiff[];
 };
 
-export type ReplicaComparison = {
+type ReplicaComparison = {
   readonly node: string;
   readonly stateVersion: string;
   readonly replicaVersion: string;
@@ -217,7 +217,7 @@ function canonRow(
  * it -- and its *absence* everywhere proves that every replica consumed a
  * transaction later than all of the traffic.
  */
-export async function quiesce(
+async function quiesce(
   lc: LogContext,
   sql: postgres.Sql,
   replicas: readonly ReplicaHandle[],
@@ -313,7 +313,7 @@ function sentinelIs(
   }
 }
 
-export function readStateVersion(lc: LogContext, replicaFile: string): string {
+function readStateVersion(lc: LogContext, replicaFile: string): string {
   let db: Database | undefined;
   try {
     db = openReplica(lc, replicaFile);
@@ -328,10 +328,7 @@ export function readStateVersion(lc: LogContext, replicaFile: string): string {
   }
 }
 
-export function readReplicaVersion(
-  lc: LogContext,
-  replicaFile: string,
-): string {
+function readReplicaVersion(lc: LogContext, replicaFile: string): string {
   let db: Database | undefined;
   try {
     db = openReplica(lc, replicaFile);

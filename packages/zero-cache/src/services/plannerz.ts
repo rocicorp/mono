@@ -110,7 +110,7 @@ export type Stat4Sample = {
  * hundreds of samples per index, which is a lot of context to spend on data an
  * LLM would only summarize anyway.
  */
-export type Stat4PrefixSummary = {
+type Stat4PrefixSummary = {
   /** Rows equal to the most common sampled key at this depth. */
   maxRowsPerKey: number;
   /** Median rows per sampled key at this depth. */
@@ -130,7 +130,7 @@ export type Stat4Summary = {
   perPrefix: Stat4PrefixSummary[];
 };
 
-export type IndexStats = {
+type IndexStats = {
   name: string;
   columns: {name: string; dir: 'ASC' | 'DESC'}[];
   unique: boolean;
@@ -141,7 +141,7 @@ export type IndexStats = {
   stat4Samples?: Stat4Sample[] | undefined;
 };
 
-export type ColumnStats = {
+type ColumnStats = {
   name: string;
   dataType: string;
   nullable: boolean;
@@ -150,7 +150,7 @@ export type ColumnStats = {
   backfilling?: true | undefined;
 };
 
-export type TableStats = {
+type TableStats = {
   name: string;
   columns: ColumnStats[];
   primaryKey: string[] | undefined;
@@ -244,10 +244,8 @@ function parseCounts(raw: string): number[] {
  * Builds the `/plannerz` bundle from the replica's catalog, `sqlite_stat*`
  * tables and the server config. No user table is read, so the cost does not
  * depend on how much data the replica holds.
- *
- * @visibleForTesting
  */
-export function buildPlannerzBundle(
+function buildPlannerzBundle(
   lc: LogContext,
   config: ZeroConfig,
   opts: BundleOptions = {},

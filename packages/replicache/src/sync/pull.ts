@@ -45,7 +45,6 @@ import {SYNC_HEAD_NAME} from './sync-head-name.ts';
 
 type FormatVersion = (typeof FormatVersion)[keyof typeof FormatVersion];
 
-export const PULL_VERSION_SDD = 0;
 export const PULL_VERSION_DD31 = 1;
 
 /**

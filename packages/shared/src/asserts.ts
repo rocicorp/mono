@@ -35,7 +35,7 @@ export function assertArray(v: unknown): asserts v is unknown[] {
   }
 }
 
-export function invalidType(v: unknown, t: string): string {
+function invalidType(v: unknown, t: string): string {
   let s = 'Invalid type: ';
   if (v === null || v === undefined) {
     s += v;
@@ -55,15 +55,6 @@ export function assertNotNull<T>(v: T | null): asserts v is T {
   }
 }
 
-export function assertUndefined<T>(
-  v: T | undefined,
-  msg = 'Expected undefined value',
-): asserts v is T {
-  if (v !== undefined) {
-    throw new Error(msg);
-  }
-}
-
 export function assertNotUndefined<T>(
   v: T | undefined,
   msg = 'Expected non undefined value',
@@ -73,25 +64,8 @@ export function assertNotUndefined<T>(
   }
 }
 
-export function assertInstanceof<T>(
-  v: unknown,
-  t: new (...args: unknown[]) => T,
-): asserts v is T {
-  if (!(v instanceof t)) {
-    throw new Error(`Expected instanceof ${t.name}`);
-  }
-}
-
-export function assertUint8Array(v: unknown): asserts v is Uint8Array {
-  assertInstanceof(v, Uint8Array);
-}
-
 export function unreachable(): never;
 export function unreachable(v: never): never;
 export function unreachable(_?: never): never {
   throw new Error('Unreachable');
-}
-
-export function notImplemented(): never {
-  throw new Error('Not implemented');
 }

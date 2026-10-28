@@ -95,7 +95,7 @@ const crudArgSchema = v.object({
 
 const crudArgsSchema = v.tuple([crudArgSchema]);
 
-export const crudMutationSchema = v.object({
+const crudMutationSchema = v.object({
   type: v.literal(MutationType.CRUD),
   id: v.number(),
   clientID: v.string(),
@@ -104,7 +104,7 @@ export const crudMutationSchema = v.object({
   timestamp: v.number(),
 });
 
-export const customMutationSchema = v.object({
+const customMutationSchema = v.object({
   type: v.literal(MutationType.Custom),
   id: v.number(),
   clientID: v.string(),
@@ -151,13 +151,11 @@ export type UpsertOp = v.Infer<typeof upsertOpSchema>;
 export type UpdateOp = v.Infer<typeof updateOpSchema>;
 export type DeleteOp = v.Infer<typeof deleteOpSchema>;
 export type CRUDOp = v.Infer<typeof crudOpSchema>;
-export type CRUDOpKind = CRUDOp['op'];
 export type CRUDMutationArg = v.Infer<typeof crudArgSchema>;
 export type CRUDMutation = v.Infer<typeof crudMutationSchema>;
 export type CustomMutation = v.Infer<typeof customMutationSchema>;
 export type Mutation = v.Infer<typeof mutationSchema>;
 
-export type MutationResponse = v.Infer<typeof mutationResponseSchema>;
 export type MutationOk = v.Infer<typeof mutationOkSchema>;
 export type MutationError = v.Infer<typeof mutationErrorSchema>;
 export type MutationResult = v.Infer<typeof mutationResultSchema>;

@@ -25,7 +25,7 @@ export type ClosedError = ClientError<{
   kind: ClientErrorKind.ClientClosed;
   message: string;
 }>;
-export type NeedsAuthReason = Expand<
+type NeedsAuthReason = Expand<
   | (ErrorBody & {
       kind: ErrorKind.AuthInvalidated | ErrorKind.Unauthorized;
     })
@@ -38,11 +38,11 @@ export type OfflineError = ClientError<{
   kind: ClientErrorKind.Offline;
   message: string;
 }>;
-export type NoSocketOriginError = ClientError<{
+type NoSocketOriginError = ClientError<{
   kind: ClientErrorKind.NoSocketOrigin;
   message: string;
 }>;
-export type HiddenError = ClientError<{
+type HiddenError = ClientError<{
   kind: ClientErrorKind.Hidden;
   message: string;
 }>;
@@ -52,8 +52,6 @@ export type DisconnectedReason =
   | HiddenError;
 export type ServerError = ProtocolError<ErrorBody>;
 export type ZeroError = ServerError | ClientError;
-export type ZeroErrorBody = Expand<ErrorBody | ClientErrorBody>;
-export type ZeroErrorDetails = Expand<Omit<ZeroErrorBody, 'message'>>;
 export type ZeroErrorKind = Expand<ErrorKind | ClientErrorKind>;
 
 /**

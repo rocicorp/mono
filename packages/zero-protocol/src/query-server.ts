@@ -6,21 +6,16 @@ import {
 } from './custom-queries.ts';
 import {transformFailedBodySchema} from './error.ts';
 
-export const queryResultSchema = v.union(
-  transformedQuerySchema,
-  erroredQuerySchema,
-);
-export type QueryResult = v.Infer<typeof queryResultSchema>;
+const queryResultSchema = v.union(transformedQuerySchema, erroredQuerySchema);
 
-export const queryResponseBodySchema = v.array(queryResultSchema);
+const queryResponseBodySchema = v.array(queryResultSchema);
 export type QueryResponseBody = v.Infer<typeof queryResponseBodySchema>;
 
-export const querySuccessSchema = v.object({
+const querySuccessSchema = v.object({
   kind: v.literal('QueryResponse'),
   userID: v.string().nullable().optional(),
   queries: queryResponseBodySchema,
 });
-export type QuerySuccess = v.Infer<typeof querySuccessSchema>;
 
 export const queryResponseSchema = v.union(
   querySuccessSchema,

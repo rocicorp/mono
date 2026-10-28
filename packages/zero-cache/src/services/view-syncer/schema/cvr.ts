@@ -218,7 +218,7 @@ export type RowsRow = {
   refCounts: {[queryHash: string]: number} | null;
 };
 
-export function rowsRowToRowID(rowsRow: RowsRow): RowID {
+function rowsRowToRowID(rowsRow: RowsRow): RowID {
   return {
     schema: rowsRow.schema,
     table: rowsRow.table,

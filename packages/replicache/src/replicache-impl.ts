@@ -170,11 +170,6 @@ const updateNeededReasonNewClientGroup: UpdateNeededReason = {
   type: 'NewClientGroup',
 } as const;
 
-/** @deprecated Not used any more */
-export interface MakeSubscriptionsManager {
-  (queryInternal: QueryInternal, lc: LogContext): SubscriptionsManager;
-}
-
 export interface ReplicacheImplOptions {
   /**
    * Defaults to true.

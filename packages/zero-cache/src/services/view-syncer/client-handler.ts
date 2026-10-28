@@ -51,21 +51,21 @@ import {
   type RowID,
 } from './schema/types.ts';
 
-export type PutRowPatch = {
+type PutRowPatch = {
   type: 'row';
   op: 'put';
   id: RowID;
   contents: JSONObject;
 };
 
-export type DeleteRowPatch = {
+type DeleteRowPatch = {
   type: 'row';
   op: 'del';
   id: RowID;
 };
 
 export type RowPatch = PutRowPatch | DeleteRowPatch;
-export type ConfigPatch = DelQueryPatch | PutQueryPatch;
+type ConfigPatch = DelQueryPatch | PutQueryPatch;
 
 export type Patch = ConfigPatch | RowPatch;
 

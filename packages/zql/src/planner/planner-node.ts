@@ -65,8 +65,6 @@ export function omitFanout(cost: CostEstimate): Omit<CostEstimate, 'fanout'> {
   return rest;
 }
 
-export type NodeType = PlannerNode['kind'];
-
 export type JoinOrConnection = 'join' | 'connection';
 
 export type JoinType = PlannerJoin['type'];

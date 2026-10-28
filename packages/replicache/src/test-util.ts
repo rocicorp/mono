@@ -121,8 +121,8 @@ export class ReplicacheTest<
   }
 }
 
-export const reps: Set<ReplicacheTest> = new Set();
-export async function closeAllReps(): Promise<void> {
+const reps: Set<ReplicacheTest> = new Set();
+async function closeAllReps(): Promise<void> {
   for (const rep of reps) {
     if (!rep.closed) {
       await rep.close();
@@ -148,7 +148,7 @@ async function closeAllCloseables(): Promise<void> {
 }
 
 export const dbsToDrop: Set<string> = new Set();
-export async function deleteAllDatabases(): Promise<void> {
+async function deleteAllDatabases(): Promise<void> {
   for (const name of dbsToDrop) {
     await dropIDBStore(name);
   }

@@ -877,10 +877,7 @@ function reseed(
  * an otherwise empty log serviceable as a catchup boundary for a subscriber
  * that is exactly at that watermark.
  */
-export function seedChangeLogStream(
-  db: Database,
-  anchor: ChangeLogAnchor,
-): void {
+function seedChangeLogStream(db: Database, anchor: ChangeLogAnchor): void {
   const beginChange = '{"tag":"begin"}';
   const commitChange = '{"tag":"commit"}';
   db.prepare(SEED_CHANGE_LOG_STREAM_SQL).run({

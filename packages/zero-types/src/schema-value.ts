@@ -21,7 +21,7 @@ export type SchemaValueWithCustomType<T> = {
   customType: T;
 };
 
-export type TypeNameToTypeMap = {
+type TypeNameToTypeMap = {
   string: string;
   number: number;
   boolean: boolean;
@@ -30,8 +30,9 @@ export type TypeNameToTypeMap = {
   json: any;
 };
 
-export type ColumnTypeName<T extends SchemaValue | ValueType> =
-  T extends SchemaValue ? T['type'] : T;
+type ColumnTypeName<T extends SchemaValue | ValueType> = T extends SchemaValue
+  ? T['type']
+  : T;
 
 /**
  * Given a schema value, return the TypeScript type.

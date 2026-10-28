@@ -429,7 +429,7 @@ export type ChangeLogCounts = {
  * sync worker in the meantime, so the cost of counting must not grow with
  * the number of changes that a client group has to catch up on.
  */
-export const CHANGE_LOG_SAMPLE_SIZE = 1000;
+const CHANGE_LOG_SAMPLE_SIZE = 1000;
 
 export interface TableFilter {
   has(table: string): boolean;
@@ -461,7 +461,7 @@ export type PrevWrites = 'uniform' | 'divergent' | 'none';
  *
  * See {@link Snapshotter.advance()} for semantics and usage.
  */
-export type DiffTimingStats = {
+type DiffTimingStats = {
   changeLogReadMs: number;
   rowReadMs: number;
   parseMs: number;

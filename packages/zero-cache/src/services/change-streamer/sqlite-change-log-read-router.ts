@@ -18,7 +18,7 @@ export type SQLiteChangeLogCoverage = {
   readonly headWatermark: string;
 };
 
-export type ChangeLogReadRouteReason =
+type ChangeLogReadRouteReason =
   | 'selected'
   // Selected while the log was still inside its warm-up window. Kept
   // distinct from 'selected' so bootstrap serving is separable in metrics

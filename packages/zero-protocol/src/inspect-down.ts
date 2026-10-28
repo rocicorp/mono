@@ -72,10 +72,6 @@ export const inspectAuthenticatedDownSchema = inspectBaseDownSchema.extend({
   value: v.boolean(),
 });
 
-export type InspectAuthenticatedDown = v.Infer<
-  typeof inspectAuthenticatedDownSchema
->;
-
 export const inspectAnalyzeQueryDownSchema = inspectBaseDownSchema.extend({
   op: v.literal('analyze-query'),
   value: analyzeQueryResultSchema,
@@ -90,9 +86,7 @@ export const inspectErrorDownSchema = inspectBaseDownSchema.extend({
   value: v.string(),
 });
 
-export type InspectErrorDown = v.Infer<typeof inspectErrorDownSchema>;
-
-export const inspectDownBodySchema = v.union(
+const inspectDownBodySchema = v.union(
   inspectQueriesDownSchema,
   inspectMetricsDownSchema,
   inspectVersionDownSchema,

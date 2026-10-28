@@ -133,7 +133,7 @@ function mapLiteDataTypeToZqlValueType(dataType: LiteTypeString): ValueType {
 // Note: Includes the "TEXT" substring for SQLite type affinity
 const TEXT_ENUM_ATTRIBUTE = '|TEXT_ENUM';
 const NOT_NULL_ATTRIBUTE = '|NOT_NULL';
-export const TEXT_ARRAY_ATTRIBUTE = '|TEXT_ARRAY';
+const TEXT_ARRAY_ATTRIBUTE = '|TEXT_ARRAY';
 
 /**
  * The `LiteTypeString` utilizes SQLite's loose type system to encode

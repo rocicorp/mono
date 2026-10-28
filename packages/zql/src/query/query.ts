@@ -1,5 +1,5 @@
 /* oxlint-disable @typescript-eslint/no-explicit-any */
-import type {Expand, ExpandRecursive} from '../../../shared/src/expand.ts';
+import type {Expand} from '../../../shared/src/expand.ts';
 import {type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {DefaultSchema} from '../../../zero-types/src/default-types.ts';
 import type {
@@ -36,8 +36,6 @@ type ArraySelectors<E extends TableSchema> = {
 }[keyof E['columns']];
 
 export type QueryReturn<Q> = Q extends Query<any, any, infer R> ? R : never;
-
-export type QueryTable<Q> = Q extends Query<infer T, any, any> ? T : never;
 
 export type ExistsOptions<TScalar extends boolean = boolean> = {
   /**
@@ -255,7 +253,7 @@ type CustomQueryPhantom = {
 /**
  * A Query, CustomQuery, or a function returning either.
  */
-export type AnyQueryLike =
+type AnyQueryLike =
   | Query<string, ZeroSchema, any>
   | ((...args: any) => Query<string, ZeroSchema, any>)
   | CustomQueryPhantom;
@@ -515,14 +513,6 @@ export type MaterializeOptions = PreloadOptions;
 export type HumanReadable<T> = undefined extends T ? Expand<T> : Expand<T>[];
 
 /**
- * A helper type that tries to make the type more readable.
- */
-// Note: opaque types expand incorrectly.
-export type HumanReadableRecursive<T> = undefined extends T
-  ? ExpandRecursive<T>
-  : ExpandRecursive<T>[];
-
-/**
  * The kind of results we want to wait for when using {@link run} on {@link Query}.
  *
  * `unknown` means we don't want to wait for the server to return results. The result is a
@@ -550,13 +540,5 @@ export type RunOptions = {
   type: 'unknown' | 'cached' | 'complete';
   ttl?: TTL | undefined;
 };
-
-export const DEFAULT_RUN_OPTIONS_UNKNOWN = {
-  type: 'unknown',
-} as const;
-
-export const DEFAULT_RUN_OPTIONS_COMPLETE = {
-  type: 'complete',
-} as const;
 
 export type AnyQuery = Query<string, ZeroSchema, any>;

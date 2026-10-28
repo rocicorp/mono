@@ -5,7 +5,7 @@ const IPV4_ADDRESS_REGEX =
 // match this regex, and no domain based hostnames will.
 const IPV6_ADDRESS_HOSTNAME_REGEX = /^\[[a-fA-F0-9:]*:[a-fA-F0-9:]*\]$/;
 
-export const IP_ADDRESS_HOSTNAME_REGEX = new RegExp(
+const IP_ADDRESS_HOSTNAME_REGEX = new RegExp(
   `(${IPV4_ADDRESS_REGEX.source}|${IPV6_ADDRESS_HOSTNAME_REGEX.source})`,
 );
 

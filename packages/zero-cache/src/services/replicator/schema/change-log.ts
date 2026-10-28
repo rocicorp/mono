@@ -148,8 +148,6 @@ const rawChangeLogEntrySchema = v.object({
     .map(val => v.record(v.string()).parse(JSON.parse(val))),
 });
 
-export type RawChangeLogEntry = v.Infer<typeof rawChangeLogEntrySchema>;
-
 export class ChangeLog {
   readonly #logRowOpStmt: Statement;
   readonly #logRowOpWithBackfillStmt: Statement;

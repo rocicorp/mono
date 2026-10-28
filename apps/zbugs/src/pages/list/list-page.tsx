@@ -60,7 +60,7 @@ function markFirstRowRendered() {
   }
 }
 
-export const ITEM_SIZE = 56;
+const ITEM_SIZE = 56;
 
 type RowProps = {
   item: VirtualRow<Issue>;

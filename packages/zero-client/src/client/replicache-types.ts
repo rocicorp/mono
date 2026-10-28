@@ -13,10 +13,10 @@ import type {ReadonlyJSONObject} from '../../../shared/src/json.ts';
  * when they are run on the server, which can use it to supplement
  * mutator args and to authorize the mutation.
  */
-export type AuthData = ReadonlyJSONObject & {readonly userID: string};
+type AuthData = ReadonlyJSONObject & {readonly userID: string};
 
 /** Environment variables. */
-export type Env = {readonly [key: string]: string};
+type Env = {readonly [key: string]: string};
 
 export interface ReadTransaction extends ReplicacheReadTransaction {
   /**

@@ -12,4 +12,4 @@ export type Immutable<T> = T extends Primitive
 
 export type ImmutableArray<T> = ReadonlyArray<Immutable<T>>;
 
-export type ImmutableObject<T> = {readonly [K in keyof T]: Immutable<T[K]>};
+type ImmutableObject<T> = {readonly [K in keyof T]: Immutable<T[K]>};

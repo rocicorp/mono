@@ -1,6 +1,5 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import {stringCompare} from '../../../shared/src/string-compare.ts';
-import {assertTesting} from '../../../shared/src/testing.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {
   Condition,
@@ -50,7 +49,7 @@ export function constraintMatchesPrimaryKey(
   return keyMatchesPrimaryKey(Object.keys(constraint), primary);
 }
 
-export function keyMatchesPrimaryKey(
+function keyMatchesPrimaryKey(
   key: Iterable<string>,
   primary: PrimaryKey,
 ): boolean {
@@ -157,44 +156,4 @@ function extractColumn(
   }
 
   return undefined;
-}
-
-export class SetOfConstraint {
-  #data: Constraint[] = [];
-
-  constructor() {
-    assertTesting('SetOfConstraint is only available in testing');
-  }
-
-  #indexOf(value: Constraint): number {
-    return this.#data.findIndex(v => constraintEquals(v, value));
-  }
-
-  has(value: Constraint): boolean {
-    return this.#indexOf(value) !== -1;
-  }
-
-  add(value: Constraint): this {
-    if (!this.has(value)) {
-      this.#data.push(value);
-    }
-    return this;
-  }
-}
-
-function constraintEquals(a: Constraint, b: Constraint): boolean {
-  const aEntries = Object.entries(a);
-  const bEntries = Object.entries(b);
-  if (aEntries.length !== bEntries.length) {
-    return false;
-  }
-  for (let i = 0; i < aEntries.length; i++) {
-    if (
-      aEntries[i][0] !== bEntries[i][0] ||
-      !valuesEqual(aEntries[i][1], bEntries[i][1])
-    ) {
-      return false;
-    }
-  }
-  return true;
 }

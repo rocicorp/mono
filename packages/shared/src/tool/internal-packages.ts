@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url';
 /**
  * Map from name to packages/name
  */
-export const internalPackagesMap: Map<string, string> = new Map();
+const internalPackagesMap: Map<string, string> = new Map();
 
 const monoRootPath = fileURLToPath(new URL('../../../../', import.meta.url));
 
@@ -27,8 +27,6 @@ for (const p of ['packages']) {
     }
   }
 }
-
-export const internalPackages = [...internalPackagesMap.keys()];
 
 export function isInternalPackage(name: string): boolean {
   return internalPackagesMap.has(name);

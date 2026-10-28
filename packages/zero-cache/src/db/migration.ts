@@ -164,8 +164,7 @@ function sorted(
   return versionMigrations.sort(([a], [b]) => a - b);
 }
 
-// Exposed for tests.
-export const versionHistory = v.object({
+const versionHistory = v.object({
   /**
    * The `schemaVersion` is highest code version that has ever been run
    * on the database, and is used to delineate the structure of the tables

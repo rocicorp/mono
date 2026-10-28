@@ -43,7 +43,7 @@ export const publishedColumnSpec = columnSpec.extend({
   typeOID: v.number(),
 });
 
-export const liteTableSpec = v.object({
+const liteTableSpec = v.object({
   name: v.string(),
   columns: v.record(columnSpec),
   primaryKey: v.array(v.string()).optional(),
@@ -107,7 +107,7 @@ export type TableSpec = Readonly<v.Infer<typeof tableSpec>>;
 
 export type PublishedTableSpec = Readonly<v.Infer<typeof publishedTableSpec>>;
 
-export const directionSchema = v.literalUnion('ASC', 'DESC');
+const directionSchema = v.literalUnion('ASC', 'DESC');
 
 export type IndexPredicateValue =
   | {readonly type: 'boolean'; readonly value: boolean}
@@ -138,7 +138,7 @@ const indexPredicateValueSchema: v.Type<IndexPredicateValue> = v.union(
   v.readonlyObject({type: v.literal('string'), value: v.string()}),
 );
 
-export const indexPredicateSchema: v.Type<IndexPredicate> = v.lazy(() =>
+const indexPredicateSchema: v.Type<IndexPredicate> = v.lazy(() =>
   v.union(
     v.readonlyObject({
       type: v.literalUnion('and', 'or'),
@@ -162,7 +162,7 @@ export const indexPredicateSchema: v.Type<IndexPredicate> = v.lazy(() =>
   ),
 );
 
-export const liteIndexSpec = v.object({
+const liteIndexSpec = v.object({
   name: v.string(),
   tableName: v.string(),
   unique: v.boolean(),

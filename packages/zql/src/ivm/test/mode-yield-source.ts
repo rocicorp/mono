@@ -17,7 +17,7 @@ import type {Stream} from '../stream.ts';
 
 export type YieldMode = 'fetch' | 'push' | 'both';
 
-export class ModeYieldSource implements Source {
+class ModeYieldSource implements Source {
   readonly #source: Source;
   readonly #rng: () => number;
   readonly #p: number;

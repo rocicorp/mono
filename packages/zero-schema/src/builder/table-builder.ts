@@ -60,7 +60,7 @@ export const column = {
   enumeration,
 };
 
-export class TableBuilder<TShape extends TableSchema> {
+class TableBuilder<TShape extends TableSchema> {
   readonly #schema: TShape;
   constructor(schema: TShape) {
     this.#schema = schema;

@@ -199,36 +199,36 @@ export type SnitchMessage =
   | PushMessage
   | FilterMessage;
 
-export type FetchCountMessage = [string, 'fetchCount', FetchRequest, number];
+type FetchCountMessage = [string, 'fetchCount', FetchRequest, number];
 export type FetchMessage = [string, 'fetch', FetchRequest];
-export type PushMessage = [string, 'push', ChangeRecord];
-export type FilterMessage = [string, 'filter', Row];
+type PushMessage = [string, 'push', ChangeRecord];
+type FilterMessage = [string, 'filter', Row];
 
-export type ChangeRecord =
+type ChangeRecord =
   | AddChangeRecord
   | RemoveChangeRecord
   | ChildChangeRecord
   | EditChangeRecord;
 
-export type AddChangeRecord = {
+type AddChangeRecord = {
   type: 'add';
   row: Row;
   // We don't currently capture the relationships. If we did, we'd need a
   // stream that cloned them lazily.
 };
 
-export type RemoveChangeRecord = {
+type RemoveChangeRecord = {
   type: 'remove';
   row: Row;
 };
 
-export type ChildChangeRecord = {
+type ChildChangeRecord = {
   type: 'child';
   row: Row;
   child: ChangeRecord;
 };
 
-export type EditChangeRecord = {
+type EditChangeRecord = {
   type: 'edit';
   row: Row;
   oldRow: Row;

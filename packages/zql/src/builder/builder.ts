@@ -12,13 +12,11 @@ import type {
   CorrelatedSubqueryCondition,
   Disjunction,
   LiteralValue,
-  Ordering,
   Parameter,
   SimpleCondition,
   ValuePosition,
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import {Cap} from '../ivm/cap.ts';
 import {Exists} from '../ivm/exists.ts';
 import {FanIn} from '../ivm/fan-in.ts';
@@ -296,7 +294,7 @@ const PERMISSIONS_EXISTS_LIMIT = 1;
  * Recursively checks AND/OR branches but does not recurse into nested subqueries
  * (those are checked when buildPipelineInternal processes them).
  */
-export function assertNoNotExists(condition: Condition): void {
+function assertNoNotExists(condition: Condition): void {
   switch (condition.type) {
     case 'simple':
       return;
@@ -706,7 +704,7 @@ function applyAnd(
   return input;
 }
 
-export function applyOr(
+function applyOr(
   input: FilterInput,
   condition: Disjunction,
   delegate: BuilderDelegate,
@@ -766,7 +764,7 @@ export function groupSubqueryConditions(condition: Disjunction) {
   return partitioned;
 }
 
-export function isNotAndDoesNotContainSubquery(
+function isNotAndDoesNotContainSubquery(
   condition: Condition,
 ): condition is NoSubqueryCondition {
   if (condition.type === 'correlatedSubquery') {
@@ -899,27 +897,6 @@ function gatherCorrelatedSubqueryQueryConditions(
     gather(condition);
   }
   return csqs;
-}
-
-export function assertOrderingIncludesPK(
-  ordering: Ordering,
-  pk: PrimaryKey,
-): void {
-  // oxlint-disable-next-line unicorn/prefer-set-has -- Array is more appropriate here for small collections
-  const orderingFields = ordering.map(([field]) => field);
-  const missingFields = pk.filter(pkField => !orderingFields.includes(pkField));
-
-  if (missingFields.length > 0) {
-    throw new Error(
-      `Ordering must include all primary key fields. Missing: ${missingFields.join(
-        ', ',
-      )}. ZQL automatically appends primary key fields to the ordering if they are missing 
-      so a common cause of this error is a casing mismatch between Postgres and ZQL.
-      E.g., "userid" vs "userID".
-      You may want to add double-quotes around your Postgres column names to prevent Postgres from lower-casing them:
-      https://www.postgresql.org/docs/current/sql-syntax-lexical.htm`,
-    );
-  }
 }
 
 function uniquifyCorrelatedSubqueryConditionAliases(ast: AST): AST {

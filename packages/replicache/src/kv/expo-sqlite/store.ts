@@ -15,7 +15,7 @@ import type {StoreProvider} from '../store.ts';
 
 export type ExpoSQLiteStoreOptions = SQLiteStoreOptions;
 
-export function dropExpoSQLiteStore(
+function dropExpoSQLiteStore(
   name: string,
   opts?: ExpoSQLiteStoreOptions,
 ): Promise<void> {

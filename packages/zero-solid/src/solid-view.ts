@@ -27,9 +27,9 @@ import {
 
 export type State = [Entry, QueryResultDetails];
 
-export const COMPLETE: QueryResultDetails = Object.freeze({type: 'complete'});
+const COMPLETE: QueryResultDetails = Object.freeze({type: 'complete'});
 export const UNKNOWN: QueryResultDetails = Object.freeze({type: 'unknown'});
-export const CACHED: QueryResultDetails = Object.freeze({type: 'cached'});
+const CACHED: QueryResultDetails = Object.freeze({type: 'cached'});
 
 /**
  * SolidView bridges Zero's incremental view updates with Solid's reactive

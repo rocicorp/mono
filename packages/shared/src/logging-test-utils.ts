@@ -19,7 +19,7 @@ export class TestLogSink implements LogSink {
   }
 }
 
-export class SilentLogSink implements LogSink {
+class SilentLogSink implements LogSink {
   log(_l: LogLevel, _c: Context | undefined, ..._args: unknown[]): void {
     return;
   }

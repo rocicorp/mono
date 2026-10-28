@@ -544,7 +544,7 @@ export function makeCommitData<M extends Meta>(
   }) as unknown as CommitData<M>;
 }
 
-export function assertCommitData(v: unknown): asserts v is CommitData<Meta> {
+function assertCommitData(v: unknown): asserts v is CommitData<Meta> {
   if (skipCommitDataAsserts) {
     return;
   }

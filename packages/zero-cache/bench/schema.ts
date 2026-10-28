@@ -90,6 +90,3 @@ export const schema = createSchema({
   tables: [member, issue, comment, label, issueLabel],
   relationships: [issueRelationships, commentRelationships],
 });
-
-type AppSchema = typeof schema;
-export type {AppSchema as Schema};

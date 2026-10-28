@@ -14,13 +14,13 @@ import {compileUrlPattern} from '../../custom/fetch.ts';
 import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
 import type {ConnectParams} from '../../workers/connect-params.ts';
 
-export type ConnectionState = 'provisional' | 'validated';
+type ConnectionState = 'provisional' | 'validated';
 
 /**
  * Normalized user identity shared by live connection state and group auth state.
  * `id: null` means logged out.
  */
-export type UserState = {readonly id: string | null};
+type UserState = {readonly id: string | null};
 
 /**
  * Delineates the two paths for validating a connection: either server can validate
@@ -51,7 +51,7 @@ export type HeaderOptions = {
   readonly origin?: string | undefined;
 };
 
-export type ConnectionFetchContext = {
+type ConnectionFetchContext = {
   readonly url: string | undefined;
   readonly allowedUrlPatterns: readonly URLPattern[] | undefined;
   readonly headerOptions: HeaderOptions;

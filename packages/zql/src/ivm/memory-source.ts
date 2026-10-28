@@ -1081,7 +1081,7 @@ function rowMatchesPK(a: Row, b: Row, primaryKey: PrimaryKey): boolean {
  * or the min or max possible value for the type. This is used to start a scan
  * at the beginning of the rows matching a constraint.
  */
-export type Bound = Value | MinValue | MaxValue;
+type Bound = Value | MinValue | MaxValue;
 export type RowBound = Record<string, Bound>;
 export const minValue = Symbol('min-value');
 type MinValue = typeof minValue;
@@ -1150,7 +1150,7 @@ export function generateRows(
     : data.valuesFrom(scanStart as Row | undefined);
 }
 
-export function stringify(change: SourceChange) {
+function stringify(change: SourceChange) {
   return JSON.stringify(change, (_, v) =>
     typeof v === 'bigint' ? v.toString() : v,
   );

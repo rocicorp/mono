@@ -1,5 +1,5 @@
 /** The values that can be represented in JSON */
-export type JSONValue =
+type JSONValue =
   | null
   | string
   | boolean

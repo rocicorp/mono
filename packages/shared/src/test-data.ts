@@ -6,7 +6,7 @@
 import {getSizeOfValue} from './size-of-value.ts';
 
 export type RandomDataType = 'string' | 'object' | 'arraybuffer' | 'blob';
-export type RandomDatum = string | Record<string, string> | ArrayBuffer | Blob;
+type RandomDatum = string | Record<string, string> | ArrayBuffer | Blob;
 export type RandomData = RandomDatum[];
 
 /**
@@ -47,7 +47,7 @@ export function randomString(len: number): string {
  * Generate a random ASCII string of the specified length.
  * Characters are in the range 1-127 (no null characters).
  */
-export function randomASCIIString(len: number): string {
+function randomASCIIString(len: number): string {
   return randomStringInternal(len, 128);
 }
 
@@ -66,7 +66,7 @@ function randomStringInternal(len: number, max: number): string {
  * Generate a random object with string keys and values.
  * The object will have up to 16 properties.
  */
-export function randomObject(len: number): Record<string, string> {
+function randomObject(len: number): Record<string, string> {
   const ret: Record<string, string> = {};
   for (let i = 0; i < Math.min(16, len); i++) {
     ret[`k${i}`] = randomString(Math.ceil(len / 16));
@@ -109,14 +109,14 @@ function randomUint8Array(len: number): Uint8Array<ArrayBuffer> {
 /**
  * Generate a random boolean value.
  */
-export function randomBoolean(): boolean {
+function randomBoolean(): boolean {
   return Math.random() < 0.5;
 }
 
 /**
  * Generate a random float64 that is not an integer.
  */
-export function randomFloat64(): number {
+function randomFloat64(): number {
   let x = Math.random();
   while (x === (x | 0)) {
     x = Math.random();
@@ -127,7 +127,7 @@ export function randomFloat64(): number {
 /**
  * Generate a random 32-bit signed integer.
  */
-export function randomInt32(): number {
+function randomInt32(): number {
   return (Math.random() * 2 ** 31 - 1) | 0;
 }
 

@@ -1,7 +1,4 @@
-import {
-  escapePostgresIdentifier,
-  escapeSQLiteIdentifier,
-} from '@databases/escape-identifier';
+import {escapePostgresIdentifier} from '@databases/escape-identifier';
 import type {FormatConfig, SQLItem, SQLQuery} from '@databases/sql';
 import sql, {SQLItemType} from '@databases/sql';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
@@ -26,14 +23,9 @@ export function formatPgInternalConvert(sql: SQLQuery) {
   return sql.format((items: readonly SQLItem[]) => formatFn(items, format));
 }
 
-export function formatSqlite(sql: SQLQuery) {
-  const format = new ReusingFormat(escapeSQLiteIdentifier);
-  return sql.format((items: readonly SQLItem[]) => formatFn(items, format));
-}
-
 const sqlConvert = Symbol('fromJson');
 
-export type LiteralType = 'boolean' | 'number' | 'string' | 'null';
+type LiteralType = 'boolean' | 'number' | 'string' | 'null';
 export type PluralLiteralType = Exclude<LiteralType, 'null'>;
 
 type ColumnSqlConvertArg = {

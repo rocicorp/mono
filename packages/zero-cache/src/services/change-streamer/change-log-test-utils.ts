@@ -153,7 +153,7 @@ export function transactionMessages(
  * The subset of {@link Storer} the driver needs, so that a test which attaches
  * no shard does not pull one in.
  */
-export type UpstreamStore = {
+type UpstreamStore = {
   store(watermark: string, msg: ChangeStreamData): void;
   allProcessed(): Promise<unknown>;
 };

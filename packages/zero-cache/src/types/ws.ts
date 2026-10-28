@@ -4,7 +4,7 @@ import {elide} from './strings.ts';
 
 // https://github.com/Luka967/websocket-close-codes
 export const PROTOCOL_ERROR = 1002;
-export const INTERNAL_ERROR = 1011;
+const INTERNAL_ERROR = 1011;
 
 export type ErrorCode = typeof PROTOCOL_ERROR | typeof INTERNAL_ERROR;
 

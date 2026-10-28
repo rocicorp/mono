@@ -1,5 +1,4 @@
 import {pid} from 'node:process';
-import type {MessagePort} from 'node:worker_threads';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {WebSocket, WebSocketServer, type ServerOptions} from 'ws';
@@ -46,10 +45,6 @@ import type {ConnectParams} from './connect-params.ts';
 import {Connection, sendError} from './connection.ts';
 import {createNotifierFrom, subscribeTo} from './replicator.ts';
 import {SyncerWsMessageHandler} from './syncer-ws-message-handler.ts';
-
-export type SyncerWorkerData = {
-  replicatorPort: MessagePort;
-};
 
 export type ReplicaReadyState = {
   readonly watermark: string;

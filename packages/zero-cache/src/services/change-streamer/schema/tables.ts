@@ -19,13 +19,11 @@ function schema(shard: ShardID) {
   return ident(cdcSchema(shard));
 }
 
-export const PG_SCHEMA = 'cdc';
-
 function createSchema(shard: ShardID) {
   return /*sql*/ `CREATE SCHEMA IF NOT EXISTS ${schema(shard)};`;
 }
 
-export type ChangeLogEntry = {
+type ChangeLogEntry = {
   // A strictly monotonically increasing, lexicographically sortable
   // value that uniquely identifies a position in the change stream.
   watermark: string;
@@ -550,7 +548,7 @@ export class AutoResetSignal extends AbortError {
  * Must be called on a **separate connection** from the one that is blocked,
  * since the blocked connection is inside a pending transaction.
  */
-export async function terminateChangeDBLockHolders(
+async function terminateChangeDBLockHolders(
   lc: LogContext,
   db: PostgresDB,
   shard: ShardID,

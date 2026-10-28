@@ -504,7 +504,7 @@ function decodeNumericViaString(
  *
  * Result is JSON.stringify'd for storage in SQLite (matching text path behavior).
  */
-export function decodeArray(buf: Buffer): string {
+function decodeArray(buf: Buffer): string {
   let offset = 0;
 
   const ndim = buf.readInt32BE(offset);

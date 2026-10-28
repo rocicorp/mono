@@ -22,7 +22,7 @@ import {validateInput} from './validate-input.ts';
 // CustomQuery and QueryRequest types
 // ----------------------------------------------------------------------------
 
-export type CustomQueryTypes<
+type CustomQueryTypes<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
   TSchema extends Schema,
@@ -89,7 +89,7 @@ export function isQuery<S extends Schema>(
   );
 }
 
-export type QueryRequestTypes<
+type QueryRequestTypes<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
@@ -188,7 +188,7 @@ export function isQueryRegistry(obj: unknown): obj is AnyQueryRegistry {
   );
 }
 
-export type QueryRegistryTypes<TSchema extends Schema> = 'QueryRegistry' & {
+type QueryRegistryTypes<TSchema extends Schema> = 'QueryRegistry' & {
   readonly $schema: TSchema;
 };
 
@@ -244,7 +244,7 @@ export type QueryDefinitions = {
 // defineQuery
 // ----------------------------------------------------------------------------
 
-export type QueryDefinitionTypes<
+type QueryDefinitionTypes<
   TTable extends string,
   TInput extends ReadonlyJSONValue | undefined,
   TOutput,
@@ -297,7 +297,7 @@ export type QueryDefinitionFunction<
   TContext,
 > = (options: {args: TInput; ctx: TContext}) => Query<TTable, Schema, TReturn>;
 
-export type QueryExecutionFunction<
+type QueryExecutionFunction<
   TTable extends string,
   TInput extends ReadonlyJSONValue | undefined,
   TReturn,

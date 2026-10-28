@@ -8,7 +8,6 @@ import type {PlannerConstraint} from '../planner-constraint.ts';
 import {PlannerFanIn} from '../planner-fan-in.ts';
 import {PlannerFanOut} from '../planner-fan-out.ts';
 import {PlannerJoin} from '../planner-join.ts';
-import type {CostEstimate} from '../planner-node.ts';
 import {PlannerSource} from '../planner-source.ts';
 
 // ============================================================================
@@ -19,11 +18,6 @@ import {PlannerSource} from '../planner-source.ts';
  * Base cost used by simpleCostModel when no constraints are applied.
  */
 export const BASE_COST = 100;
-
-/**
- * Cost reduction per constraint in simpleCostModel.
- */
-export const CONSTRAINT_REDUCTION = 10;
 
 /**
  * Default sort ordering used in tests.
@@ -67,34 +61,6 @@ export const simpleCostModel: ConnectionCostModel = (
     fanout,
   };
 };
-
-/**
- * Calculates expected cost given a number of constraints.
- */
-export function expectedCost(constraintCount: number): CostEstimate {
-  const c = Math.max(1, BASE_COST - constraintCount * CONSTRAINT_REDUCTION);
-  return {
-    startupCost: 0,
-    scanEst: c,
-    cost: c,
-    returnedRows: c,
-    selectivity: 1.0,
-    limit: undefined,
-    fanout,
-  };
-}
-
-export function multCost(base: CostEstimate, factor: number): CostEstimate {
-  return {
-    startupCost: base.startupCost,
-    scanEst: base.scanEst * factor,
-    cost: base.cost * factor,
-    returnedRows: base.returnedRows * factor,
-    selectivity: base.selectivity,
-    limit: base.limit,
-    fanout,
-  };
-}
 
 // ============================================================================
 // Test Factories

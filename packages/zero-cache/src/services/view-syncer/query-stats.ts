@@ -10,7 +10,7 @@ export type QueryIdentity = {
   readonly shape: QueryShape;
 };
 
-export type HydrationOutcome = 'finished' | 'aborted' | 'failed';
+type HydrationOutcome = 'finished' | 'aborted' | 'failed';
 
 export type HydrationRecord = {
   readonly outcome: HydrationOutcome;

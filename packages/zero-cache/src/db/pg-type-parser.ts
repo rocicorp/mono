@@ -6,7 +6,7 @@ import type {PostgresDB} from '../types/pg.ts';
 // Arbitrary array type to test if the PostgresDB client has fetched types.
 const INT4_ARRAY_TYPE = 1007;
 
-export type TypeParser = (val: string) => unknown;
+type TypeParser = (val: string) => unknown;
 export interface TypeParsers {
   getTypeParser(typeOID: number): TypeParser;
 }

@@ -1,13 +1,13 @@
 import * as v from '../../shared/src/valita.ts';
 import {nullableVersionSchema, versionSchema} from './version.ts';
 
-export const pullRequestBodySchema = v.object({
+const pullRequestBodySchema = v.object({
   clientGroupID: v.string(),
   cookie: nullableVersionSchema,
   requestID: v.string(),
 });
 
-export const pullResponseBodySchema = v.object({
+const pullResponseBodySchema = v.object({
   cookie: versionSchema,
   // Matches pullRequestBodySchema requestID that initiated this response
   requestID: v.string(),
@@ -26,7 +26,6 @@ export const pullResponseMessageSchema = v.tuple([
   pullResponseBodySchema,
 ]);
 
-export type PullRequestBody = v.Infer<typeof pullRequestBodySchema>;
 export type PullResponseBody = v.Infer<typeof pullResponseBodySchema>;
 
 export type PullRequestMessage = v.Infer<typeof pullRequestMessageSchema>;

@@ -17,7 +17,7 @@ import {purgeStreaks, type ResourceSample} from './resources.ts';
  */
 
 /** Drawn from `ChangeLogReadRouteReason`, the closed set of route reasons. */
-export const REQUIRED_ROUTES: readonly {
+const REQUIRED_ROUTES: readonly {
   route: string;
   triggeredBy: string;
   chaos: readonly string[];

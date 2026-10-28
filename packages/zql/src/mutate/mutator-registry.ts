@@ -201,7 +201,7 @@ export function isMutatorRegistry(value: unknown): value is AnyMutatorRegistry {
   );
 }
 
-export type MutatorRegistryTypes<TSchema extends Schema> = 'MutatorRegistry' & {
+type MutatorRegistryTypes<TSchema extends Schema> = 'MutatorRegistry' & {
   readonly $schema: TSchema;
 };
 

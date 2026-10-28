@@ -20,11 +20,3 @@ export function useNumericPref(key: string, defaultValue: number): number {
   const value = useUserPref(key);
   return value !== undefined ? parseInt(value, 10) : defaultValue;
 }
-
-export function setNumericPref(
-  z: Zero,
-  key: string,
-  value: number,
-): Promise<void> {
-  return setUserPref(z, key, value + '');
-}

@@ -24,7 +24,7 @@ import * as v from '../../shared/src/valita.ts';
  */
 export type Value = ReadonlyJSONValue | undefined;
 
-export const valueSchema: v.Type<Value> = v.union(jsonSchema, v.undefined());
+const valueSchema: v.Type<Value> = v.union(jsonSchema, v.undefined());
 
 /**
  * A Row is represented as a JS Object.

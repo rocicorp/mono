@@ -4,7 +4,7 @@ import {
   type PokeChunk,
 } from '../../../zero-protocol/src/poke.ts';
 
-export const POKE_CHUNK_BYTES = 1024 * 1024;
+const POKE_CHUNK_BYTES = 1024 * 1024;
 
 export type EmitPokeChunk = (chunk: PokeChunk) => Promise<void>;
 

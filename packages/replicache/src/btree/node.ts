@@ -58,8 +58,6 @@ export function makeNodeChunkData<V>(
   ]) as BaseNode<V>;
 }
 
-export type Node = DataNode | InternalNode;
-
 /**
  * Describes the changes that happened to Replicache after a
  * {@link WriteTransaction} was committed.
@@ -250,10 +248,6 @@ function convertNonV7Entry(
   f(entry[1]);
   const entrySize = getSizeOfEntry(entry[0], entry[1]);
   return [entry[0], entry[1], entrySize] as Entry<Hash | JSONValue>;
-}
-
-export function isInternalNode(node: Node): node is InternalNode {
-  return node[NODE_LEVEL] > 0;
 }
 
 abstract class NodeImpl<Value> {

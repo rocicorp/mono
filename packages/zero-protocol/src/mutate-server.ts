@@ -13,12 +13,11 @@ const legacyPushResponseSchema = v.union(
   pushFailedBodySchema,
 );
 
-export const mutateSuccessSchema = v.object({
+const mutateSuccessSchema = v.object({
   kind: v.literal('MutateResponse'),
   userID: v.string().nullable().optional(),
   mutations: v.array(mutationResponseSchema),
 });
-export type MutateSuccess = v.Infer<typeof mutateSuccessSchema>;
 
 export const mutateResponseSchema = v.union(
   mutateSuccessSchema,

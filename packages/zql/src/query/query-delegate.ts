@@ -2,7 +2,7 @@ import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {BuilderDelegate} from '../builder/builder.ts';
-import type {Format, ViewFactory} from '../ivm/view.ts';
+import type {ViewFactory} from '../ivm/view.ts';
 import type {MetricsDelegate} from './metrics-delegate.ts';
 import type {CustomQueryID} from './named.ts';
 import type {
@@ -29,19 +29,6 @@ export type GotCallback = (
   got: boolean | 'cached',
   error?: ErroredQuery,
 ) => void;
-
-export interface NewQueryDelegate {
-  newQuery<
-    TTable extends keyof TSchema['tables'] & string,
-    TSchema extends Schema,
-    TReturn,
-  >(
-    schema: TSchema,
-    table: TTable,
-    ast: AST,
-    format: Format,
-  ): Query<TTable, TSchema, TReturn>;
-}
 
 /**
  * Builds and hydrates a deferred pipeline. Returns the function that exposes

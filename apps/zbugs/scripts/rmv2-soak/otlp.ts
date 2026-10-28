@@ -72,7 +72,7 @@ const AGGREGATION_TEMPORALITY_DELTA = 1;
 
 const METRICS_PATH = /^\/v1\/metrics\/([^/?]+)/;
 
-export type Attributes = Readonly<Record<string, string>>;
+type Attributes = Readonly<Record<string, string>>;
 
 /** One (node, metric, attributes) series, aggregated over the run. */
 export type MetricSample = {

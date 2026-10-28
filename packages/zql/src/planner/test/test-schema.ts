@@ -114,7 +114,7 @@ const likesRelationships = relationships(likes, ({one}) => ({
   }),
 }));
 
-export const testSchema = createSchema({
+const testSchema = createSchema({
   tables: [users, posts, comments, profile, likes],
   relationships: [
     usersRelationships,

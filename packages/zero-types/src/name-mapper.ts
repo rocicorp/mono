@@ -4,7 +4,7 @@ import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.ts';
 // Defined here to avoid circular dependency with zero-protocol
 export type Value = JSONValue | ReadonlyJSONValue | undefined;
 
-export type ColumnNames = {[src: string]: string};
+type ColumnNames = {[src: string]: string};
 
 export type DestNames = {
   tableName: string;

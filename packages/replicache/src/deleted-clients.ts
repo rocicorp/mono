@@ -26,7 +26,7 @@ export type DeletedClients = readonly Readonly<ClientIDPair>[];
 
 export type WritableDeletedClients = ClientIDPair[];
 
-export const deletedClientsSchema: v.Type<DeletedClients> = v.readonlyArray(
+const deletedClientsSchema: v.Type<DeletedClients> = v.readonlyArray(
   v.readonlyObject({
     clientGroupID: clientGroupIDSchema,
     clientID: clientIDSchema,

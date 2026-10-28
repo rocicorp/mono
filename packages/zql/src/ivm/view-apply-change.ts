@@ -41,7 +41,7 @@ type MutableMetaEntryList = MutableMetaEntry[];
  * Node with eagerly-expanded relationships (arrays instead of generators).
  * Used when batching changes to capture source state at push time.
  */
-export type ExpandedNode = {
+type ExpandedNode = {
   row: Row;
   relationships: Record<string, ExpandedNode[]>;
 };
@@ -51,7 +51,7 @@ export type ExpandedNode = {
  * - A lazy Node with generator relationships (original behavior)
  * - An ExpandedNode with pre-computed relationship arrays (for batching)
  */
-export type ViewNode = Node | ExpandedNode;
+type ViewNode = Node | ExpandedNode;
 
 /**
  * `applyChange` does not consume the `relationships` of `ChildChange#node`,
@@ -64,14 +64,14 @@ export type ViewChange =
   | ChildViewChange
   | EditViewChange;
 
-export type RowOnlyNode = {row: Row};
+type RowOnlyNode = {row: Row};
 
-export type AddViewChange = {
+type AddViewChange = {
   type: 'add';
   node: ViewNode;
 };
 
-export type RemoveViewChange = {
+type RemoveViewChange = {
   type: 'remove';
   node: ViewNode;
 };
@@ -90,16 +90,6 @@ type EditViewChange = {
   node: RowOnlyNode;
   oldNode: RowOnlyNode;
 };
-
-/**
- * This is a subset of WeakMap but restricted to what we need.
- * @deprecated Not used anymore. This will be removed in the future.
- */
-export interface RefCountMap {
-  get(entry: Entry): number | undefined;
-  set(entry: Entry, refCount: number): void;
-  delete(entry: Entry): boolean;
-}
 
 /**
  * Get child nodes from a relationship, handling both lazy (Node) and expanded (ExpandedNode).
@@ -208,7 +198,7 @@ export function applyChange(
   }
 }
 
-export function applyChangeInternal<M extends Mutate>(
+function applyChangeInternal<M extends Mutate>(
   parentEntry: MetaEntry<M>,
   change: ViewChange,
   schema: SourceSchema,
@@ -543,35 +533,6 @@ export function applyChangeInternal<M extends Mutate>(
     default:
       unreachable(change);
   }
-}
-
-/**
- * Batch apply multiple changes to an Entry tree.
- * For small batches or complex cases, falls back to sequential applyChange.
- * Future optimization: O(N + K) batch processing for large K.
- */
-export function applyChanges(
-  parentEntry: Entry,
-  changes: ViewChange[],
-  schema: SourceSchema,
-  relationship: string,
-  format: Format,
-  withIDs: WithIDs = false,
-  mutate: Mutate = false,
-): Entry {
-  let result = parentEntry;
-  for (const change of changes) {
-    result = applyChange(
-      result,
-      change,
-      schema,
-      relationship,
-      format,
-      withIDs,
-      mutate,
-    );
-  }
-  return result;
 }
 
 function applyEdit<M extends Mutate>(

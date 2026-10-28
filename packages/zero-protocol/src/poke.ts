@@ -31,7 +31,7 @@ import {nullableVersionSchema, versionSchema} from './version.ts';
  * disconnect, and reconnect.
  */
 
-export const pokeStartBodySchema = v.object({
+const pokeStartBodySchema = v.object({
   pokeID: v.string(),
   // We always specify a Version as our cookie, but Replicache starts clients
   // with initial cookie `null`, before the first request. So we have to be
@@ -72,7 +72,7 @@ export const pokePartBodySchema = v.object({
  */
 export const pokePartsSchema = v.array(pokePartBodySchema);
 
-export const pokeEndBodySchema = v.object({
+const pokeEndBodySchema = v.object({
   pokeID: v.string(),
   // Note: This should be ignored (and may be empty) if cancel === `true`.
   cookie: versionSchema,

@@ -28,7 +28,7 @@ export type RelationshipsSchema = {
   readonly [name: string]: Relationship;
 };
 
-export type Cardinality = 'one' | 'many';
+type Cardinality = 'one' | 'many';
 
 type Connection = {
   readonly sourceField: readonly string[];

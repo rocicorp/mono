@@ -1535,7 +1535,7 @@ export class OwnershipError extends ProtocolErrorWithLevel {
   }
 }
 
-export class InvalidClientSchemaError extends ProtocolErrorWithLevel {
+class InvalidClientSchemaError extends ProtocolErrorWithLevel {
   readonly name = 'InvalidClientSchemaError';
 
   constructor(cause: unknown) {

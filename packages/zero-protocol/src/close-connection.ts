@@ -3,7 +3,7 @@ import * as v from '../../shared/src/valita.ts';
 /**
  * We do not use the body yet.
  */
-export const closeConnectionBodySchema = v.array(v.unknown());
+const closeConnectionBodySchema = v.array(v.unknown());
 
 /**
  * This message gets sent as part of the close reason in the WebSocket close event.
@@ -18,11 +18,3 @@ export const closeConnectionMessageSchema = v.tuple([
   v.literal('closeConnection'),
   closeConnectionBodySchema,
 ]);
-
-/** @deprecated */
-export type CloseConnectionBody = v.Infer<typeof closeConnectionBodySchema>;
-
-/** @deprecated */
-export type CloseConnectionMessage = v.Infer<
-  typeof closeConnectionMessageSchema
->;

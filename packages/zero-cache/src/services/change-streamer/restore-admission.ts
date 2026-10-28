@@ -11,7 +11,7 @@ import type {LocalReplica} from './subscribe.ts';
  * backoff of which starts at 10 seconds in Kubernetes), but not the restore
  * itself, which is tracked by the liveness of its snapshot reservation.
  */
-export const DEFAULT_PENDING_GRANT_TTL_MS = 90_000;
+const DEFAULT_PENDING_GRANT_TTL_MS = 90_000;
 
 /**
  * The default time for which a replacement continues to be counted after its
