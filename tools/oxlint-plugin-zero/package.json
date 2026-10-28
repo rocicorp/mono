@@ -16,7 +16,7 @@
   },
   "devDependencies": {
     "oxfmt": "^0.74.0",
-    "oxlint": "^1.80.0",
+    "oxlint": "^1.89.0",
     "typescript": "~7.0.2",
     "vitest": "^5.0.5"
   },
