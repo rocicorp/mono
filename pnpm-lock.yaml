@@ -507,14 +507,11 @@ importers:
   packages/datadog:
     devDependencies:
       '@rocicorp/lock':
-        specifier: ^1.0.4
-        version: 1.0.4
+        specifier: ^2.0.1
+        version: 2.0.1
       '@rocicorp/logger':
         specifier: ^6.1.0
         version: 6.1.0
-      '@rocicorp/resolver':
-        specifier: ^1.0.2
-        version: 1.0.2
       oxfmt:
         specifier: ^0.74.0
         version: 0.74.0
@@ -562,14 +559,11 @@ importers:
         specifier: 0.5.5
         version: 0.5.5
       '@rocicorp/lock':
-        specifier: ^1.0.4
-        version: 1.0.4
+        specifier: ^2.0.1
+        version: 2.0.1
       '@rocicorp/logger':
         specifier: ^6.1.0
         version: 6.1.0
-      '@rocicorp/resolver':
-        specifier: ^1.0.2
-        version: 1.0.2
     devDependencies:
       '@op-engineering/op-sqlite':
         specifier: ^18.2.5
@@ -672,8 +666,8 @@ importers:
         specifier: ^1.4.2
         version: 1.4.2(typedoc-plugin-markdown@4.11.0(typedoc@0.28.19(typescript@6.0.3)))(typedoc@0.28.19(typescript@6.0.3))
       replicache:
-        specifier: 15.2.1
-        version: 15.2.1
+        specifier: workspace:*
+        version: link:../replicache
       typedoc:
         specifier: ^0.28.19
         version: 0.28.19(typescript@6.0.3)
@@ -686,9 +680,6 @@ importers:
 
   packages/replicache-perf:
     dependencies:
-      '@rocicorp/resolver':
-        specifier: ^1.0.2
-        version: 1.0.2
       '@types/command-line-args':
         specifier: ^5.2.3
         version: 5.2.3
@@ -762,9 +753,6 @@ importers:
       '@rocicorp/logger':
         specifier: ^6.1.0
         version: 6.1.0
-      '@rocicorp/resolver':
-        specifier: ^1.0.2
-        version: 1.0.2
       chalk-template:
         specifier: ^1.1.2
         version: 1.1.2
@@ -939,14 +927,11 @@ importers:
         specifier: ^0.2.0
         version: 0.2.0
       '@rocicorp/lock':
-        specifier: ^1.0.4
-        version: 1.0.4
+        specifier: ^2.0.1
+        version: 2.0.1
       '@rocicorp/logger':
         specifier: ^6.1.0
         version: 6.1.0
-      '@rocicorp/resolver':
-        specifier: ^1.0.2
-        version: 1.0.2
       '@rocicorp/zero-sqlite3':
         specifier: ^1.1.7
         version: 1.1.7
@@ -1147,14 +1132,11 @@ importers:
         specifier: ^0.2.0
         version: 0.2.0
       '@rocicorp/lock':
-        specifier: ^1.0.4
-        version: 1.0.4
+        specifier: ^2.0.1
+        version: 2.0.1
       '@rocicorp/logger':
         specifier: ^6.1.0
         version: 6.1.0
-      '@rocicorp/resolver':
-        specifier: ^1.0.2
-        version: 1.0.2
       '@rocicorp/zero-sqlite3':
         specifier: ^1.1.7
         version: 1.1.7
@@ -1280,14 +1262,11 @@ importers:
   packages/zero-client:
     dependencies:
       '@rocicorp/lock':
-        specifier: ^1.0.4
-        version: 1.0.4
+        specifier: ^2.0.1
+        version: 2.0.1
       '@rocicorp/logger':
         specifier: ^6.1.0
         version: 6.1.0
-      '@rocicorp/resolver':
-        specifier: ^1.0.2
-        version: 1.0.2
     devDependencies:
       '@faker-js/faker':
         specifier: ^10.6.0
@@ -1436,9 +1415,6 @@ importers:
 
   packages/zero-react:
     dependencies:
-      '@rocicorp/resolver':
-        specifier: ^1.0.2
-        version: 1.0.2
       react-dom:
         specifier: ^19.3.1
         version: 19.3.1(react@19.3.1)
@@ -1469,10 +1445,6 @@ importers:
         version: link:../zero-client
 
   packages/zero-react-native:
-    dependencies:
-      '@rocicorp/resolver':
-        specifier: ^1.0.2
-        version: 1.0.2
     devDependencies:
       oxfmt:
         specifier: ^0.74.0
@@ -1562,9 +1534,6 @@ importers:
 
   packages/zero-solid:
     devDependencies:
-      '@rocicorp/resolver':
-        specifier: ^1.0.2
-        version: 1.0.2
       '@solidjs/testing-library':
         specifier: ^0.8.10
         version: 0.8.10(solid-js@1.9.17)
@@ -1607,9 +1576,6 @@ importers:
 
   packages/zql:
     dependencies:
-      '@rocicorp/resolver':
-        specifier: ^1.0.2
-        version: 1.0.2
       compare-utf8:
         specifier: ^0.2.3
         version: 0.2.3
@@ -2003,8 +1969,8 @@ importers:
   tools/sqlite-io-yield-simulator:
     dependencies:
       '@rocicorp/lock':
-        specifier: ^1.0.4
-        version: 1.0.4
+        specifier: ^2.0.1
+        version: 2.0.1
       '@rocicorp/logger':
         specifier: ^6.1.0
         version: 6.1.0
@@ -2930,10 +2896,6 @@ packages:
   '@babel/types@7.29.8':
     resolution: {integrity: sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg==}
     engines: {node: '>=6.9.0'}
-
-  '@badrap/valita@0.3.11':
-    resolution: {integrity: sha512-oak0W8bycFjnrLeVCVvZqkOWTGh74wCPKUxGLJyhRukRs+V/hQdfZp1eDcQE4Gf3UrtJWfR/Ou4Xe0DZqJZ2FA==}
-    engines: {node: '>= 16'}
 
   '@badrap/valita@0.5.5':
     resolution: {integrity: sha512-+Hp6PfoOyD6hpONZOiJTIP3xiqPPLMtMzDjJ522Hoba1ynqKKnt7bW82L5+G8klLoUHmcuxfCNpND93KyiA7CQ==}
@@ -6046,8 +6008,9 @@ packages:
     resolution: {integrity: sha512-FavTiO8ETXFXDVfA87IThGduTTTR8iqzBnr/c60gUUmbk7knGEXPmf2B+yiNuluJD0ku0fL2V2r62UXnsLXl6w==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
-  '@rocicorp/logger@5.5.0':
-    resolution: {integrity: sha512-lBn0Y4FPKB/IOhcz+r3f9/Ig//LLjWiaQ66Z9tJ54uFib8juzBSXeuxZd/oRnvBt+Lu4epDmLsO1Pnl4mdkSFQ==}
+  '@rocicorp/lock@2.0.1':
+    resolution: {integrity: sha512-dKWMCEPZWrgzeeBsSlihM0bVzc6Oe/wfPIxbl9ZCULDU/o7g9i2Sh9qRWLagDXSZcHBuVV9YLMbjQ1okrp+tYg==}
+    engines: {node: '>=22.0.0'}
 
   '@rocicorp/logger@6.1.0':
     resolution: {integrity: sha512-4jOOwem9veRxl7uH15PsmT48PRd3OzM7n3umkO8WCMt8M929MJml4kfeqAcga8feZAfUb/+DRjsvl4ySgPWqYQ==}
@@ -11961,11 +11924,6 @@ packages:
   renderkid@3.0.0:
     resolution: {integrity: sha512-q/7VIQA8lmM1hF+jn+sFSPWGlMkSAeNYcPLmDQx2zzuiDfaLrOmumR8iaUKlenFgh0XRPIUeSPlH3A+AW3Z5pg==}
 
-  replicache@15.2.1:
-    resolution: {integrity: sha512-FhKA6Icjb7tHoKVslkq2OGGk1QbGqn6NotIaVJv+sD/atbeC6KJ9iS6eDQ7fNwISWc1MMPRuP5qJcw1nP0Dayg==}
-    engines: {node: '>=14.8.0'}
-    hasBin: true
-
   require-directory@2.1.1:
     resolution: {integrity: sha512-fGxEI7+wsG9xrvdjsrlmL22OMTTiHRwAMroiEeMgq8gzoLC/PQr7RsRDSTLUg/bZAZtF+TVIkHc6/4RIKrui+Q==}
     engines: {node: '>=0.10.0'}
@@ -14765,8 +14723,6 @@ snapshots:
     dependencies:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
-
-  '@badrap/valita@0.3.11': {}
 
   '@badrap/valita@0.5.5': {}
 
@@ -18762,7 +18718,7 @@ snapshots:
     dependencies:
       '@rocicorp/resolver': 1.0.2
 
-  '@rocicorp/logger@5.5.0': {}
+  '@rocicorp/lock@2.0.1': {}
 
   '@rocicorp/logger@6.1.0': {}
 
@@ -25789,13 +25745,6 @@ snapshots:
       htmlparser2: 6.1.0
       lodash: 4.18.1
       strip-ansi: 6.0.1
-
-  replicache@15.2.1:
-    dependencies:
-      '@badrap/valita': 0.3.11
-      '@rocicorp/lock': 1.0.4
-      '@rocicorp/logger': 5.5.0
-      '@rocicorp/resolver': 1.0.2
 
   require-directory@2.1.1: {}
 

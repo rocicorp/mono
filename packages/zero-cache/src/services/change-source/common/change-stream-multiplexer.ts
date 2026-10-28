@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../../shared/src/asserts.ts';
+import {resolver} from '../../../../../shared/src/resolver.ts';
 import type {Source} from '../../../types/streams.ts';
 import {Subscription} from '../../../types/subscription.ts';
 import type {

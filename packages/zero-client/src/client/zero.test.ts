@@ -1,5 +1,4 @@
 import {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import {
   afterEach,
   assert,
@@ -34,6 +33,7 @@ import {
   overrideBrowserGlobal,
 } from '../../../shared/src/browser-env.ts';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
+import {resolver} from '../../../shared/src/resolver.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import {changeDesiredQueriesMessageSchema} from '../../../zero-protocol/src/change-desired-queries.ts';

@@ -1,5 +1,5 @@
-import {resolver} from '@rocicorp/resolver';
 import {beforeEach, expect, test} from 'vitest';
+import {resolver} from '../../../shared/src/resolver.ts';
 import {withRead, withWrite} from '../with-transactions.ts';
 import {MemStore, clearAllNamedMemStoresForTesting} from './mem-store.ts';
 import {runAll} from './store-test-util.ts';

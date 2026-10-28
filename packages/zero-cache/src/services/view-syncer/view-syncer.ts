@@ -1,6 +1,5 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import type {Row} from 'postgres';
 import {
   manualSpan,
@@ -14,6 +13,7 @@ import {h64} from '../../../../shared/src/hash.ts';
 import {getOrInsertComputed} from '../../../../shared/src/map.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
+import {resolver} from '../../../../shared/src/resolver.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../../zero-protocol/src/change-desired-queries.ts';
 import {

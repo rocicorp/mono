@@ -1,4 +1,4 @@
-import {resolver} from '@rocicorp/resolver';
+import {resolver} from '../../../shared/src/resolver.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import {

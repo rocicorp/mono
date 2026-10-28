@@ -1,5 +1,5 @@
-import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../../shared/src/asserts.ts';
+import {resolver} from '../../../../shared/src/resolver.ts';
 
 type DrainListener = () => void;
 

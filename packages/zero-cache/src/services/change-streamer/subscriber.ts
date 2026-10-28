@@ -1,9 +1,9 @@
-import {resolver, type Resolver} from '@rocicorp/resolver';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import type {Enum} from '../../../../shared/src/enum.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import {resolver, type Resolver} from '../../../../shared/src/resolver.ts';
 import {RingBuffer} from '../../../../shared/src/ring-buffer.ts';
 import {max} from '../../types/lexi-version.ts';
 import type {Subscription} from '../../types/subscription.ts';

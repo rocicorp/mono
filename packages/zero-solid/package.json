@@ -22,7 +22,6 @@
     "check-fmt": "oxfmt --check ."
   },
   "devDependencies": {
-    "@rocicorp/resolver": "^1.0.2",
     "@solidjs/testing-library": "^0.8.10",
     "oxfmt": "^0.74.0",
     "shared": "workspace:*",

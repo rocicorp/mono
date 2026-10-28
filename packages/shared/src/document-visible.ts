@@ -1,4 +1,4 @@
-import {resolver} from '@rocicorp/resolver';
+import {resolver} from './resolver.ts';
 
 type PartialDocument = Pick<
   Document,

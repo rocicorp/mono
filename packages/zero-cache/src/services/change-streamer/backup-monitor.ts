@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import {resolver} from '../../../../shared/src/resolver.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {getOrCreateGauge} from '../../observability/metrics.ts';
 import type {Source} from '../../types/streams.ts';

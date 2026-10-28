@@ -1,12 +1,12 @@
 import {getDefaultHighWaterMark} from 'node:stream';
 import type {LogContext} from '@rocicorp/logger';
-import {resolver, type Resolver} from '@rocicorp/resolver';
 import {defu} from 'defu';
 import postgres, {type Options, type PostgresType} from 'postgres';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {promiseOrAbort} from '../../../../shared/src/promise-race.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import {resolver, type Resolver} from '../../../../shared/src/resolver.ts';
 import {publishCriticalEvent} from '../../observability/events.ts';
 import {
   getOrCreateCounter,

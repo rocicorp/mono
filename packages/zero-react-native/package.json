@@ -15,9 +15,6 @@
     "fmt": "oxfmt .",
     "check-fmt": "oxfmt --check ."
   },
-  "dependencies": {
-    "@rocicorp/resolver": "^1.0.2"
-  },
   "devDependencies": {
     "oxfmt": "^0.74.0",
     "shared": "workspace:*"

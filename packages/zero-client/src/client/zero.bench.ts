@@ -1,6 +1,6 @@
-import {resolver} from '@rocicorp/resolver';
 import {expect} from 'vitest';
 import {bench, describe} from '../../../shared/src/bench.ts';
+import {resolver} from '../../../shared/src/resolver.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import type {Row} from '../../../zql/src/query/query.ts';
 import {getInternalReplicacheImplForTesting, Zero} from './zero.ts';

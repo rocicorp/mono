@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import {randomUint64} from '../../shared/src/random-uint64.ts';
+import {resolver} from '../../shared/src/resolver.ts';
 import {
   jsonArrayTestData,
   type TestDataObject,

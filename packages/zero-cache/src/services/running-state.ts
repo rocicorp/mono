@@ -1,7 +1,7 @@
 import {PG_UNDEFINED_TABLE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import {AbortError} from '../../../shared/src/abort-error.ts';
+import {resolver} from '../../../shared/src/resolver.ts';
 import {sleepWithAbort} from '../../../shared/src/sleep.ts';
 import {isPostgresError} from '../types/pg.ts';
 

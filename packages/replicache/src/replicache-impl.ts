@@ -1,13 +1,13 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {consoleLogSink} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import {AbortError} from '../../shared/src/abort-error.ts';
 import {assert} from '../../shared/src/asserts.ts';
 import {getBrowserGlobal} from '../../shared/src/browser-env.ts';
 import {getDocumentVisibilityWatcher} from '../../shared/src/document-visible.ts';
 import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {promiseFalse, promiseVoid} from '../../shared/src/resolved-promises.ts';
+import {resolver} from '../../shared/src/resolver.ts';
 import {TESTING} from '../../shared/src/testing.ts';
 import type {MaybePromise} from '../../shared/src/types.ts';
 import {PullDelegate, PushDelegate} from './connection-loop-delegates.ts';

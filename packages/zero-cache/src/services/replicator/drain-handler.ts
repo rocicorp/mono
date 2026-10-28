@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
+import {resolver} from '../../../../shared/src/resolver.ts';
 import {readHead, type Sized, type Source} from '../../types/streams.ts';
 import type {
   ChangeStreamer,

@@ -1,6 +1,6 @@
 import type {ObservableResult} from '@opentelemetry/api';
 import type {LogContext, LogLevel} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
+import {resolver} from '../../../../../shared/src/resolver.ts';
 import {getOrCreateGauge} from '../../../observability/metrics.ts';
 import type {ReplicationReport} from './report-schema.ts';
 

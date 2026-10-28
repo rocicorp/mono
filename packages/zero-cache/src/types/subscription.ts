@@ -1,5 +1,5 @@
-import {resolver, type Resolver} from '@rocicorp/resolver';
 import {assert} from '../../../shared/src/asserts.ts';
+import {resolver, type Resolver} from '../../../shared/src/resolver.ts';
 import {RingBuffer} from '../../../shared/src/ring-buffer.ts';
 import type {Sink, Source} from './streams.ts';
 

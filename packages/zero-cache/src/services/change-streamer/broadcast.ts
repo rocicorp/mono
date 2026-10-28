@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import {must} from '../../../../shared/src/must.ts';
+import {resolver} from '../../../../shared/src/resolver.ts';
 import {isPreSerialized, type PreSerialized} from '../../types/streams.ts';
 import type {WatermarkedChange} from './change-streamer.ts';
 import type {Subscriber} from './subscriber.ts';

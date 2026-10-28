@@ -12,12 +12,12 @@ function* range(start = 0, end = Infinity, step = 1) {
   }
 }
 
-test('lib < ES2024', () => {
-  // Iterator.from was added in ES2024
+test('lib < ES2025', () => {
+  // Iterator.from was added in ES2025
 
-  // sanity check that we are using not yet using es2024. If this starts failing
+  // sanity check that we are using not yet using es2025. If this starts failing
   // then we can remove the wrapIterable and use the builtins.
-  expect(getESLibVersion()).toBeLessThan(2024);
+  expect(getESLibVersion()).toBeLessThan(2025);
 });
 
 test('wrapper should be iterable', () => {

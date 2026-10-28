@@ -1,5 +1,4 @@
 import {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import {
   type MockInstance,
   afterEach,
@@ -10,6 +9,7 @@ import {
   test,
   vi,
 } from 'vitest';
+import {resolver} from '../../../shared/src/resolver.ts';
 import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';

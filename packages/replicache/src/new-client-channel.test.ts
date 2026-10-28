@@ -1,6 +1,6 @@
-import {resolver} from '@rocicorp/resolver';
 import {describe, expect, test} from 'vitest';
 import {BroadcastChannel} from '../../shared/src/broadcast-channel.ts';
+import {resolver} from '../../shared/src/resolver.ts';
 import {sleep} from '../../shared/src/sleep.ts';
 import {TestStore} from './dag/test-store.ts';
 import {fakeHash} from './hash.ts';

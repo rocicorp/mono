@@ -1,6 +1,6 @@
-import {resolver} from '@rocicorp/resolver';
 import {afterEach, describe, expect, test, vi} from 'vitest';
 import {assert, assertNotUndefined} from '../../shared/src/asserts.ts';
+import {resolver} from '../../shared/src/resolver.ts';
 import {sleep} from '../../shared/src/sleep.ts';
 import {chunkRefCountKey} from './dag/key.ts';
 import {StoreImpl, WriteImpl} from './dag/store-impl.ts';

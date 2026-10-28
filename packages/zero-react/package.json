@@ -21,9 +21,6 @@
     "fmt": "oxfmt .",
     "check-fmt": "oxfmt --check ."
   },
-  "dependencies": {
-    "@rocicorp/resolver": "^1.0.2"
-  },
   "devDependencies": {
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.3.0",

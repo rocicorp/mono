@@ -1,7 +1,7 @@
-import {resolver} from '@rocicorp/resolver';
 import {describe, expect, expectTypeOf, test} from 'vitest';
 import {assert} from './asserts.ts';
 import {promiseOrAbort, promiseRace} from './promise-race.ts';
+import {resolver} from './resolver.ts';
 import {sleep} from './sleep.ts';
 
 /**

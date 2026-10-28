@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
-    "target": "es2023",
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "target": "es2024",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "module": "preserve",
     "verbatimModuleSyntax": true,
     "erasableSyntaxOnly": true,

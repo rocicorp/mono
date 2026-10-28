@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {resolver, type Resolver} from '@rocicorp/resolver';
+import {resolver, type Resolver} from '../../../../shared/src/resolver.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import type {PreSerializedBatch} from './broadcast.ts';
 import type {Subscriber} from './subscriber.ts';

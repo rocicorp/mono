@@ -1,5 +1,5 @@
-import {resolver} from '@rocicorp/resolver';
 import {AbortError} from './abort-error.ts';
+import {resolver} from './resolver.ts';
 
 const promiseVoid = Promise.resolve();
 const promiseNever = new Promise<void>(() => undefined);

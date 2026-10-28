@@ -27,7 +27,6 @@
     "@badrap/valita": "0.5.5",
     "@dotenvx/dotenvx": "^1.66.0",
     "@rocicorp/logger": "^6.1.0",
-    "@rocicorp/resolver": "^1.0.2",
     "chalk-template": "^1.1.2",
     "command-line-args": "^6.0.2",
     "command-line-usage": "^7.0.4",

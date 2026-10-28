@@ -1,6 +1,5 @@
 import {getHeapStatistics} from 'node:v8';
 import type {LogContext} from '@rocicorp/logger';
-import {resolver, type Resolver} from '@rocicorp/resolver';
 import {type PendingQuery, type Row} from 'postgres';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
@@ -11,6 +10,7 @@ import {
 import {must} from '../../../../shared/src/must.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import {resolver, type Resolver} from '../../../../shared/src/resolver.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {runTx} from '../../db/run-transaction.ts';

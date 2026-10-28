@@ -2,8 +2,8 @@ import type {IncomingHttpHeaders} from 'node:http';
 import {pid} from 'node:process';
 import type {EventEmitter} from 'stream';
 import type {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import {AbortError} from '../../../shared/src/abort-error.ts';
+import {resolver} from '../../../shared/src/resolver.ts';
 import {logLastChanceSQLiteCorruptionDiagnostics} from '../db/sqlite-corruption.ts';
 import {
   getOrCreateHistogram,

@@ -1,6 +1,6 @@
 import type {LogLevel, LogSink} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import {describe, expect, onTestFinished, test, vi} from 'vitest';
+import {resolver} from '../../shared/src/resolver.ts';
 import {MemStore} from './kv/mem-store.ts';
 import type {StoreProvider} from './kv/store.ts';
 import {refresh} from './persist/refresh.ts';

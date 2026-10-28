@@ -1,5 +1,5 @@
-import {resolver, type Resolver} from '@rocicorp/resolver';
 import {assert} from './asserts.ts';
+import {resolver, type Resolver} from './resolver.ts';
 import {RingBuffer} from './ring-buffer.ts';
 
 /**

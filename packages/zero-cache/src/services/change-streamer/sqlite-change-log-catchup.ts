@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
+import {resolver} from '../../../../shared/src/resolver.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {
   getOrCreateCounter,

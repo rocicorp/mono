@@ -1,6 +1,6 @@
-import {resolver} from '@rocicorp/resolver';
 import React, {useRef, useSyncExternalStore} from 'react';
 import {deepEqual} from '../../shared/src/json.ts';
+import {resolver} from '../../shared/src/resolver.ts';
 import {TESTING} from '../../shared/src/testing.ts';
 import {
   type Immutable,

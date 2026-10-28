@@ -1,6 +1,6 @@
-import {type Resolver, resolver} from '@rocicorp/resolver';
 import {AbortError} from '../../shared/src/abort-error.ts';
 import {assert} from '../../shared/src/asserts.ts';
+import {type Resolver, resolver} from '../../shared/src/resolver.ts';
 import {sleep} from '../../shared/src/sleep.ts';
 import {requestIdle as defaultRequestIdle} from './request-idle.ts';
 

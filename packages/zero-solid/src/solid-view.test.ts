@@ -1,9 +1,9 @@
-import {resolver} from '@rocicorp/resolver';
 import {createEffect} from 'solid-js';
 import {createStore} from 'solid-js/store';
 import {expect, test, vi} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {resolver} from '../../shared/src/resolver.ts';
 import {stringCompare} from '../../shared/src/string-compare.ts';
 import {
   makeAddChange,

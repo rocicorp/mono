@@ -1,8 +1,8 @@
 import {pid} from 'node:process';
 import type {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import {WebSocket, WebSocketServer, type ServerOptions} from 'ws';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
+import {resolver} from '../../../shared/src/resolver.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {

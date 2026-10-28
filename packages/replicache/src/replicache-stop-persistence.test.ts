@@ -1,6 +1,6 @@
-import {resolver} from '@rocicorp/resolver';
 import {afterEach, expect, test, vi} from 'vitest';
 import {assert} from '../../shared/src/asserts.ts';
+import {resolver} from '../../shared/src/resolver.ts';
 import {MemStore, dropMemStore} from './kv/mem-store.ts';
 import type {Read, Store, Write} from './kv/store.ts';
 import {

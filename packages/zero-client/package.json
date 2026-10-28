@@ -25,9 +25,8 @@
     "check-types:watch": "tsc --watch"
   },
   "dependencies": {
-    "@rocicorp/lock": "^1.0.4",
-    "@rocicorp/logger": "^6.1.0",
-    "@rocicorp/resolver": "^1.0.2"
+    "@rocicorp/lock": "^2.0.1",
+    "@rocicorp/logger": "^6.1.0"
   },
   "devDependencies": {
     "@faker-js/faker": "^10.6.0",

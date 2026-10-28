@@ -1,7 +1,7 @@
 import path from 'node:path';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import {must} from '../../../shared/src/must.ts';
+import {resolver} from '../../../shared/src/resolver.ts';
 import {runsChangeStreamer} from '../config/normalize.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {registerSQLiteCorruptionDiagnosticTarget} from '../db/sqlite-corruption.ts';

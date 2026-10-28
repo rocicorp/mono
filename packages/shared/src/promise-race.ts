@@ -1,4 +1,4 @@
-import {resolver} from '@rocicorp/resolver';
+import {resolver} from './resolver.ts';
 
 type PromiseRaceResult<T extends Record<string, PromiseLike<unknown>>> = {
   [K in Extract<keyof T, string>]: {

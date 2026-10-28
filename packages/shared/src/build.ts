@@ -7,7 +7,6 @@ const external = [
   '@rocicorp/datadog-util',
   '@rocicorp/lock',
   '@rocicorp/logger',
-  '@rocicorp/resolver',
   'replicache',
 ];
 

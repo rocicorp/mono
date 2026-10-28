@@ -15,9 +15,8 @@
     "check-fmt": "oxfmt --check ."
   },
   "devDependencies": {
-    "@rocicorp/lock": "^1.0.4",
+    "@rocicorp/lock": "^2.0.1",
     "@rocicorp/logger": "^6.1.0",
-    "@rocicorp/resolver": "^1.0.2",
     "oxfmt": "^0.74.0",
     "shared": "workspace:*",
     "typescript": "~7.0.2",

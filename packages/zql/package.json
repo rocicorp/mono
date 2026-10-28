@@ -16,7 +16,6 @@
     "check-fmt": "oxfmt --check ."
   },
   "dependencies": {
-    "@rocicorp/resolver": "^1.0.2",
     "compare-utf8": "^0.2.3"
   },
   "devDependencies": {

@@ -1,5 +1,4 @@
 import {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import {describe, expect, test, vi} from 'vitest';
 import type {Hash} from '../../../replicache/src/hash.ts';
 import {
@@ -7,6 +6,7 @@ import {
   overrideBrowserGlobal,
 } from '../../../shared/src/browser-env.ts';
 import type {DocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
+import {resolver} from '../../../shared/src/resolver.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';

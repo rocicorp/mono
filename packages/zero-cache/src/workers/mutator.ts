@@ -1,5 +1,5 @@
 import {pid} from 'node:process';
-import {resolver} from '@rocicorp/resolver';
+import {resolver} from '../../../shared/src/resolver.ts';
 import type {SingletonService} from '../services/service.ts';
 
 // TODO:

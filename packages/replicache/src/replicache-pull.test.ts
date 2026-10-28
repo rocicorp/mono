@@ -1,5 +1,5 @@
-import {resolver} from '@rocicorp/resolver';
 import {expect, test, vi} from 'vitest';
+import {resolver} from '../../shared/src/resolver.ts';
 import type {VersionNotSupportedResponse} from './error-responses.ts';
 import {getDefaultPuller} from './get-default-puller.ts';
 import {type Hash, emptyHash} from './hash.ts';

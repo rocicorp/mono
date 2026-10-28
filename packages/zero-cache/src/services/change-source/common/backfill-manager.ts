@@ -1,5 +1,4 @@
 import type {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../../shared/src/bigint-json.ts';
@@ -8,6 +7,7 @@ import {must} from '../../../../../shared/src/must.ts';
 import {promiseOrAbort} from '../../../../../shared/src/promise-race.ts';
 import {Queue} from '../../../../../shared/src/queue.ts';
 import {randInt} from '../../../../../shared/src/rand.ts';
+import {resolver} from '../../../../../shared/src/resolver.ts';
 import {JSON_STRINGIFIED, type JSONFormat} from '../../../types/lite.ts';
 import {
   stateVersionFromString,
