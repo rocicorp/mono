@@ -18,6 +18,7 @@ import {LitestreamController} from '../litestream/litestream-controller.ts';
 import {ChangeProcessor, type ChangeProcessorMode} from './change-processor.ts';
 import {readReplicaBackfills} from './schema/backfilling.ts';
 import {getSubscriptionState} from './schema/replication-state.ts';
+import {gatherStatistics} from './schema/statistics.ts';
 import {
   applyPragmas,
   serializeError,
@@ -114,6 +115,7 @@ function createAPI(): API {
       try {
         db = new Database(lc, dbPath);
         applyPragmas(db, pragmas);
+        gatherStatistics(lc, db);
         runner = new StatementRunner(db);
         mode = cpMode;
         checkpointerConfig = checkpointConfig ?? undefined;
@@ -168,7 +170,9 @@ function createAPI(): API {
     stop() {
       checkpointer?.close();
       checkpointer = undefined;
-      db?.close();
+      // The write worker gathers the replica's statistics when it opens the
+      // replica, and after a schema change.
+      db?.close({optimize: false});
       db = undefined;
       runner = undefined;
       processor = undefined;

@@ -73,6 +73,7 @@ import {
   ZERO_VERSION_COLUMN_NAME,
   updateReplicationWatermark,
 } from './schema/replication-state.ts';
+import {optimizeStatistics} from './schema/statistics.ts';
 import {TableMetadataTracker} from './schema/table-metadata.ts';
 
 export type ChangeProcessorMode = ReplicatorMode | 'initial-sync';
@@ -1122,9 +1123,11 @@ class TransactionProcessor {
     }
     updateReplicationWatermark(this.#db, watermark);
 
-    if (this.#schemaChanged) {
+    // An initial sync leaves the statistics to the replicator, whose write
+    // worker gathers them under its analysis limit when it opens the replica.
+    if (this.#schemaChanged && this.#mode !== 'initial-sync') {
       const start = Date.now();
-      this.#db.db.pragma('optimize');
+      optimizeStatistics(this.#db.db);
       this.#lc.info?.(
         `PRAGMA optimized after schema change (${Date.now() - start} ms)`,
       );

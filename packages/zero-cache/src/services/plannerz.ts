@@ -15,16 +15,20 @@ import {
 } from '../db/lite-tables.ts';
 import {StatementRunner} from '../db/statements.ts';
 import {getReplicationState} from './replicator/schema/replication-state.ts';
+import {
+  readStatisticsRecord,
+  type StatisticsRecord,
+} from './replicator/schema/statistics.ts';
 
 /**
- * How the statistics in the replica were gathered. zero-cache only ever runs
- * `PRAGMA optimize`, and always under an `analysis_limit`, which samples rather
- * than scanning. A replica that someone ran `ANALYZE` on by hand has better
- * statistics, which is visible in `sqlite_stat4` having rows at all.
+ * How the statistics in the replica were gathered. zero-cache gathers them
+ * under `replica.analysisLimit`, which samples rather than scanning unless it
+ * is 0. Only an `ANALYZE` without a limit collects `sqlite_stat4`, so its
+ * having rows at all shows that statistics were read from every row.
  */
 const APPROXIMATE_METHOD =
-  'PRAGMA optimize under an analysis_limit. Row counts and per-key averages ' +
-  'are sampled estimates, and sqlite_stat4 is not collected.';
+  'ANALYZE under an analysis_limit. Per-key averages are sampled ' +
+  'estimates, and sqlite_stat4 is not collected.';
 const FULL_METHOD =
   'ANALYZE, with no analysis limit. sqlite_stat4 has rows, so a full ANALYZE ' +
   'ran against this replica at some point.';
@@ -69,6 +73,11 @@ const ABOUT = {
     'Indexes: add them in Postgres, not on the replica. The replica copies ' +
       'upstream indexes, so a new index reaches it through replication.',
     'The planner flags in `server.planner`.',
+    'The analysis limit (ZERO_REPLICA_ANALYSIS_LIMIT): 0 gathers the ' +
+      'statistics from every row, sqlite_stat4 included. ' +
+      '`statsQuality.recorded` says how they were gathered: "gathered" ' +
+      'under its `analysisLimit`, "earlier" by an earlier zero-cache, which ' +
+      'recorded no limit, or "none" when nothing is recorded.',
   ],
   caveats: [
     'Row counts are estimates from the statistics, not COUNT(*). This ' +
@@ -176,6 +185,7 @@ export type PlannerzBundle = {
     stat1Present: boolean;
     stat4Rows: number;
     method: string;
+    recorded: StatisticsRecord;
     tablesWithoutStats: string[];
   };
   tables: TableStats[];
@@ -381,6 +391,9 @@ export function buildPlannerzBundleFromDB(
       stat1Present,
       stat4Rows,
       method: stat4Rows > 0 ? FULL_METHOD : APPROXIMATE_METHOD,
+      recorded: tableExists(db, '_zero.statistics')
+        ? readStatisticsRecord(db)
+        : {type: 'none'},
       tablesWithoutStats,
     },
     tables: tableStats,
