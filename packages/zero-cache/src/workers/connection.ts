@@ -243,6 +243,10 @@ export class Connection {
     return false;
   }
 
+  get wsID(): string {
+    return this.#wsID;
+  }
+
   close(reason: string, ...args: unknown[]) {
     if (this.#closed) {
       return;

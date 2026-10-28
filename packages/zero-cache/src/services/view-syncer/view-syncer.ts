@@ -1303,16 +1303,21 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   #deleteClientDueToDisconnect(clientID: string, client: ClientHandler) {
-    this.connContextManager.closeConnection({
-      clientID,
-      wsID: client.wsID,
-    });
+    const c = this.#clients.get(clientID);
+
+    // A replacement connection with the same wsID shares this connection's
+    // context key, so closing it would unregister the replacement's context.
+    if (c === client || c?.wsID !== client.wsID) {
+      this.connContextManager.closeConnection({
+        clientID,
+        wsID: client.wsID,
+      });
+    }
 
     // Note: It is okay to delete / cleanup clients without acquiring the lock.
     // In fact, it is important to do so in order to guarantee that idle cleanup
     // is performed in a timely manner, regardless of the amount of work
     // queued on the lock.
-    const c = this.#clients.get(clientID);
     if (c === client) {
       this.#clients.delete(clientID);
 
@@ -1471,10 +1476,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.#ttlClockBase = now;
       }
 
-      this.#clients
-        .get(connCtx.clientID)
-        ?.close(`replaced by wsID: ${connCtx.wsID}`);
+      const replaced = this.#clients.get(connCtx.clientID);
       this.#clients.set(connCtx.clientID, newClient);
+      replaced?.close(`replaced by wsID: ${connCtx.wsID}`);
 
       // Note: initConnection() must be synchronous so that `downstream` is
       // immediately returned to the caller (connection.ts). This ensures
@@ -1825,20 +1829,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             lc.debug?.('acquired lock for cvr');
 
             client = this.#clients.get(clientID);
-            if (client?.wsID !== wsID) {
-              lc.debug?.('mismatched wsID', client?.wsID, wsID);
+            if (client?.wsID !== wsID || (newClient && client !== newClient)) {
+              lc.debug?.('mismatched or superseded client', client?.wsID, wsID);
               // Only respond to messages of the currently connected client.
-              // Connections may have been drained or dropped due to an error.
+              // Connections may have been drained or dropped due to an error,
+              // or replaced by another connection with the same wsID.
               return;
             }
 
             connCtx = this.connContextManager.getConnectionContext(selector);
 
             if (newClient) {
-              assert(
-                newClient === client,
-                'newClient must match existing client',
-              );
               checkClientAndCVRVersions(client.version(), cvr.version);
             } else if (!this.#clients.has(clientID)) {
               lc.warn?.(`Processing ${cmd} before initConnection was received`);

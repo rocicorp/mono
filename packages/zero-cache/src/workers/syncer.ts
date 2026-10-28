@@ -840,6 +840,14 @@ export class Syncer implements SingletonService {
     // Check for and close existing connections AFTER auth is validated
     const existing = this.#connections.get(clientID);
     if (existing) {
+      if (existing.wsID === params.wsID) {
+        // Clients generate a new wsID per socket, so this means the same
+        // connect request was delivered twice (e.g. duplicated upstream).
+        this.#lc.warn?.(
+          `duplicate connection for client ${clientID} with the same wsID ${params.wsID}, closing existing connection`,
+          {clientGroupID},
+        );
+      }
       this.#lc.debug?.(
         `client ${clientID} already connected, closing existing connection`,
       );
