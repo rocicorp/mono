@@ -53,7 +53,9 @@ test('bounds the wal while the writer never checkpoints', async () => {
       await expect
         .poll(() => walStatus(db).checkpointed, {timeout: 10_000})
         .toBeGreaterThan(0);
-      expect(walStatus(db).log).toBeLessThan(4000);
+      // A few wal switches' worth of frames. Without checkpoints the writer
+      // could never switch back, and the wal would hold every frame written.
+      expect(walStatus(db).log).toBeLessThan(8000);
     }
     expect(
       statSync(`${path}-wal`).size + statSync(`${path}-wal2`).size,

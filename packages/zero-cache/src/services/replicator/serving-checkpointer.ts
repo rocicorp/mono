@@ -11,6 +11,7 @@ export type ServingCheckpointWorkerData = {
 
 export type ServingCheckpointWorkerMessage =
   | {ready: true}
+  | {checkpointed: true}
   | {error: SerializedError};
 
 /**
@@ -22,14 +23,17 @@ export type ServingCheckpointWorkerMessage =
  * switches wal files once the current one reaches the wal2 size threshold;
  * this thread checkpoints the other one in response to commits.
  *
- * A checkpoint is requested after every commit. Requests queue behind a
- * running checkpoint and are cheap once it completes: a wal2 checkpoint
- * copies a whole wal file or nothing, so a request only does work after the
- * writer has switched files again.
+ * A checkpoint is requested after every commit, with at most one request
+ * outstanding: commits during a checkpoint leave a single follow-up request,
+ * so a stalled checkpoint cannot queue unbounded work. The follow-up is cheap
+ * unless the writer has switched files again, since a wal2 checkpoint copies a
+ * whole wal file or nothing.
  */
 export class ServingCheckpointer {
   readonly #worker: Worker;
   readonly #ready = resolver<void, Error>();
+  #inflight = false;
+  #requested = false;
 
   constructor(
     dbPath: string,
@@ -43,11 +47,19 @@ export class ServingCheckpointer {
     this.#worker = new Worker(SERVING_CHECKPOINT_WORKER_URL, {
       workerData: {dbPath, logConfig} satisfies ServingCheckpointWorkerData,
     });
-    this.#worker.on('message', (msg: ServingCheckpointWorkerMessage) =>
-      'ready' in msg
-        ? this.#ready.resolve()
-        : fail(deserializeError(msg.error)),
-    );
+    this.#worker.on('message', (msg: ServingCheckpointWorkerMessage) => {
+      if ('ready' in msg) {
+        this.#ready.resolve();
+      } else if ('checkpointed' in msg) {
+        this.#inflight = false;
+        if (this.#requested) {
+          this.#requested = false;
+          this.requestCheckpoint();
+        }
+      } else {
+        fail(deserializeError(msg.error));
+      }
+    });
     this.#worker.on('error', fail);
   }
 
@@ -57,12 +69,17 @@ export class ServingCheckpointer {
   }
 
   requestCheckpoint(): void {
+    if (this.#inflight) {
+      this.#requested = true;
+      return;
+    }
+    this.#inflight = true;
     this.#worker.postMessage('checkpoint');
   }
 
   /**
    * Stops the worker. A running checkpoint completes first, since the
-   * synchronous SQLite call cannot be interrupted; queued requests are dropped.
+   * synchronous SQLite call cannot be interrupted; a pending request is dropped.
    */
   close(): Promise<unknown> {
     return this.#worker.terminate();

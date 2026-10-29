@@ -29,6 +29,7 @@ try {
   port.on('message', () => {
     try {
       db.pragma('wal_checkpoint(PASSIVE)');
+      send({checkpointed: true});
     } catch (e) {
       fail(e);
     }
