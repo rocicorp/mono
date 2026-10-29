@@ -88,7 +88,13 @@ function createWebSocketHandoffHandler<P>(
         message as IncomingMessage,
         socket,
         Buffer.from(head),
-        ws => closeWithError(lc, ws, error, PROTOCOL_ERROR),
+        ws => {
+          ws.on('error', error => {
+            lc.warn?.('error while rejecting websocket handoff', error);
+            ws.terminate();
+          });
+          closeWithError(lc, ws, error, PROTOCOL_ERROR);
+        },
       );
     }
 
