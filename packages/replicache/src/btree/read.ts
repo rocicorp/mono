@@ -1,3 +1,4 @@
+import {compareUTF8} from 'compare-utf8';
 import type {Enum} from '../../../shared/src/enum.ts';
 import {deepEqual} from '../../../shared/src/json.ts';
 import {getSizeOfEntry} from '../../../shared/src/size-of-value.ts';
@@ -249,7 +250,7 @@ function* diffEntries(
       }
       i++;
       j++;
-    } else if (lastKey < currentKey) {
+    } else if (compareUTF8(lastKey, currentKey) < 0) {
       yield {
         op: 'del',
         key: lastKey,
