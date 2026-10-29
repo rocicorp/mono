@@ -160,7 +160,7 @@ async function prepare(
 
     await setJournalMode(lc, replica, walMode);
 
-    const pragmas = getPragmaConfig(mode);
+    const pragmas = getPragmaConfig();
     applyPragmas(replica, pragmas);
 
     replica.pragma('optimize = 0x10002');
@@ -196,15 +196,17 @@ async function setJournalMode(
 }
 
 /**
- * Returns the PragmaConfig for a given replica file mode.
- * This is used by both the main thread (setupReplica) and
- * the write worker thread to apply the same pragma settings.
+ * The pragmas applied to the replica by both the main thread (setupReplica)
+ * and the write worker thread. Neither replicator checkpoints from its writer:
+ * the backup replica hands checkpointing to litestream, and the serving
+ * replica to its ServingCheckpointer thread, so that a checkpoint's disk
+ * syncs never stall a COMMIT.
  */
-export function getPragmaConfig(mode: ReplicaFileMode): PragmaConfig {
+export function getPragmaConfig(): PragmaConfig {
   return {
     busyTimeout: 30000,
     analysisLimit: 1000,
-    walAutocheckpoint: mode === 'backup' ? 0 : undefined,
+    walAutocheckpoint: 0,
   };
 }
 

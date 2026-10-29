@@ -75,13 +75,17 @@ function createAPI(): API {
     }
   }
 
+  function failService(err: unknown) {
+    handleCorruptedDb(err);
+    port.postMessage({
+      writeError: serializeError(err),
+    } satisfies WriteError);
+  }
+
   function createProcessor() {
-    processor = new ChangeProcessor(must(runner), must(mode), (_lc, err) => {
-      handleCorruptedDb(err);
-      port.postMessage({
-        writeError: serializeError(err),
-      } satisfies WriteError);
-    });
+    processor = new ChangeProcessor(must(runner), must(mode), (_lc, err) =>
+      failService(err),
+    );
   }
 
   function createCheckpointer() {
@@ -120,15 +124,9 @@ function createAPI(): API {
           servingCheckpointer = new ServingCheckpointer(
             dbPath,
             logConfig,
-            err => {
-              handleCorruptedDb(err);
-              port.postMessage({
-                writeError: serializeError(err),
-              } satisfies WriteError);
-            },
+            failService,
           );
-          await servingCheckpointer.ready;
-          db.pragma('wal_autocheckpoint = 0');
+          await servingCheckpointer.ready();
         }
         runner = new StatementRunner(db);
         mode = cpMode;
@@ -162,7 +160,7 @@ function createAPI(): API {
           const committed = must(processor).processMessage(must(lc), message);
           if (committed) {
             commitResult = committed;
-            servingCheckpointer?.request();
+            servingCheckpointer?.requestCheckpoint();
             if (checkpointer) {
               await checkpointer.maybeCheckpoint();
             }
@@ -183,19 +181,16 @@ function createAPI(): API {
     },
 
     async stop() {
-      try {
-        await servingCheckpointer?.close();
-      } finally {
-        servingCheckpointer = undefined;
-        checkpointer?.close();
-        checkpointer = undefined;
-        db?.close();
-        db = undefined;
-        runner = undefined;
-        processor = undefined;
-        replicaDbPath = undefined;
-        unregisterCorruptionDiagnostics();
-      }
+      await servingCheckpointer?.close();
+      servingCheckpointer = undefined;
+      checkpointer?.close();
+      checkpointer = undefined;
+      db?.close();
+      db = undefined;
+      runner = undefined;
+      processor = undefined;
+      replicaDbPath = undefined;
+      unregisterCorruptionDiagnostics();
     },
   };
 }

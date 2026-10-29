@@ -12,7 +12,7 @@ import type {SubscriptionState} from './schema/replication-state.ts';
 export type PragmaConfig = {
   busyTimeout: number;
   analysisLimit: number;
-  walAutocheckpoint?: number | undefined;
+  walAutocheckpoint: number;
 };
 
 /**
@@ -152,9 +152,7 @@ export type WriteError = {writeError: SerializedError};
 export function applyPragmas(db: Database, pragmas: PragmaConfig) {
   db.pragma(`busy_timeout = ${pragmas.busyTimeout}`);
   db.pragma(`analysis_limit = ${pragmas.analysisLimit}`);
-  if (pragmas.walAutocheckpoint !== undefined) {
-    db.pragma(`wal_autocheckpoint = ${pragmas.walAutocheckpoint}`);
-  }
+  db.pragma(`wal_autocheckpoint = ${pragmas.walAutocheckpoint}`);
 }
 
 /**
