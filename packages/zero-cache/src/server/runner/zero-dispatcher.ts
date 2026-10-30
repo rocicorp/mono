@@ -13,19 +13,33 @@ import type {Worker} from '../../types/processes.ts';
 import {
   installWebSocketHandoff,
   type HandoffSpec,
+  type WebSocketHandoff,
 } from '../../types/websocket-handoff.ts';
+import {expiredAffinityCookieHeader, rehome} from '../../workers/rehome.ts';
+import {parsePath} from '../worker-dispatcher.ts';
 
 export class ZeroDispatcher extends HttpService {
   readonly id = 'zero-dispatcher';
   readonly #getWorker: () => Promise<Worker>;
   readonly #onStart: (() => void) | undefined;
+  readonly #whenDrained: (() => Promise<void>) | undefined;
+  readonly #drainingHeaders: string[];
+  #draining = false;
 
+  /**
+   * @param whenDrained Resolves when the workers behind this dispatcher have
+   *        drained (exited). The listener stays open until then, rehoming new
+   *        sync connections, so that clients that are still routed here (e.g.
+   *        by a sticky cookie) are not refused while the load balancer
+   *        catches up.
+   */
   constructor(
     config: NormalizedZeroConfig,
     lc: LogContext,
     opts: Options,
     getWorker: () => Promise<Worker>,
     onStart?: () => void,
+    whenDrained?: () => Promise<void>,
   ) {
     super(`zero-dispatcher`, lc, opts, fastify => {
       fastify.get('/statz', (req, res) =>
@@ -47,20 +61,40 @@ export class ZeroDispatcher extends HttpService {
     });
     this.#getWorker = getWorker;
     this.#onStart = onStart;
+    this.#whenDrained = whenDrained;
+    const expiredCookie = expiredAffinityCookieHeader(config);
+    this.#drainingHeaders = expiredCookie ? [expiredCookie] : [];
+  }
+
+  async drain() {
+    this.#draining = true;
+    this.failHealthChecks();
+    await this.#whenDrained?.();
   }
 
   protected override _onStart() {
     this.#onStart?.();
   }
 
-  readonly #handoff = (
-    _req: IncomingMessageSubset,
+  readonly #handoff: WebSocketHandoff<string> = (
+    req: IncomingMessageSubset,
     dispatch: (h: HandoffSpec<string>) => void,
     onError: (error: unknown) => void,
+    accept,
   ) => {
+    if (this.#draining && this.#isSync(req)) {
+      // Respond here rather than handing off to a sync worker, which may
+      // have already exited after draining its own clients.
+      accept(ws => rehome(this._lc, ws), this.#drainingHeaders);
+      return;
+    }
     void this.#getWorker().then(
       sender => dispatch({payload: 'unused', sender}),
       onError,
     );
   };
+
+  #isSync({url}: IncomingMessageSubset) {
+    return parsePath(new URL(url ?? '', 'http://unused/'))?.worker === 'sync';
+  }
 }

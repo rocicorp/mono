@@ -90,12 +90,14 @@ export class HttpService implements Service {
 
   /**
    * Responds to subsequent health checks (both "/" and "/keepalive") with a
-   * 503, e.g. to signal the container runner to stop routing to, and shut
-   * down, a server that is draining itself (see {@link SelfDrain}).
+   * 503, e.g. to signal the load balancer to stop routing to a server that
+   * is draining (see {@link SelfDrain}).
    */
   failHealthChecks() {
-    this._lc.info?.(`${this.id}: failing health checks to self drain`);
-    this.#failHealthChecks = true;
+    if (!this.#failHealthChecks) {
+      this._lc.info?.(`${this.id}: failing health checks while draining`);
+      this.#failHealthChecks = true;
+    }
   }
 
   /**

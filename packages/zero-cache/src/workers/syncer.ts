@@ -38,12 +38,12 @@ import {
   TARGET_UTILIZATION,
 } from '../services/view-syncer/drain-coordinator.ts';
 import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
-import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 import type {ClientGroupStatusMessage, Worker} from '../types/processes.ts';
 import type {Subscription} from '../types/subscription.ts';
 import {installWebSocketReceiver} from '../types/websocket-handoff.ts';
 import type {ConnectParams} from './connect-params.ts';
 import {Connection, sendError} from './connection.ts';
+import {expiredAffinityCookieHeader, rehome} from './rehome.ts';
 import {createNotifierFrom, subscribeTo} from './replicator.ts';
 import {SyncerWsMessageHandler} from './syncer-ws-message-handler.ts';
 
@@ -473,15 +473,13 @@ export class Syncer implements SingletonService {
     }
     this.#wss = new WebSocketServer(getWebSocketServerOptions(config));
 
-    const cookie = config.affinityCookie;
-    if (cookie?.name) {
-      const {name, path, domain} = cookie;
-      const expiredCookie = `${name}=; Max-Age=0; Path=${path}${domain ? `; Domain=${domain}` : ''}; Secure; HttpOnly; SameSite=None`;
+    const expiredCookie = expiredAffinityCookieHeader(config);
+    if (expiredCookie) {
       // ws exposes handshake headers through this event. Set-Cookie must be
       // part of the 101 response, before receiveConnection sends Rehome.
       this.#wss.on('headers', headers => {
         if (this.#draining) {
-          headers.push(`Set-Cookie: ${expiredCookie}`);
+          headers.push(expiredCookie);
         }
       });
     }
@@ -830,7 +828,7 @@ export class Syncer implements SingletonService {
     // or replace an existing client connection after that transition.
     if (this.#draining) {
       recordConnectionFailure('draining');
-      this.#rehome(ws);
+      rehome(this.#lc, ws);
       return;
     }
 
@@ -953,7 +951,7 @@ export class Syncer implements SingletonService {
   ) => {
     try {
       if (this.#draining) {
-        this.#rehome(ws);
+        rehome(this.#lc, ws);
         return;
       }
       await this.#createConnection(ws, params);
@@ -961,23 +959,6 @@ export class Syncer implements SingletonService {
       this.#releasePending(params.clientGroupID, params.generation);
     }
   };
-
-  #rehome(ws: WebSocket) {
-    ws.on('error', error => {
-      this.#lc.warn?.('error while rehoming draining connection', error);
-      ws.terminate();
-    });
-    const error = new ProtocolErrorWithLevel(
-      {
-        kind: ErrorKind.Rehome,
-        message: 'Server is draining',
-        origin: ErrorOrigin.ZeroCache,
-      },
-      'info',
-    );
-    sendError(this.#lc, ws, error.errorBody, error);
-    ws.close(1001, 'Server is draining');
-  }
 
   #releasePending(clientGroupID: string, generation: number | undefined): void {
     const remaining = (this.#pendingConnections.get(clientGroupID) ?? 1) - 1;

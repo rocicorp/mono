@@ -73,6 +73,8 @@ export async function runWorker(
     {port, keepaliveTimeoutMs},
     startZeroCache,
     () => printStartupMessage(env),
+    // Keep the listener open until the zero-cache has drained and exited.
+    () => processes.shutdown(),
   );
   const selfDrain = new SelfDrain(lc, parent ?? process, {
     delayMs: selfDrainDelayMs,
