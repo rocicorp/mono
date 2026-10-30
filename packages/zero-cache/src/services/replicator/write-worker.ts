@@ -18,6 +18,7 @@ import {LitestreamController} from '../litestream/litestream-controller.ts';
 import {ChangeProcessor, type ChangeProcessorMode} from './change-processor.ts';
 import {readReplicaBackfills} from './schema/backfilling.ts';
 import {getSubscriptionState} from './schema/replication-state.ts';
+import {ServingCheckpointer} from './serving-checkpointer.ts';
 import {
   applyPragmas,
   serializeError,
@@ -54,6 +55,7 @@ function createAPI(): API {
   // on litestream v5). `undefined` disables the feature.
   let checkpointerConfig: ForceCheckpointConfig | undefined;
   let checkpointer: LitestreamCheckpointer | undefined;
+  let servingCheckpointer: ServingCheckpointer | undefined;
 
   function unregisterCorruptionDiagnostics() {
     unregisterCorruptionDiagnosticTargets.forEach(unregister => unregister());
@@ -73,13 +75,17 @@ function createAPI(): API {
     }
   }
 
+  function failService(err: unknown) {
+    handleCorruptedDb(err);
+    port.postMessage({
+      writeError: serializeError(err),
+    } satisfies WriteError);
+  }
+
   function createProcessor() {
-    processor = new ChangeProcessor(must(runner), must(mode), (_lc, err) => {
-      handleCorruptedDb(err);
-      port.postMessage({
-        writeError: serializeError(err),
-      } satisfies WriteError);
-    });
+    processor = new ChangeProcessor(must(runner), must(mode), (_lc, err) =>
+      failService(err),
+    );
   }
 
   function createCheckpointer() {
@@ -95,13 +101,13 @@ function createAPI(): API {
   }
 
   return {
-    init(
+    async init(
       dbPath: string,
       cpMode: ChangeProcessorMode,
       pragmas: PragmaConfig,
       logConfig: LogConfig,
       checkpointConfig: ForceCheckpointConfig | null,
-    ): void {
+    ): Promise<void> {
       replicaDbPath = dbPath;
       lc = createLogContext({log: logConfig}, 'write-worker');
       unregisterCorruptionDiagnostics();
@@ -114,6 +120,14 @@ function createAPI(): API {
       try {
         db = new Database(lc, dbPath);
         applyPragmas(db, pragmas);
+        if (cpMode === 'serving') {
+          servingCheckpointer = new ServingCheckpointer(
+            dbPath,
+            logConfig,
+            failService,
+          );
+          await servingCheckpointer.ready();
+        }
         runner = new StatementRunner(db);
         mode = cpMode;
         checkpointerConfig = checkpointConfig ?? undefined;
@@ -146,6 +160,7 @@ function createAPI(): API {
           const committed = must(processor).processMessage(must(lc), message);
           if (committed) {
             commitResult = committed;
+            servingCheckpointer?.requestCheckpoint();
             if (checkpointer) {
               await checkpointer.maybeCheckpoint();
             }
@@ -165,7 +180,9 @@ function createAPI(): API {
       createCheckpointer();
     },
 
-    stop() {
+    async stop() {
+      await servingCheckpointer?.close();
+      servingCheckpointer = undefined;
       checkpointer?.close();
       checkpointer = undefined;
       db?.close();
