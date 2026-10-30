@@ -423,8 +423,9 @@ test('synced top-level aggregate (count) reads the server value, not a local cou
     () => {},
   );
 
-  // No aggregate row synced yet → no value.
-  expect(view.data).toBeUndefined();
+  // No aggregate row synced yet: the empty value its type promises, not
+  // undefined.
+  expect(view.data).toBe(0);
 
   // Server streams the count (it consumed the t1 rows; they never sync). The
   // synthetic row carries the singleton key, the value, and a stamped version.

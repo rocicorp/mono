@@ -4,6 +4,7 @@ import {ChangeIndex} from '../../zql/src/ivm/change-index.ts';
 import {ChangeType} from '../../zql/src/ivm/change-type.ts';
 import {
   applyChange,
+  emptyViewValue,
   idSymbol,
   skipYields,
   type ViewChange,
@@ -304,7 +305,7 @@ export class SolidView implements Output {
 
   #createEmptyRoot(): Entry {
     return {
-      '': this.#format.singular ? undefined : [],
+      '': emptyViewValue(this.#format),
     };
   }
 

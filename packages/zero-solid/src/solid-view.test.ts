@@ -6,6 +6,10 @@ import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {resolver} from '../../shared/src/resolver.ts';
 import {stringCompare} from '../../shared/src/string-compare.ts';
 import {
+  AGGREGATE_KEY_COLUMN,
+  AGGREGATE_VALUE_COLUMN,
+} from '../../zql/src/ivm/aggregate.ts';
+import {
   makeAddChange,
   makeChildChange,
   makeEditChange,
@@ -206,6 +210,59 @@ test('hydrate-empty', () => {
 
   expect(data()).toEqual([]);
 });
+
+test.each([
+  ['count', 0],
+  ['sum', null],
+  ['avg', null],
+  ['min', null],
+  ['max', null],
+] as const)(
+  'a top-level %s reads its empty value until its row arrives',
+  (fn, empty) => {
+    const ms = createSource(
+      lc,
+      testLogConfig,
+      'table',
+      {
+        [AGGREGATE_KEY_COLUMN]: {type: 'number'},
+        [AGGREGATE_VALUE_COLUMN]: {type: 'number', optional: true},
+      },
+      [AGGREGATE_KEY_COLUMN],
+    );
+    let commit: () => void = () => {};
+    const [state, setState] = createStore<State>([
+      {
+        '': undefined,
+      },
+      {type: 'unknown'},
+    ]);
+    const data = () => state[0][''];
+
+    new SolidView(
+      ms.connect([[AGGREGATE_KEY_COLUMN, 'asc']]),
+      cb => {
+        commit = cb;
+      },
+      {singular: true, relationships: {}, aggregate: {fn}},
+      () => {},
+      true,
+      () => {},
+      setState,
+      () => {},
+    );
+    expect(data()).toBe(empty);
+
+    const row = {[AGGREGATE_KEY_COLUMN]: 0, [AGGREGATE_VALUE_COLUMN]: 3};
+    consume(ms.push(makeSourceChangeAdd(row)));
+    commit();
+    expect(data()).toBe(3);
+
+    consume(ms.push(makeSourceChangeRemove(row)));
+    commit();
+    expect(data()).toBe(empty);
+  },
+);
 
 test('tree', () => {
   const ms = createSource(

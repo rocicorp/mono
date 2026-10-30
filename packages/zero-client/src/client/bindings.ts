@@ -11,6 +11,7 @@ export {skipYields} from '../../../zql/src/ivm/operator.ts';
 export {consume} from '../../../zql/src/ivm/stream.ts';
 export {
   applyChange,
+  emptyViewValue,
   idSymbol,
   refCountSymbol,
   type ViewChange,

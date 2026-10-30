@@ -9,7 +9,11 @@ import {ChangeType} from './change-type.ts';
 import type {Change} from './change.ts';
 import {skipYields, type Input, type Output} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import {applyChange, type ViewChange} from './view-apply-change.ts';
+import {
+  applyChange,
+  emptyViewValue,
+  type ViewChange,
+} from './view-apply-change.ts';
 import type {Entry, Format, View} from './view.ts';
 
 function changeToViewChange(change: Change): ViewChange {
@@ -99,7 +103,7 @@ export class ArrayView<V = View> implements Output, TypedView<V> {
     this.#input = input;
     this.#format = format;
     this.#updateTTL = updateTTL;
-    this.#root = {'': format.singular ? undefined : []};
+    this.#root = {'': emptyViewValue(format)};
     input.setOutput(this);
 
     if (queryComplete === true) {

@@ -913,6 +913,17 @@ function arrayWith<M extends Mutate, T>(
   return track(array.with(index, value));
 }
 
+/**
+ * The result of a view before any row arrives: the empty aggregate value for an
+ * aggregate, `undefined` for `one()`, and `[]` otherwise.
+ */
+export function emptyViewValue(format: Format): 0 | null | undefined | [] {
+  if (format.aggregate) {
+    return emptyAggregateValue(format.aggregate);
+  }
+  return format.singular ? undefined : [];
+}
+
 /** An aggregate over no rows, as in SQL: `count` is `0`, the rest `null`. */
 function emptyAggregateValue(
   aggregate: NonNullable<Format['aggregate']>,
