@@ -6,7 +6,7 @@ import {
   hashOfNameAndArgs,
 } from '../../../zero-protocol/src/query-hash.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import {buildPipeline, distinctViewInput} from '../builder/builder.ts';
+import {buildPipeline, groupViewInput} from '../builder/builder.ts';
 import {ArrayView} from '../ivm/array-view.ts';
 import {DeferredInput} from '../ivm/deferred-input.ts';
 import type {FilterInput} from '../ivm/filter-operators.ts';
@@ -508,10 +508,8 @@ function materializeImpl<
   // stops rejecting a query built from a schema with legacy queries enabled
   // (custom.test.ts covers that rejection).
   const input = deferred ?? buildPipeline(ast, delegate, queryID);
-  // A view of a distinct query shows only its columns.
-  const viewInput = ast.groupBy
-    ? distinctViewInput(input, ast, delegate)
-    : input;
+  // A view of a grouped query shows only its columns and value.
+  const viewInput = ast.groupBy ? groupViewInput(input, ast, delegate) : input;
 
   const view = delegate.batchViewUpdates(() =>
     (factory ?? arrayViewFactory)(

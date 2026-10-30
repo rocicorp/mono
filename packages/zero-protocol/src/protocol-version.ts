@@ -67,8 +67,9 @@ import {assert} from '../../shared/src/asserts.ts';
 //    CorrelatedSubquery and, top-level, to AST
 // -- version 55 adds the `json` (JsonPathReference) condition value for JSON path filters
 // -- version 56 adds an optional JSON `path` to `aggregate`
-// -- version 57 adds `groupBy` to AST, so far only without an `aggregate`: a
-//    SELECT DISTINCT of its columns; and `distinct` to a `count` aggregate
+// -- version 57 adds `groupBy` to AST (alone, a SELECT DISTINCT of its columns;
+//    with an `aggregate`, that aggregate per group) and `distinct` to a
+//    `count` aggregate
 export const PROTOCOL_VERSION = 57;
 
 /**

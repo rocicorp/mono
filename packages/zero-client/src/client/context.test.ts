@@ -13,14 +13,14 @@ import {
 import {
   aggregateTableName,
   buildPipeline,
-  distinctTableName,
-  distinctViewInput,
+  groupTableName,
+  groupViewInput,
   topLevelAggregateTableName,
 } from '../../../zql/src/builder/builder.ts';
 import {ArrayView} from '../../../zql/src/ivm/array-view.ts';
 import {Catch} from '../../../zql/src/ivm/catch.ts';
 import {defaultFormat} from '../../../zql/src/ivm/default-format.ts';
-import {distinctKey} from '../../../zql/src/ivm/distinct.ts';
+import {groupKey} from '../../../zql/src/ivm/group-by.ts';
 import {Join} from '../../../zql/src/ivm/join.ts';
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
@@ -961,11 +961,11 @@ test('synced distinct reads the server rows under the client column names', () =
     assertValidRunOptions,
   );
   const queryID = 'q1';
-  const table = distinctTableName(queryID);
-  expect(table).toBe('aggregate:q1:#distinct');
+  const table = groupTableName(queryID);
+  expect(table).toBe('aggregate:q1:#group');
   const ast: AST = {table: 'issue', groupBy: ['ownerId']};
   const view = new ArrayView(
-    distinctViewInput(buildPipeline(ast, context, queryID), ast, context),
+    groupViewInput(buildPipeline(ast, context, queryID), ast, context),
     defaultFormat,
     true,
     () => {},
@@ -974,8 +974,8 @@ test('synced distinct reads the server rows under the client column names', () =
 
   const row = (owner: string | null, count: number, version = '01') => ({
     ['owner_id']: owner,
-    ['_0_key']: distinctKey([owner]),
-    ['_0_count']: count,
+    ['_0_key']: groupKey([owner]),
+    ['_0_value']: count,
     ['_0_version']: version,
   });
   const add = (r: ReturnType<typeof row>) => ({
@@ -1016,4 +1016,61 @@ test('synced distinct reads the server rows under the client column names', () =
     },
   ]);
   expect(view.data).toEqual([rows[0]]);
+});
+
+test('synced groupBy shows the value under the function name and follows it', () => {
+  const context = new ZeroContext(
+    new LogContext('info'),
+    new IVMSourceBranch(issueSchema.tables),
+    null as unknown as AddQuery,
+    null as unknown as AddCustomQuery,
+    null as unknown as UpdateQuery,
+    null as unknown as UpdateCustomQuery,
+    null as unknown as FlushQueryChanges,
+    testBatchViewUpdates,
+    () => {},
+    assertValidRunOptions,
+  );
+  const queryID = 'q1';
+  const table = groupTableName(queryID);
+  const ast: AST = {
+    table: 'issue',
+    groupBy: ['ownerId'],
+    aggregate: {fn: 'sum', field: 'createdAt'},
+  };
+  const view = new ArrayView(
+    groupViewInput(buildPipeline(ast, context, queryID), ast, context),
+    defaultFormat,
+    true,
+    () => {},
+  );
+
+  // As the server streams it: the group column under its server name, and
+  // the sum with its components.
+  const row = (owner: string, sum: number, version = '01') => ({
+    ['owner_id']: owner,
+    ['_0_key']: groupKey([owner]),
+    ['_0_value']: sum,
+    ['_0_sum']: sum,
+    ['_0_count']: 1,
+    ['_0_version']: version,
+  });
+  context.processChanges(undefined, 'h1' as Hash, [
+    {
+      key: aggregateRowKey(table, row('u1', 5)),
+      op: 'add',
+      newValue: row('u1', 5),
+    },
+  ]);
+  expect(view.data).toEqual([{ownerId: 'u1', sum: 5, [refCountSymbol]: 1}]);
+
+  context.processChanges('h1' as Hash, 'h2' as Hash, [
+    {
+      key: aggregateRowKey(table, row('u1', 5)),
+      op: 'change',
+      oldValue: row('u1', 5),
+      newValue: row('u1', 8, '02'),
+    },
+  ]);
+  expect(view.data).toEqual([{ownerId: 'u1', sum: 8, [refCountSymbol]: 1}]);
 });

@@ -32,7 +32,7 @@ import {
 } from '../../zero-schema/src/name-mapper.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
-import {distinctOrdering} from '../../zql/src/ivm/distinct.ts';
+import {groupOrdering} from '../../zql/src/ivm/group-by.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import {completeOrdering} from '../../zql/src/query/complete-ordering.ts';
 import {
@@ -80,8 +80,24 @@ export function compile(
   format?: Format,
 ): SQLQuery {
   assert(
-    ast.groupBy === undefined || ast.aggregate === undefined,
-    'groupBy with an aggregate is not supported yet',
+    ast.groupBy === undefined || ast.aggregate?.distinct === undefined,
+    'a count of distinct values per group is not supported yet',
+  );
+  // The value would be selected under a group column's name. The query
+  // builder rejects such a query; a hand-built AST can still name one.
+  assert(
+    ast.groupBy === undefined ||
+      ast.aggregate === undefined ||
+      !ast.groupBy.includes(ast.aggregate.fn),
+    () =>
+      `groupBy(): the column "${ast.aggregate?.fn}" has the same name as the ${ast.aggregate?.fn}() value`,
+  );
+  // As in the IVM builder: the rows are grouped in the group's order, not the
+  // one a bound would be taken in.
+  assert(
+    (ast.groupBy === undefined && ast.aggregate?.distinct === undefined) ||
+      (ast.start === undefined && ast.limit === undefined),
+    'groupBy and a count of distinct values do not support start or limit',
   );
   ast = completeOrdering(
     ast,
@@ -95,6 +111,14 @@ export function compile(
     },
     zql: zqlSchema.tables,
   };
+  if (ast.groupBy) {
+    const groups = ast.aggregate
+      ? selectGroups(spec, ast, ast.aggregate)
+      : selectDistinct(spec, ast);
+    return sql`SELECT ${toJSON(ZQL_RESULT_TABLE_KEY)}::text AS ${ZQL_RESULT_KEY_IDENT}
+      FROM (${groups}) ${ZQL_RESULT_TABLE_IDENT}`;
+  }
+
   if (ast.aggregate) {
     if (ast.aggregate.distinct) {
       // A count of the distinct combinations counts the rows a distinct()
@@ -129,20 +153,49 @@ export function compile(
       FROM (${inner}) ${ZQL_RESULT_TABLE_IDENT}`;
   }
 
-  if (ast.groupBy) {
-    return sql`SELECT ${toJSON(ZQL_RESULT_TABLE_KEY)}::text AS ${ZQL_RESULT_KEY_IDENT}
-      FROM (${selectDistinct(spec, ast)}) ${ZQL_RESULT_TABLE_IDENT}`;
-  }
-
   return sql`SELECT 
     ${toJSON(ZQL_RESULT_TABLE_KEY, format?.singular)}::text AS ${ZQL_RESULT_KEY_IDENT}
     FROM (${select(spec, ast, format)}) ${ZQL_RESULT_TABLE_IDENT}`;
 }
 
 /**
+ * The groups of `ast.groupBy` among the rows that pass `ast.where`, each with
+ * the aggregate under the function's name (`count`, `sum`, …), in the order a
+ * grouped query's rows have (see `groupOrdering`). Like a top-level
+ * aggregate, it reduces the normalized projection {@link select} gives, so a
+ * timestamp comes back in epoch milliseconds, and groups by those values.
+ */
+function selectGroups(spec: Spec, ast: AST, agg: Aggregate): SQLQuery {
+  const inner = select(
+    spec,
+    {
+      ...ast,
+      groupBy: undefined,
+      aggregate: undefined,
+      related: undefined,
+      orderBy: undefined,
+    },
+    undefined,
+  );
+  const cols = must(ast.groupBy).map(col => sql.ident(col));
+  return sql`SELECT ${sql.join(cols, ',')}, ${aggregateExpr(spec, ast.table, agg)} AS ${sql.ident(agg.fn)}
+    FROM (${inner}) ${sql.ident('zql_group')}
+    GROUP BY ${sql.join(cols, ', ')}
+    ORDER BY ${sql.join(
+      groupOrdering(ast).map(([col, dir]) => {
+        const value = orderedValue(spec, ast.table, col, sql.ident(col));
+        return dir === 'asc'
+          ? sql`${value} ASC NULLS FIRST`
+          : sql`${value} DESC NULLS LAST`;
+      }),
+      ', ',
+    )}`;
+}
+
+/**
  * The distinct values of `ast.groupBy` among the rows that pass `ast.where`,
  * one row of those columns each, in the order a distinct query's rows have
- * (see `distinctOrdering`). It groups by the columns rather than selecting
+ * (see `groupOrdering`). It groups by the columns rather than selecting
  * DISTINCT, which would need the converted values {@link selectIdent} selects
  * to appear in the ORDER BY too. Like the IVM operator, it ignores `related`.
  */
@@ -160,7 +213,7 @@ function selectDistinct(spec: Spec, ast: AST): SQLQuery {
       ', ',
     )}
     ORDER BY ${sql.join(
-      distinctOrdering(ast).map(([col, dir]) => {
+      groupOrdering(ast).map(([col, dir]) => {
         const value = orderedValue(
           spec,
           ast.table,

@@ -52,6 +52,7 @@ import type {
   AggregateResult,
   ExistsOptions,
   GetFilterType,
+  GroupedQuery,
   HumanReadable,
   PreloadOptions,
   PullRow,
@@ -461,10 +462,12 @@ export class QueryImpl<
     }
   }
 
-  /** `method` doesn't apply to the rows of a `distinct()` yet. */
+  /** `method` doesn't apply to the rows of a `distinct()` or `groupBy()` yet. */
   #assertNotDistinct(method: string): void {
     if (this.#ast.groupBy) {
-      throw new Error(`${method}() does not support distinct() yet`);
+      throw new Error(
+        `${method}() does not support ${this.#ast.aggregate ? 'groupBy()' : 'distinct()'} yet`,
+      );
     }
   }
 
@@ -474,8 +477,9 @@ export class QueryImpl<
   ): AnyQuery {
     this.#assertNotAggregated(fn);
     // A count of a distinct() counts its rows: the distinct combinations.
+    // A groupBy() already has its aggregate.
     const distinct = this.#ast.groupBy;
-    if (distinct && fn !== 'count') {
+    if (distinct && (fn !== 'count' || this.#ast.aggregate)) {
       this.#assertNotDistinct(fn);
     }
     // A named query is synced by name and args: the server runs its own
@@ -560,51 +564,7 @@ export class QueryImpl<
   }
 
   distinct(...columns: readonly string[]): Query<TTable, TSchema, any> {
-    this.#assertNotAggregated('distinct');
-    this.#assertNotDistinct('distinct');
-    // Like an aggregate, it would never reach the server's run of a named
-    // query.
-    if (this.customQueryID) {
-      throw new Error(
-        `distinct() cannot be applied to the named query "${this.customQueryID.name}": put it in the query's definition`,
-      );
-    }
-    if (columns.length === 0) {
-      throw new Error('distinct() needs at least one column');
-    }
-    const tableColumns = this.#schema.tables[this.#tableName].columns;
-    columns.forEach((col, i) => {
-      const colSchema = tableColumns[col];
-      if (colSchema === undefined) {
-        throw new Error(
-          `distinct(): "${col}" is not a column of "${this.#tableName}"`,
-        );
-      }
-      if (colSchema.type === 'json') {
-        throw new Error(`distinct() does not support the json column "${col}"`);
-      }
-      if (columns.indexOf(col) !== i) {
-        throw new Error(`distinct(): "${col}" is named twice`);
-      }
-      // The rows carry the synthetic columns too.
-      if (isSyntheticColumn(col)) {
-        throw new Error(
-          `distinct(): "${col}" is the name of a synthetic column, which a distinct row has too`,
-        );
-      }
-    });
-    const {limit, start, orderBy, related} = this.#ast;
-    if (limit !== undefined || start !== undefined) {
-      throw new Error(
-        'distinct() does not support limit(), start() or one() yet',
-      );
-    }
-    if (related !== undefined) {
-      throw new Error('distinct() does not support related() yet');
-    }
-    for (const [col] of orderBy ?? []) {
-      this.#assertDistinctColumn(col, columns);
-    }
+    this.#assertGroupable('distinct', columns);
     return this.#derive('distinct', JSON.stringify(columns), undefined, () =>
       this.#newQuery(
         this.#tableName,
@@ -616,12 +576,110 @@ export class QueryImpl<
     ) as AnyQuery;
   }
 
-  /** The rows of a `distinct()` can only be ordered by its columns. */
-  #assertDistinctColumn(col: string, columns: readonly string[]): void {
+  groupBy(...columns: readonly string[]): GroupedQuery<TTable, TSchema, any> {
+    this.#assertGroupable('groupBy', columns);
+    return new GroupedQueryImpl(this, columns) as unknown as GroupedQuery<
+      TTable,
+      TSchema,
+      any
+    >;
+  }
+
+  /**
+   * The rows of `groupBy(...columns)` reduced by `fn`, each with the value
+   * under the function's name, as plain rows: the AST's `groupBy` and
+   * `aggregate` together. Interned on this query, like any other step.
+   * Internal: {@link GroupedQueryImpl} calls it.
+   */
+  groupAggregate(
+    columns: readonly string[],
+    fn: AggregateFunction,
+    selector: string | JsonAggregateSelector | undefined,
+  ): AnyQuery {
+    if (columns.includes(fn)) {
+      throw new Error(
+        `groupBy(): the column "${fn}" has the same name as the ${fn}() value`,
+      );
+    }
+    const aggregate = aggregateFromSelector(fn, selector);
+    return this.#derive(
+      `groupBy:${fn}`,
+      JSON.stringify([columns, aggregate.field ?? null]),
+      aggregate.path,
+      () =>
+        this.#newQuery(
+          this.#tableName,
+          {...this.#ast, groupBy: columns, aggregate},
+          this.format,
+          this.customQueryID,
+          this.#currentJunction,
+        ),
+    ) as AnyQuery;
+  }
+
+  /**
+   * Checks the columns of `method()` (`distinct` or `groupBy`), and that the
+   * query so far can be grouped by them.
+   */
+  #assertGroupable(method: string, columns: readonly string[]): void {
+    this.#assertNotAggregated(method);
+    this.#assertNotDistinct(method);
+    // Like an aggregate, it would never reach the server's run of a named
+    // query.
+    if (this.customQueryID) {
+      throw new Error(
+        `${method}() cannot be applied to the named query "${this.customQueryID.name}": put it in the query's definition`,
+      );
+    }
+    if (columns.length === 0) {
+      throw new Error(`${method}() needs at least one column`);
+    }
+    const tableColumns = this.#schema.tables[this.#tableName].columns;
+    columns.forEach((col, i) => {
+      const colSchema = tableColumns[col];
+      if (colSchema === undefined) {
+        throw new Error(
+          `${method}(): "${col}" is not a column of "${this.#tableName}"`,
+        );
+      }
+      if (colSchema.type === 'json') {
+        throw new Error(
+          `${method}() does not support the json column "${col}"`,
+        );
+      }
+      if (columns.indexOf(col) !== i) {
+        throw new Error(`${method}(): "${col}" is named twice`);
+      }
+      // The rows carry the synthetic columns too.
+      if (isSyntheticColumn(col)) {
+        throw new Error(
+          `${method}(): "${col}" is the name of a synthetic column, which a grouped row has too`,
+        );
+      }
+    });
+    const {limit, start, orderBy, related} = this.#ast;
+    if (limit !== undefined || start !== undefined) {
+      throw new Error(
+        `${method}() does not support limit(), start() or one() yet`,
+      );
+    }
+    if (related !== undefined) {
+      throw new Error(`${method}() does not support related() yet`);
+    }
+    for (const [col] of orderBy ?? []) {
+      this.#assertGroupColumn(col, columns);
+    }
+  }
+
+  /**
+   * The rows of a `distinct()` or `groupBy()` can only be ordered by its
+   * columns.
+   */
+  #assertGroupColumn(col: string, columns: readonly string[]): void {
     if (!columns.includes(col)) {
       throw new Error(
         // log-leak-ignore -- column names are schema, allowed in errors
-        `orderBy("${col}"): the rows of distinct(${columns.map(c => JSON.stringify(c)).join(', ')}) can only be ordered by its columns`,
+        `orderBy("${col}"): the rows can only be ordered by the grouped columns (${columns.map(c => JSON.stringify(c)).join(', ')})`,
       );
     }
   }
@@ -680,7 +738,7 @@ export class QueryImpl<
       //   q = q.one();
       // }
       const subQuery = asQueryImpl(cb(q));
-      assertSubqueryNotDistinct(subQuery, 'related');
+      assertSubqueryNotGrouped(subQuery, 'related');
       assert(
         isCompoundKey(sourceField),
         'The source of a relationship must specify at last 1 field',
@@ -763,7 +821,7 @@ export class QueryImpl<
           ) as AnyQuery,
         ),
       );
-      assertSubqueryNotDistinct(sq, 'related');
+      assertSubqueryNotGrouped(sq, 'related');
 
       // Bound to consts so the `isCompoundKey` narrowing survives into the
       // closure below; TypeScript drops narrowing of property accesses there.
@@ -1078,7 +1136,7 @@ export class QueryImpl<
       );
     }
     if (this.#ast.groupBy) {
-      this.#assertDistinctColumn(field as string, this.#ast.groupBy);
+      this.#assertGroupColumn(field as string, this.#ast.groupBy);
     }
     return this.#derive(
       direction === 'asc' ? 'orderBy:asc' : 'orderBy:desc',
@@ -1134,7 +1192,7 @@ export class QueryImpl<
         subQuery.#ast.aggregate === undefined,
         'exists() does not support an aggregate subquery',
       );
-      assertSubqueryNotDistinct(subQuery, 'exists');
+      assertSubqueryNotGrouped(subQuery, 'exists');
       // Give the sub-query's AST an id so the enclosing `where` can key on it
       // exactly rather than comparing the sub-tree.
       astID(subQuery.#ast);
@@ -1180,7 +1238,7 @@ export class QueryImpl<
         asQueryImpl(queryToDest).#ast.aggregate === undefined,
         'exists() does not support an aggregate subquery',
       );
-      assertSubqueryNotDistinct(asQueryImpl(queryToDest), 'exists');
+      assertSubqueryNotGrouped(asQueryImpl(queryToDest), 'exists');
 
       return {
         type: 'correlatedSubquery',
@@ -1234,14 +1292,54 @@ export class QueryImpl<
   }
 }
 
-/** A subquery of `related()` or `exists()` can't be a `distinct()` yet. */
-function assertSubqueryNotDistinct(
+/**
+ * The {@link GroupedQuery} of `query.groupBy(...columns)`. It only holds the
+ * grouping: each aggregate is a query derived from `query`, so asking for the
+ * same one twice gives the same query.
+ */
+class GroupedQueryImpl {
+  readonly #query: QueryImpl<any, any, any>;
+  readonly #columns: readonly string[];
+
+  constructor(query: QueryImpl<any, any, any>, columns: readonly string[]) {
+    this.#query = query;
+    this.#columns = columns;
+  }
+
+  count(): AnyQuery {
+    return this.#query.groupAggregate(this.#columns, 'count', undefined);
+  }
+
+  sum(selector: string | JsonAggregateSelector): AnyQuery {
+    return this.#query.groupAggregate(this.#columns, 'sum', selector);
+  }
+
+  avg(selector: string | JsonAggregateSelector): AnyQuery {
+    return this.#query.groupAggregate(this.#columns, 'avg', selector);
+  }
+
+  min(selector: string | JsonAggregateSelector): AnyQuery {
+    return this.#query.groupAggregate(this.#columns, 'min', selector);
+  }
+
+  max(selector: string | JsonAggregateSelector): AnyQuery {
+    return this.#query.groupAggregate(this.#columns, 'max', selector);
+  }
+}
+
+/**
+ * A subquery of `related()` or `exists()` can't be a `distinct()` or a
+ * `groupBy()` yet.
+ */
+function assertSubqueryNotGrouped(
   sq: QueryImpl<any, any, any>,
   method: string,
 ): void {
   const {groupBy, aggregate} = sq.ast;
   if (groupBy || aggregate?.distinct) {
-    throw new Error(`${method}() does not support a distinct() subquery yet`);
+    throw new Error(
+      `${method}() does not support a ${groupBy && aggregate ? 'groupBy()' : 'distinct()'} subquery yet`,
+    );
   }
 }
 

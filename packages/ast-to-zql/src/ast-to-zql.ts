@@ -2,6 +2,7 @@ import {unreachable} from '../../shared/src/asserts.ts';
 import {toSorted} from '../../shared/src/iterables.ts';
 import {must} from '../../shared/src/must.ts';
 import type {
+  Aggregate,
   AST,
   Condition,
   Conjunction,
@@ -48,11 +49,16 @@ export function astToZQL(ast: AST, options: AstToZQLOptions = {}): string {
     }
   }
 
-  // Handle distinct, before orderBy, which then orders its rows. A count of
-  // the distinct values carries the columns on its aggregate instead.
-  const distinct = ast.groupBy ?? ast.aggregate?.distinct;
-  if (distinct) {
-    code += `.distinct(${distinct.map(jsStringLiteral).join(', ')})`;
+  // Handle distinct and groupBy, before orderBy, which then orders their rows.
+  // A count of the distinct values carries the columns on its aggregate.
+  if (ast.groupBy) {
+    const cols = ast.groupBy.map(jsStringLiteral).join(', ');
+    const {aggregate} = ast;
+    code += aggregate
+      ? `.groupBy(${cols}).${aggregate.fn}(${transformAggregateArg(aggregate)})`
+      : `.distinct(${cols})`;
+  } else if (ast.aggregate?.distinct) {
+    code += `.distinct(${ast.aggregate.distinct.map(jsStringLiteral).join(', ')})`;
   }
 
   // Handle orderBy
@@ -359,6 +365,24 @@ function transformLiteral(literal: LiteralReference): string {
 function jsStringLiteral(s: string): string {
   const inner = JSON.stringify(s).slice(1, -1);
   return `'${inner.replace(/\\"/g, '"').replace(/'/g, "\\'")}'`;
+}
+
+/**
+ * The argument of an aggregate method: nothing for a count, a column name, or
+ * a callback picking a leaf inside a `json()` column.
+ */
+function transformAggregateArg({field, path}: Aggregate): string {
+  if (field === undefined) {
+    return '';
+  }
+  const name = jsStringLiteral(field);
+  if (path === undefined) {
+    return name;
+  }
+  const segs = path
+    .map(s => transformLiteral({type: 'literal', value: s}))
+    .join(', ');
+  return `({json}) => json(${name}, ${segs})`;
 }
 
 function transformParameter(param: Parameter): string {

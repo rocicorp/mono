@@ -68,6 +68,7 @@ const QUERY_METHODS = {
   min: true,
   max: true,
   distinct: true,
+  groupBy: true,
   run: false,
   preload: false,
   materialize: false,

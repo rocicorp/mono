@@ -14,9 +14,11 @@ import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {
   AGGREGATE_COUNT_COLUMN,
+  AGGREGATE_KEY_COLUMN,
   AGGREGATE_SUM_COLUMN,
   AGGREGATE_VALUE_COLUMN,
 } from '../../../zql/src/ivm/aggregate.ts';
+import {groupKey, groupValues} from '../../../zql/src/ivm/group-by.ts';
 import {
   makeSourceChangeAdd,
   makeSourceChangeEdit,
@@ -114,12 +116,18 @@ function nextAggregateRow(
 /**
  * The Replicache key of the aggregate row a child row contributes to, or
  * `undefined` when a correlation value is null: such a child has no parent, so
- * it is in no aggregate.
+ * it is in no aggregate. A grouped query's row is its group's, whose values
+ * can be null.
  */
 function aggregateKeyFor(
   agg: OptimisticAggregate,
   child: Row,
 ): string | undefined {
+  if (agg.grouped) {
+    return aggregateRowKey(agg.aggTableName, {
+      [AGGREGATE_KEY_COLUMN]: groupKey(groupValues(child, agg.childField)),
+    });
+  }
   const keyRow: Record<string, Value> = {};
   for (let i = 0; i < agg.childField.length; i++) {
     const value = child[agg.childField[i]];
@@ -136,6 +144,9 @@ function aggregateKeyFor(
  * row is on the client (its parent is in some query's result). The row is
  * also pushed to the transaction's branch, so a query the mutator runs after
  * the change reads the new value.
+ *
+ * A grouped count's row is the group's: a row joining a group that isn't on
+ * the client adds it, and the last row leaving one removes it.
  */
 async function applyAggregateDelta(
   tx: WriteTransaction,
@@ -145,19 +156,66 @@ async function applyAggregateDelta(
   oldRow: Row | undefined,
   newRow: Row | undefined,
 ): Promise<void> {
+  // The branch holds the row when a view of its query reads it.
+  const source = ivmBranch.getSource(agg.aggTableName);
   const cur = await tx.get(aggKey);
   if (cur === undefined) {
+    const added =
+      agg.grouped && agg.fn === 'count'
+        ? newGroupRow(agg, oldRow, newRow)
+        : undefined;
+    if (added !== undefined) {
+      await tx.set(aggKey, added);
+      if (source) {
+        consume(source.push(makeSourceChangeAdd(added)));
+      }
+    }
     return;
   }
   const updated = nextAggregateRow(agg, cur as Row, oldRow, newRow);
-  if (updated !== undefined) {
-    await tx.set(aggKey, updated);
-    // The branch holds the row when a view of its query reads it.
-    const source = ivmBranch.getSource(agg.aggTableName);
-    if (source?.data.has(cur as Row)) {
-      consume(source.push(makeSourceChangeEdit(updated, cur as Row)));
-    }
+  if (updated === undefined) {
+    return;
   }
+  const inBranch = source?.data.has(cur as Row) ?? false;
+  if (
+    agg.grouped &&
+    agg.fn === 'count' &&
+    updated[AGGREGATE_VALUE_COLUMN] === 0
+  ) {
+    await tx.del(aggKey);
+    if (inBranch) {
+      consume(must(source).push(makeSourceChangeRemove(cur as Row)));
+    }
+    return;
+  }
+  await tx.set(aggKey, updated);
+  if (inBranch) {
+    consume(must(source).push(makeSourceChangeEdit(updated, cur as Row)));
+  }
+}
+
+/**
+ * The row of a group of a grouped count that isn't on the client, when the
+ * change from `oldRow` to `newRow` makes `newRow` its first row: `newRow`
+ * passes the query's `where` and `oldRow` wasn't counted in the group
+ * already. Otherwise `undefined`.
+ */
+function newGroupRow(
+  agg: OptimisticAggregate,
+  oldRow: Row | undefined,
+  newRow: Row | undefined,
+): Row | undefined {
+  const counted = (row: Row | undefined): row is Row =>
+    row !== undefined && (!agg.predicate || agg.predicate(row));
+  if (!counted(newRow) || counted(oldRow)) {
+    return undefined;
+  }
+  const values = groupValues(newRow, agg.childField);
+  const added: Record<string, Value> = {};
+  agg.keyField.forEach((col, i) => assignProperty(added, col, values[i]));
+  added[AGGREGATE_KEY_COLUMN] = groupKey(values);
+  added[AGGREGATE_VALUE_COLUMN] = 1;
+  return added;
 }
 
 /**
@@ -168,7 +226,8 @@ async function applyAggregateDelta(
  * immediately, and Replicache's rebase reconciles it against the server's
  * authoritative value when it pokes back (the pending mutation's delta is
  * replayed while pending and absorbed into the base once confirmed — no
- * double-count). An aggregate row that is not on the client is left alone.
+ * double-count). An aggregate row that is not on the client is left alone,
+ * except that a grouped count's row is added by the first row of its group.
  */
 async function applyOptimisticAggregateDeltas(
   tx: WriteTransaction,

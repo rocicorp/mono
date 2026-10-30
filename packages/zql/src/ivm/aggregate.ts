@@ -73,7 +73,7 @@ export const AGGREGATE_SUM_COLUMN = '_0_sum';
 export const AGGREGATE_COUNT_COLUMN = '_0_count';
 
 /**
- * Whether `col` is the name of a synthetic column of an aggregate or distinct
+ * Whether `col` is the name of a synthetic column of an aggregate or grouped
  * row: `_0_key` or a payload column.
  */
 export function isSyntheticColumn(col: string): boolean {
@@ -82,7 +82,7 @@ export function isSyntheticColumn(col: string): boolean {
 
 /**
  * Asserts that the group key column `col` of an aggregate, or a column of a
- * distinct, is not a synthetic column. The synthetic columns are written over
+ * grouped query, is not a synthetic column. The synthetic columns are written over
  * the group's columns in the emitted row, the payload is stripped from it by
  * the client's row key and `_0_key` alone keys a row that has it, so a
  * collision would silently merge or corrupt the groups. Their reserved `_0_`
@@ -189,7 +189,7 @@ export function aggregateSourceSchema(
  *  - `avg`      → sum / nonNull           (NULL when nonNull === 0)
  *  - `min`/`max`→ extreme of non-null     (NULL when nonNull === 0)
  */
-type AggState = {
+export type AggState = {
   count: number;
   sum: number;
   nonNull: number;
@@ -197,10 +197,14 @@ type AggState = {
   extreme: NormalizedValue;
 };
 
-/** Typed view of the operator's {@link Storage} (mirrors Take). */
-interface AggStorage {
+/**
+ * Typed view of the operator's {@link Storage} (mirrors Take): a group's state
+ * by its key. Shared with `GroupBy`.
+ */
+export interface AggStorage {
   get(key: string): AggState | undefined;
   set(key: string, value: AggState): void;
+  del(key: string): void;
   destroy(): void;
 }
 
@@ -211,6 +215,205 @@ interface AggStorage {
  */
 export const isInvertible = (fn: AggregateFunction) =>
   fn === 'count' || fn === 'sum' || fn === 'avg';
+
+/**
+ * How an aggregate function reduces a group's rows into an {@link AggState},
+ * and reads its result back. Shared by {@link Aggregate}, which keeps a state
+ * per parent of a relationship, and `GroupBy`, which keeps one per group.
+ */
+export class Reducer {
+  readonly fn: AggregateFunction;
+  readonly field: string | undefined;
+  /** A JSON path into `field` (see `Aggregate.path`). */
+  readonly path: readonly (string | number)[] | undefined;
+
+  constructor(
+    fn: AggregateFunction,
+    field: string | undefined,
+    path: readonly (string | number)[] | undefined,
+  ) {
+    assert(
+      fn === 'count' ? field === undefined : field !== undefined,
+      () =>
+        `Aggregate: ${fn} ${fn === 'count' ? 'takes no' : 'requires a'} field`,
+    );
+    assert(
+      path === undefined || field !== undefined,
+      'Aggregate: a JSON path requires a field',
+    );
+    this.fn = fn;
+    this.field = field;
+    this.path = path;
+  }
+
+  /** The state of a group with no rows. */
+  empty(): AggState {
+    return {count: 0, sum: 0, nonNull: 0, extreme: null};
+  }
+
+  /** The scalar result for a state, per the aggregate function. */
+  value(s: AggState): Value {
+    switch (this.fn) {
+      case 'count':
+        return s.count;
+      case 'sum':
+        return s.nonNull === 0 ? null : s.sum;
+      case 'avg':
+        return s.nonNull === 0 ? null : s.sum / s.nonNull;
+      case 'min':
+      case 'max':
+        return s.extreme; // null when nonNull === 0
+      default:
+        unreachable(this.fn);
+    }
+  }
+
+  /** Whether `v` should replace the current extreme for a min/max. */
+  #beats(v: NormalizedValue, current: NormalizedValue): boolean {
+    const c = compareAggregateValues(v, current);
+    return this.fn === 'max' ? c > 0 : c < 0;
+  }
+
+  /**
+   * The value `row` contributes: its field, or the JSON leaf at the path (see
+   * `aggregateValue`), `null` when it contributes nothing.
+   */
+  #read(row: Row): NormalizedValue {
+    const field = must(this.field);
+    return normalizeUndefined(
+      this.path === undefined
+        ? row[field]
+        : (aggregateValue({fn: this.fn, field, path: this.path}, row) as Value),
+    );
+  }
+
+  /** Whether an edit from `oldRow` to `newRow` leaves the value it reduces. */
+  sameValue(oldRow: Row, newRow: Row): boolean {
+    return (
+      this.field === undefined ||
+      compareAggregateValues(this.#read(oldRow), this.#read(newRow)) === 0
+    );
+  }
+
+  /** Add one row's contribution to a (freshly accumulating) state. */
+  contribute(s: AggState, row: Row): void {
+    s.count++;
+    if (this.field === undefined) {
+      return;
+    }
+    const v = this.#read(row);
+    if (v === null) {
+      return;
+    }
+    s.nonNull++;
+    switch (this.fn) {
+      case 'sum':
+      case 'avg':
+        assert(
+          typeof v === 'number',
+          () => `Aggregate: ${this.fn} needs a number`,
+        );
+        s.sum += v;
+        break;
+      case 'min':
+      case 'max':
+        if (s.extreme === null || this.#beats(v, s.extreme)) {
+          s.extreme = v;
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  /** Invertible delta for count/sum/avg. */
+  applyInvertible(
+    state: AggState,
+    row: Row,
+    sign: 1 | -1,
+    fieldOnly = false,
+  ): void {
+    if (!fieldOnly) {
+      state.count += sign;
+    }
+    if (this.field !== undefined) {
+      const v = this.#read(row);
+      if (v !== null) {
+        assert(
+          typeof v === 'number',
+          () => `Aggregate: ${this.fn}(${this.field}) requires a number`,
+        );
+        state.sum += sign * v;
+        state.nonNull += sign;
+      }
+    }
+  }
+
+  /**
+   * min/max maintenance, applied to `state` in place. Cheap for adds and for
+   * removing a non-extreme value. Returns false when the current extreme is
+   * removed or edited away: the new extreme is not recoverable from running
+   * state, so the group has to be re-fetched.
+   */
+  pushExtreme(state: AggState, change: Change): boolean {
+    switch (change[ChangeIndex.TYPE]) {
+      case ChangeType.ADD:
+        // Adding can only extend the extreme outward — O(1).
+        this.contribute(state, change[ChangeIndex.NODE].row);
+        return true;
+      case ChangeType.REMOVE: {
+        const v = this.#read(change[ChangeIndex.NODE].row);
+        state.count--;
+        if (v === null) {
+          return true; // null never contributed to the extreme
+        }
+        if (
+          state.extreme !== null &&
+          compareAggregateValues(v, state.extreme) === 0
+        ) {
+          return false; // removed (one of) the extreme
+        }
+        state.nonNull--; // a non-extreme value left; extreme unchanged
+        return true;
+      }
+      case ChangeType.EDIT:
+        // When the field moved, the extreme may have changed in either
+        // direction.
+        return this.sameValue(
+          change[ChangeIndex.OLD_NODE].row,
+          change[ChangeIndex.NODE].row,
+        );
+      case ChangeType.CHILD:
+        return true;
+      default:
+        unreachable(change);
+    }
+  }
+
+  /**
+   * Whether a group's row changes from `stored` to `state`: its value, or, for
+   * sum/avg, the components even when the value doesn't (e.g. adding a 0 to a
+   * sum, or a row equal to the average), so the synced client's
+   * optimistic-delta base stays in sync.
+   */
+  changed(stored: AggState, state: AggState): boolean {
+    return (
+      this.value(stored) !== this.value(state) ||
+      (carriesComponents(this.fn) &&
+        (stored.sum !== state.sum || stored.nonNull !== state.nonNull))
+    );
+  }
+
+  /** Writes the result, and for sum/avg its components, into `row`. */
+  writePayload(row: Record<string, Value>, state: AggState): void {
+    row[AGGREGATE_VALUE_COLUMN] = this.value(state);
+    if (carriesComponents(this.fn)) {
+      // Carry the running components so the synced client can adjust them.
+      row[AGGREGATE_SUM_COLUMN] = state.sum;
+      row[AGGREGATE_COUNT_COLUMN] = state.nonNull;
+    }
+  }
+}
 
 /**
  * Aggregate is a reducing operator for `count(*)` / `sum` / `avg` / `min` /
@@ -243,9 +446,7 @@ export class Aggregate implements Operator {
   readonly #storage: AggStorage;
   // Empty for a top-level (ungrouped) aggregate — a single global group.
   readonly #groupKey: readonly string[];
-  readonly #fn: AggregateFunction;
-  readonly #field: string | undefined;
-  readonly #path: readonly (string | number)[] | undefined;
+  readonly #reducer: Reducer;
   readonly #schema: SourceSchema;
   // The source connection `input` reads straight from, when nothing between
   // them drops rows. A `count` asks it for the number instead of reading every
@@ -271,22 +472,11 @@ export class Aggregate implements Operator {
     countSource?: SourceInput,
     path?: readonly (string | number)[],
   ) {
-    assert(
-      fn === 'count' ? field === undefined : field !== undefined,
-      () =>
-        `Aggregate: ${fn} ${fn === 'count' ? 'takes no' : 'requires a'} field`,
-    );
-    assert(
-      path === undefined || field !== undefined,
-      'Aggregate: a JSON path requires a field',
-    );
+    this.#reducer = new Reducer(fn, field, path);
     this.#input = input;
     this.#storage = storage as AggStorage;
     this.#groupKey = groupKey;
-    this.#fn = fn;
-    this.#field = field;
     this.#countSource = fn === 'count' ? countSource : undefined;
-    this.#path = path;
     input.setOutput(this);
 
     const inputSchema = input.getSchema();
@@ -337,79 +527,9 @@ export class Aggregate implements Operator {
     this.#storage.destroy();
   }
 
-  /** The scalar result for the current state, per the aggregate function. */
-  #value(s: AggState): Value {
-    switch (this.#fn) {
-      case 'count':
-        return s.count;
-      case 'sum':
-        return s.nonNull === 0 ? null : s.sum;
-      case 'avg':
-        return s.nonNull === 0 ? null : s.sum / s.nonNull;
-      case 'min':
-      case 'max':
-        return s.extreme; // null when nonNull === 0
-      default:
-        unreachable(this.#fn);
-    }
-  }
-
-  /** Whether `v` should replace the current extreme for a min/max. */
-  #beats(v: NormalizedValue, current: NormalizedValue): boolean {
-    const c = compareAggregateValues(v, current);
-    return this.#fn === 'max' ? c > 0 : c < 0;
-  }
-
-  /**
-   * The value `row` contributes: its field, or the JSON leaf at the path (see
-   * `aggregateValue`), `null` when it contributes nothing.
-   */
-  #read(row: Row): NormalizedValue {
-    const field = must(this.#field);
-    return normalizeUndefined(
-      this.#path === undefined
-        ? row[field]
-        : (aggregateValue(
-            {fn: this.#fn, field, path: this.#path},
-            row,
-          ) as Value),
-    );
-  }
-
-  /** Add one row's contribution to a (freshly accumulating) state. */
-  #contribute(s: AggState, row: Row): void {
-    s.count++;
-    if (this.#field === undefined) {
-      return;
-    }
-    const v = this.#read(row);
-    if (v === null) {
-      return;
-    }
-    s.nonNull++;
-    switch (this.#fn) {
-      case 'sum':
-      case 'avg':
-        assert(
-          typeof v === 'number',
-          () => `Aggregate: ${this.#fn} needs a number`,
-        );
-        s.sum += v;
-        break;
-      case 'min':
-      case 'max':
-        if (s.extreme === null || this.#beats(v, s.extreme)) {
-          s.extreme = v;
-        }
-        break;
-      default:
-        break;
-    }
-  }
-
   /** Recompute the whole group state from the source (already up to date). */
   *#compute(constraint: Constraint | undefined): Generator<'yield', AggState> {
-    const s: AggState = {count: 0, sum: 0, nonNull: 0, extreme: null};
+    const s = this.#reducer.empty();
     const count = this.#countSource?.count?.(constraint);
     if (count !== undefined) {
       s.count = count;
@@ -420,7 +540,7 @@ export class Aggregate implements Operator {
         yield node;
         continue;
       }
-      this.#contribute(s, node.row);
+      this.#reducer.contribute(s, node.row);
     }
     return s;
   }
@@ -476,13 +596,14 @@ export class Aggregate implements Operator {
 
     const state: AggState = {...stored};
 
-    if (isInvertible(this.#fn)) {
+    const reducer = this.#reducer;
+    if (isInvertible(reducer.fn)) {
       switch (change[ChangeIndex.TYPE]) {
         case ChangeType.ADD:
-          this.#applyInvertible(state, change[ChangeIndex.NODE].row, 1);
+          reducer.applyInvertible(state, change[ChangeIndex.NODE].row, 1);
           break;
         case ChangeType.REMOVE:
-          this.#applyInvertible(state, change[ChangeIndex.NODE].row, -1);
+          reducer.applyInvertible(state, change[ChangeIndex.NODE].row, -1);
           break;
         case ChangeType.EDIT: {
           // Group key unchanged (Join guarantees it); only the field moves the
@@ -490,22 +611,21 @@ export class Aggregate implements Operator {
           // its value: subtracting and re-adding it would only add rounding
           // error.
           if (
-            this.#field === undefined ||
-            compareAggregateValues(
-              this.#read(change[ChangeIndex.OLD_NODE].row),
-              this.#read(change[ChangeIndex.NODE].row),
-            ) === 0
+            reducer.sameValue(
+              change[ChangeIndex.OLD_NODE].row,
+              change[ChangeIndex.NODE].row,
+            )
           ) {
             return;
           }
           // Remove the old contribution, add the new.
-          this.#applyInvertible(
+          reducer.applyInvertible(
             state,
             change[ChangeIndex.OLD_NODE].row,
             -1,
             true,
           );
-          this.#applyInvertible(state, change[ChangeIndex.NODE].row, 1, true);
+          reducer.applyInvertible(state, change[ChangeIndex.NODE].row, 1, true);
           break;
         }
         case ChangeType.CHILD:
@@ -516,7 +636,7 @@ export class Aggregate implements Operator {
     } else {
       // min/max — non-invertible. A dirty group is recomputed from the source
       // in reconcile, which covers this change too.
-      if (this.#dirtyGroups.has(key) || !this.#pushExtreme(state, change)) {
+      if (this.#dirtyGroups.has(key) || !reducer.pushExtreme(state, change)) {
         this.#dirtyGroups.set(key, groupValues);
         return;
       }
@@ -533,15 +653,7 @@ export class Aggregate implements Operator {
     stored: AggState,
     state: AggState,
   ): Stream<'yield'> {
-    // Emit when the value changes, or — for sum/avg — when the components
-    // change even though the value doesn't (e.g. adding a 0 to a sum, or a row
-    // equal to the average), so the synced client's optimistic-delta base stays
-    // in sync.
-    const changed =
-      this.#value(stored) !== this.#value(state) ||
-      (carriesComponents(this.#fn) &&
-        (stored.sum !== state.sum || stored.nonNull !== state.nonNull));
-    if (changed) {
+    if (this.#reducer.changed(stored, state)) {
       yield* this.#output.push(
         makeEditChange(
           this.#makeNode(groupValues, state),
@@ -549,70 +661,6 @@ export class Aggregate implements Operator {
         ),
         this,
       );
-    }
-  }
-
-  /** Invertible delta for count/sum/avg. */
-  #applyInvertible(
-    state: AggState,
-    row: Row,
-    sign: 1 | -1,
-    fieldOnly = false,
-  ): void {
-    if (!fieldOnly) {
-      state.count += sign;
-    }
-    if (this.#field !== undefined) {
-      const v = this.#read(row);
-      if (v !== null) {
-        assert(
-          typeof v === 'number',
-          () => `Aggregate: ${this.#fn}(${this.#field}) requires a number`,
-        );
-        state.sum += sign * v;
-        state.nonNull += sign;
-      }
-    }
-  }
-
-  /**
-   * min/max maintenance, applied to `state` in place. Cheap for adds and for
-   * removing a non-extreme value. Returns false when the current extreme is
-   * removed or edited away: the new extreme is not recoverable from running
-   * state, so the group has to be re-fetched.
-   */
-  #pushExtreme(state: AggState, change: Change): boolean {
-    switch (change[ChangeIndex.TYPE]) {
-      case ChangeType.ADD:
-        // Adding can only extend the extreme outward — O(1).
-        this.#contribute(state, change[ChangeIndex.NODE].row);
-        return true;
-      case ChangeType.REMOVE: {
-        const v = this.#read(change[ChangeIndex.NODE].row);
-        state.count--;
-        if (v === null) {
-          return true; // null never contributed to the extreme
-        }
-        if (
-          state.extreme !== null &&
-          compareAggregateValues(v, state.extreme) === 0
-        ) {
-          return false; // removed (one of) the extreme
-        }
-        state.nonNull--; // a non-extreme value left; extreme unchanged
-        return true;
-      }
-      case ChangeType.EDIT: {
-        const oldV = this.#read(change[ChangeIndex.OLD_NODE].row);
-        const newV = this.#read(change[ChangeIndex.NODE].row);
-        // When the field moved, the extreme may have changed in either
-        // direction.
-        return compareAggregateValues(oldV, newV) === 0;
-      }
-      case ChangeType.CHILD:
-        return true;
-      default:
-        unreachable(change);
     }
   }
 
@@ -625,12 +673,7 @@ export class Aggregate implements Operator {
       // Top-level (ungrouped): the single row carries the synthetic key column.
       row[AGGREGATE_KEY_COLUMN] = AGGREGATE_KEY_VALUE;
     }
-    row[AGGREGATE_VALUE_COLUMN] = this.#value(state);
-    if (carriesComponents(this.#fn)) {
-      // Carry the running components so the synced client can adjust them.
-      row[AGGREGATE_SUM_COLUMN] = state.sum;
-      row[AGGREGATE_COUNT_COLUMN] = state.nonNull;
-    }
+    this.#reducer.writePayload(row, state);
     return {row, relationships: {}};
   }
 

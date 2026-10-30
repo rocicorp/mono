@@ -95,6 +95,8 @@ export type OptimisticAggregate = {
    * server-authoritative (it is never registered for optimism at all).
    */
   readonly predicate: ((row: Row) => boolean) | undefined;
+  /** The rows are a grouped query's groups (see `AggregateOptimisticDelta`). */
+  readonly grouped: boolean;
 };
 
 export class IVMSourceBranch {
@@ -196,6 +198,7 @@ export class IVMSourceBranch {
         field: optimistic.field,
         path: optimistic.path,
         predicate: optimistic.predicate,
+        grouped: optimistic.grouped ?? false,
       });
     }
     const existing = this.#sources.get(name);

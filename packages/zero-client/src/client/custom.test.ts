@@ -548,6 +548,39 @@ describe('custom mutators compute aggregates from the rows they can read', () =>
     ]);
   });
 
+  test("a groupBy and a distinct read the mutator's own writes", async () => {
+    const results: unknown[] = [];
+    const z = zeroForTest({
+      schema: legacySchema,
+      mutators: {
+        issue: {
+          writeAndRead: async (tx: MutatorTx) => {
+            await tx.mutate.issue.insert(issue('1'));
+            results.push(await tx.run(zql.issue.groupBy('closed').count()));
+            await tx.mutate.issue.insert(issue('2', 1, true));
+            await tx.mutate.issue.insert(issue('3', 2));
+            results.push(
+              await tx.run(zql.issue.groupBy('closed').count()),
+              await tx.run(zql.issue.groupBy('closed').sum('createdAt')),
+              await tx.run(zql.issue.distinct('closed')),
+              await tx.run(zql.issue.distinct('closed').count()),
+            );
+          },
+        },
+      } as const,
+    });
+
+    await z.mutate.issue.writeAndRead().client;
+    const row = (r: object) => ({...r, [refCountSymbol]: 1});
+    expect(results).toEqual([
+      [row({closed: false, count: 1})],
+      [row({closed: false, count: 2}), row({closed: true, count: 1})],
+      [row({closed: false, sum: 3}), row({closed: true, sum: 1})],
+      [row({closed: false}), row({closed: true})],
+      2,
+    ]);
+  });
+
   test('a relationship aggregate', async () => {
     const results: unknown[] = [];
     const z = zeroForTest({

@@ -137,8 +137,8 @@ export function aggregateRowKey(tableName: string, row: Row): string {
 
 /**
  * The key columns of a row of the synthetic aggregate table `tableName`:
- * `_0_key` for a top-level aggregate's or a distinct's, which also carries
- * the columns it encodes, and otherwise, for a relationship aggregate's,
+ * `_0_key` for a top-level aggregate's or a grouped query's, which also
+ * carries the columns it encodes, and otherwise, for a relationship aggregate's,
  * every column except the payload and the row-version, sorted. The table
  * name decides, not the row, so a relationship aggregate's key is the same
  * whatever its columns are named.

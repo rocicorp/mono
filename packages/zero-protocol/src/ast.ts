@@ -535,10 +535,10 @@ export type AST = {
   /**
    * Groups the rows that pass `where` by these columns: one row per
    * combination of their values, as in `GROUP BY`. Without an `aggregate` it
-   * is a `SELECT DISTINCT` of the columns, which is all that is supported so
-   * far; with one it would be that aggregate per group. `NULL` is a value like
+   * is a `SELECT DISTINCT` of the columns; with one, that aggregate per group,
+   * other than a count of distinct values. `NULL` is a value like
    * any other. `orderBy` orders the groups and may only name these columns;
-   * `start`, `limit` and `related` do not apply. See zql's `ivm/distinct.ts`.
+   * `start`, `limit` and `related` do not apply. See zql's `ivm/group-by.ts`.
    */
   readonly groupBy?: readonly string[] | undefined;
 };

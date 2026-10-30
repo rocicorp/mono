@@ -203,6 +203,7 @@ export {type MaterializeOptions} from '../../zql/src/query/query.ts';
 export type {
   AggregateResult,
   AnyQuery,
+  GroupedQuery,
   HumanReadable,
   PullRow,
   Query,

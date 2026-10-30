@@ -918,6 +918,28 @@ export interface Query<
   >;
 
   /**
+   * Groups the query's rows by `columns`, as `GROUP BY` does, for an
+   * aggregate per group: one row per combination of their values, with the
+   * aggregate under the function's name, e.g.
+   * `issue.groupBy('assigneeID').count()` gives `{assigneeID, count}` rows.
+   * `null` is a value like any other. An `orderBy` may only name these
+   * columns, and they order the rows by default. For the combinations alone,
+   * use {@link distinct}.
+   */
+  groupBy<
+    const TColumns extends readonly (NoCompoundTypeSelector<
+      PullTableSchema<TTable, TSchema>
+    > &
+      string)[],
+  >(
+    ...columns: TColumns
+  ): GroupedQuery<
+    TTable,
+    TSchema,
+    Pick<PullRow<TTable, TSchema>, TColumns[number] & string>
+  >;
+
+  /**
    * @deprecated Use {@link RunOptions} with {@link zero.run} instead.
    */
   run(options?: RunOptions): Promise<HumanReadable<TReturn>>;
@@ -942,6 +964,96 @@ export interface Query<
     factory: ViewFactory<TTable, TSchema, TReturn, T>,
     ttl?: TTL,
   ): T;
+}
+
+/**
+ * The query {@link Query.groupBy} returns: the aggregate that reduces each
+ * group. Its value is in the row under the function's name, next to the
+ * group columns (`TGroup`). As for a whole query, `sum`, `avg`, `min` and
+ * `max` are `null` for a group whose values are all null.
+ */
+export interface GroupedQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TSchema extends ZeroSchema,
+  TGroup,
+> {
+  count(): Query<TTable, TSchema, TGroup & {readonly count: number}>;
+  sum<TSelector extends NumericSelector<PullTableSchema<TTable, TSchema>>>(
+    field: TSelector,
+  ): Query<TTable, TSchema, TGroup & {readonly sum: number | null}>;
+  /** Sums the number leaves at a path inside a `json()` column per group. */
+  sum<TColumnType, const P extends readonly (string | number)[]>(
+    selector: (
+      builder: JsonAggregateBuilder<TTable, TSchema>,
+    ) => ColumnRef<TColumnType, P, TTable> &
+      JsonLeafOf<ValueAtPath<TColumnType, P>, number>,
+  ): Query<TTable, TSchema, TGroup & {readonly sum: number | null}>;
+  avg<TSelector extends NumericSelector<PullTableSchema<TTable, TSchema>>>(
+    field: TSelector,
+  ): Query<TTable, TSchema, TGroup & {readonly avg: number | null}>;
+  /** Averages the number leaves at a path inside a `json()` column per group. */
+  avg<TColumnType, const P extends readonly (string | number)[]>(
+    selector: (
+      builder: JsonAggregateBuilder<TTable, TSchema>,
+    ) => ColumnRef<TColumnType, P, TTable> &
+      JsonLeafOf<ValueAtPath<TColumnType, P>, number>,
+  ): Query<TTable, TSchema, TGroup & {readonly avg: number | null}>;
+  min<TSelector extends OrderedSelector<PullTableSchema<TTable, TSchema>>>(
+    field: TSelector,
+  ): Query<
+    TTable,
+    TSchema,
+    TGroup & {
+      readonly min: FieldTSType<TTable, TSchema, TSelector & string> | null;
+    }
+  >;
+  /**
+   * The minimum of the number and string leaves at a path inside a `json()`
+   * column per group, ordered as by {@link Query.min}.
+   */
+  min<TColumnType, const P extends readonly (string | number)[]>(
+    selector: (
+      builder: JsonAggregateBuilder<TTable, TSchema>,
+    ) => ColumnRef<TColumnType, P, TTable> &
+      JsonLeafOf<ValueAtPath<TColumnType, P>, number | string>,
+  ): Query<
+    TTable,
+    TSchema,
+    TGroup & {
+      readonly min: Extract<
+        ValueAtPath<TColumnType, P>,
+        number | string
+      > | null;
+    }
+  >;
+  max<TSelector extends OrderedSelector<PullTableSchema<TTable, TSchema>>>(
+    field: TSelector,
+  ): Query<
+    TTable,
+    TSchema,
+    TGroup & {
+      readonly max: FieldTSType<TTable, TSchema, TSelector & string> | null;
+    }
+  >;
+  /**
+   * The maximum of the number and string leaves at a path inside a `json()`
+   * column per group, ordered as by {@link Query.max}.
+   */
+  max<TColumnType, const P extends readonly (string | number)[]>(
+    selector: (
+      builder: JsonAggregateBuilder<TTable, TSchema>,
+    ) => ColumnRef<TColumnType, P, TTable> &
+      JsonLeafOf<ValueAtPath<TColumnType, P>, number | string>,
+  ): Query<
+    TTable,
+    TSchema,
+    TGroup & {
+      readonly max: Extract<
+        ValueAtPath<TColumnType, P>,
+        number | string
+      > | null;
+    }
+  >;
 }
 
 export type PreloadOptions = {
