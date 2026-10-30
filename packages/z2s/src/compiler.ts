@@ -35,6 +35,7 @@ import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import {completeOrdering} from '../../zql/src/query/complete-ordering.ts';
 import {
+  isBuiltinTypeSchema,
   pgTypeForLiteralType,
   sql,
   sqlConvertColumnArg,
@@ -1164,7 +1165,12 @@ function selectIdent(server: ServerSpec, column: QualifiedColumn): SQLQuery {
       server.mapper.columnName(column.table.zql, column.zql)
     ];
   const serverType = serverColumnSchema.type;
-  if (!serverColumnSchema.isEnum) {
+  // A user-defined type can have a built-in name such as `timestamp`; only
+  // convert the values of the built-in types.
+  if (
+    !serverColumnSchema.isEnum &&
+    isBuiltinTypeSchema(serverColumnSchema.typeSchema)
+  ) {
     let needsNormalization = false;
     switch (serverType) {
       case 'timetz':

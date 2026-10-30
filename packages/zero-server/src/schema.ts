@@ -20,8 +20,10 @@ type ServerSchemaRow = {
   scale: string | null;
   typtype: PostgresTypeClass;
   typename: string;
+  typenamespace: string;
   elemTyptype: PostgresTypeClass | null;
   elemTypname: string | null;
+  elemTypenamespace: string | null;
 };
 
 export async function getServerSchema<S extends Schema>(
@@ -100,10 +102,17 @@ export async function getServerSchema<S extends Schema>(
     ) {
       type = `${type}(${row.precision}, ${row.scale})`;
     }
+    // The namespace that backs `type`. For arrays `type` holds the element
+    // type name, so we record the element type's namespace; otherwise the
+    // column type's own namespace. This lets the SQL generator schema-qualify
+    // casts to user-defined types (enums, ...).
+    const typeSchema =
+      (isArray ? row.elemTypenamespace : row.typenamespace) ?? undefined;
     tableSchema[row.column] = {
       type,
       isEnum,
       isArray,
+      typeSchema,
     };
   }
 
@@ -172,8 +181,15 @@ export function serverSchemaQuery(
           END AS scale,
           ut.typtype::text AS typtype,
           ut.typname::text AS typename,
+          -- The namespaces of the type names above. They let the SQL generator
+          -- schema-qualify casts to user-defined types, which would otherwise
+          -- not resolve outside the search_path, or would resolve to a
+          -- pg_catalog type of the same name. These are udt_schema in
+          -- information_schema terms.
+          nut.nspname::text AS "typenamespace",
           CASE WHEN ut.typelem <> 0 THEN et.typtype::text ELSE NULL END AS "elemTyptype",
-          CASE WHEN ut.typelem <> 0 THEN et.typname::text ELSE NULL END AS "elemTypname"
+          CASE WHEN ut.typelem <> 0 THEN et.typname::text ELSE NULL END AS "elemTypname",
+          CASE WHEN ut.typelem <> 0 THEN net.nspname::text ELSE NULL END AS "elemTypenamespace"
       FROM
           pg_catalog.pg_attribute a
       JOIN
@@ -188,6 +204,8 @@ export function serverSchemaQuery(
           pg_catalog.pg_namespace nut ON nut.oid = ut.typnamespace
       LEFT JOIN
           pg_catalog.pg_type et ON et.oid = ut.typelem
+      LEFT JOIN
+          pg_catalog.pg_namespace net ON net.oid = et.typnamespace
       CROSS JOIN LATERAL
           (SELECT CASE WHEN t.typtype = 'd' THEN t.typtypmod ELSE a.atttypmod END AS typmod) tm
       WHERE
