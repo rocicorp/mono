@@ -277,6 +277,7 @@ test('add renamed fields', () => {
             "ast": {
               "aggregate": undefined,
               "alias": undefined,
+              "groupBy": undefined,
               "limit": undefined,
               "orderBy": [
                 [
@@ -303,6 +304,7 @@ test('add renamed fields', () => {
                   "subquery": {
                     "aggregate": undefined,
                     "alias": undefined,
+                    "groupBy": undefined,
                     "limit": undefined,
                     "orderBy": undefined,
                     "related": undefined,
@@ -354,6 +356,7 @@ test('add renamed fields', () => {
                       "subquery": {
                         "aggregate": undefined,
                         "alias": undefined,
+                        "groupBy": undefined,
                         "limit": undefined,
                         "orderBy": undefined,
                         "related": undefined,
@@ -954,6 +957,7 @@ describe('getQueriesPatch', () => {
                   "ast": {
                     "aggregate": undefined,
                     "alias": undefined,
+                    "groupBy": undefined,
                     "limit": undefined,
                     "orderBy": [
                       [
@@ -992,6 +996,7 @@ describe('getQueriesPatch', () => {
                   "ast": {
                     "aggregate": undefined,
                     "alias": undefined,
+                    "groupBy": undefined,
                     "limit": undefined,
                     "orderBy": [
                       [
@@ -1039,6 +1044,7 @@ describe('getQueriesPatch', () => {
                   "ast": {
                     "aggregate": undefined,
                     "alias": undefined,
+                    "groupBy": undefined,
                     "limit": undefined,
                     "orderBy": [
                       [
@@ -1081,6 +1087,7 @@ describe('getQueriesPatch', () => {
                   "ast": {
                     "aggregate": undefined,
                     "alias": undefined,
+                    "groupBy": undefined,
                     "limit": undefined,
                     "orderBy": [
                       [
@@ -1184,6 +1191,7 @@ describe('getQueriesPatch', () => {
           "ast": {
             "aggregate": undefined,
             "alias": undefined,
+            "groupBy": undefined,
             "limit": undefined,
             "orderBy": [
               [
@@ -1207,6 +1215,7 @@ describe('getQueriesPatch', () => {
           "ast": {
             "aggregate": undefined,
             "alias": undefined,
+            "groupBy": undefined,
             "limit": undefined,
             "orderBy": [
               [

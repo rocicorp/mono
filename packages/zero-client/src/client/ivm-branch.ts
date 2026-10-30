@@ -41,6 +41,7 @@ import {
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import {consume} from '../../../zql/src/ivm/stream.ts';
 import {
+  aggregateRowKeyColumns,
   ROW_KEY_PREFIXES,
   ROW_VERSION_COLUMN,
   sourceNameFromKey,
@@ -454,7 +455,7 @@ function applyRowDiffs(
       const row = (diff.op === 'del' ? diff.oldValue : diff.newValue) as Row;
       source = branch.getOrCreateAggregateSource(
         name,
-        ...inferAggregateSchema(row),
+        ...inferAggregateSchema(name, row),
       );
     }
     source = must(source);
@@ -510,10 +511,10 @@ function takeAddsForSource(
  * otherwise supply the exact schema) materializes.
  */
 function inferAggregateSchema(
+  name: string,
   row: Row,
 ): [columns: Record<string, SchemaValue>, primaryKey: PrimaryKey] {
   const columns: Record<string, SchemaValue> = {};
-  const keyColumns: string[] = [];
   for (const k of Object.keys(row)) {
     if (k === ROW_VERSION_COLUMN) {
       continue;
@@ -523,10 +524,9 @@ function inferAggregateSchema(
       assignProperty(columns, k, {type: 'number', optional: true});
     } else {
       assignProperty(columns, k, {type: valueTypeOf(row[k])});
-      keyColumns.push(k);
     }
   }
-  keyColumns.sort();
+  const keyColumns = aggregateRowKeyColumns(name, row);
   // The result column is always present even if absent from this particular row.
   if (!(AGGREGATE_VALUE_COLUMN in columns)) {
     columns[AGGREGATE_VALUE_COLUMN] = {type: 'number', optional: true};

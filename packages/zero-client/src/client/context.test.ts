@@ -13,13 +13,18 @@ import {
 import {
   aggregateTableName,
   buildPipeline,
+  distinctTableName,
+  distinctViewInput,
   topLevelAggregateTableName,
 } from '../../../zql/src/builder/builder.ts';
 import {ArrayView} from '../../../zql/src/ivm/array-view.ts';
 import {Catch} from '../../../zql/src/ivm/catch.ts';
 import {defaultFormat} from '../../../zql/src/ivm/default-format.ts';
+import {distinctKey} from '../../../zql/src/ivm/distinct.ts';
 import {Join} from '../../../zql/src/ivm/join.ts';
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
+import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
+import {schema as issueSchema} from '../../../zql/src/query/test/test-schemas.ts';
 import {
   ZeroContext,
   type AddCustomQuery,
@@ -29,7 +34,7 @@ import {
   type UpdateQuery,
 } from './context.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
-import {ENTITIES_KEY_PREFIX} from './keys.ts';
+import {aggregateRowKey, ENTITIES_KEY_PREFIX} from './keys.ts';
 const testBatchViewUpdates = (applyViewUpdates: () => void) =>
   applyViewUpdates();
 
@@ -937,4 +942,78 @@ test('synced junction (many-to-many) count with a where reads the server value',
   const labels = context.getSource('label');
   assert(labels, 'Expected label source');
   expect([...labels.connect([['id', 'asc']]).fetch({})]).toEqual([]);
+});
+
+test('synced distinct reads the server rows under the client column names', () => {
+  // The server streams one row per distinct value to a synthetic table, under
+  // its own column names (`owner_id` for the client's `ownerId`), keyed by the
+  // encoded values. The view shows them under the client's names.
+  const context = new ZeroContext(
+    new LogContext('info'),
+    new IVMSourceBranch(issueSchema.tables),
+    null as unknown as AddQuery,
+    null as unknown as AddCustomQuery,
+    null as unknown as UpdateQuery,
+    null as unknown as UpdateCustomQuery,
+    null as unknown as FlushQueryChanges,
+    testBatchViewUpdates,
+    () => {},
+    assertValidRunOptions,
+  );
+  const queryID = 'q1';
+  const table = distinctTableName(queryID);
+  expect(table).toBe('aggregate:q1:#distinct');
+  const ast: AST = {table: 'issue', groupBy: ['ownerId']};
+  const view = new ArrayView(
+    distinctViewInput(buildPipeline(ast, context, queryID), ast, context),
+    defaultFormat,
+    true,
+    () => {},
+  );
+  expect(view.data).toEqual([]);
+
+  const row = (owner: string | null, count: number, version = '01') => ({
+    ['owner_id']: owner,
+    ['_0_key']: distinctKey([owner]),
+    ['_0_count']: count,
+    ['_0_version']: version,
+  });
+  const add = (r: ReturnType<typeof row>) => ({
+    key: aggregateRowKey(table, r),
+    op: 'add' as const,
+    newValue: r,
+  });
+  const byKey = (a: {key: string}, b: {key: string}) =>
+    a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
+  context.processChanges(
+    undefined,
+    'h1' as Hash,
+    [add(row(null, 1)), add(row('u1', 2))].sort(byKey),
+  );
+  const rows = [
+    {ownerId: null, [refCountSymbol]: 1},
+    {ownerId: 'u1', [refCountSymbol]: 1},
+  ];
+  expect(view.data).toEqual(rows);
+
+  // A count the server changes doesn't change what the view shows.
+  context.processChanges('h1' as Hash, 'h2' as Hash, [
+    {
+      key: aggregateRowKey(table, row('u1', 2)),
+      op: 'change',
+      oldValue: row('u1', 2),
+      newValue: row('u1', 1, '02'),
+    },
+  ]);
+  expect(view.data).toEqual(rows);
+
+  // The server deletes the row of a value no row has any more.
+  context.processChanges('h2' as Hash, 'h3' as Hash, [
+    {
+      key: aggregateRowKey(table, row('u1', 1, '02')),
+      op: 'del',
+      oldValue: row('u1', 1, '02'),
+    },
+  ]);
+  expect(view.data).toEqual([rows[0]]);
 });

@@ -137,6 +137,25 @@ export function buildCountQuery(
 }
 
 /**
+ * The distinct values of `groupColumns` among the rows that pass `filters`,
+ * each followed by its number of rows, in no particular order.
+ */
+export function buildGroupCountsQuery(
+  tableName: string,
+  groupColumns: readonly string[],
+  filters: NoSubqueryCondition | undefined,
+): SQLQuery {
+  const cols = sql.join(
+    groupColumns.map(c => sql.ident(c)),
+    sql`, `,
+  );
+  const select = sql`SELECT ${cols}, COUNT(*) FROM ${sql.ident(tableName)}`;
+  return filters
+    ? sql`${select} WHERE ${filtersToSQL(filters)} GROUP BY ${cols}`
+    : sql`${select} GROUP BY ${cols}`;
+}
+
+/**
  * {@link buildSelectQueries} for a fetch that needs only one SELECT, such as
  * one without a start row.
  */

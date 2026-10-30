@@ -48,6 +48,13 @@ export function astToZQL(ast: AST, options: AstToZQLOptions = {}): string {
     }
   }
 
+  // Handle distinct, before orderBy, which then orders its rows. A count of
+  // the distinct values carries the columns on its aggregate instead.
+  const distinct = ast.groupBy ?? ast.aggregate?.distinct;
+  if (distinct) {
+    code += `.distinct(${distinct.map(jsStringLiteral).join(', ')})`;
+  }
+
   // Handle orderBy
   if (ast.orderBy && ast.orderBy.length > 0) {
     code += transformOrder(ast.orderBy);
@@ -64,6 +71,11 @@ export function astToZQL(ast: AST, options: AstToZQLOptions = {}): string {
     code += `.start(${options.redactLiterals ? '?' : JSON.stringify(row)}${
       exclusive ? '' : ', { inclusive: true }'
     })`;
+  }
+
+  // A count of the distinct values ends the chain.
+  if (ast.aggregate?.distinct) {
+    code += '.count()';
   }
 
   return code;

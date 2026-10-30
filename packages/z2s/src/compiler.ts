@@ -32,6 +32,7 @@ import {
 } from '../../zero-schema/src/name-mapper.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
+import {distinctOrdering} from '../../zql/src/ivm/distinct.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import {completeOrdering} from '../../zql/src/query/complete-ordering.ts';
 import {
@@ -78,6 +79,10 @@ export function compile(
   ast: AST,
   format?: Format,
 ): SQLQuery {
+  assert(
+    ast.groupBy === undefined || ast.aggregate === undefined,
+    'groupBy with an aggregate is not supported yet',
+  );
   ast = completeOrdering(
     ast,
     tableName => zqlSchema.tables[tableName].primaryKey,
@@ -91,6 +96,17 @@ export function compile(
     zql: zqlSchema.tables,
   };
   if (ast.aggregate) {
+    if (ast.aggregate.distinct) {
+      // A count of the distinct combinations counts the rows a distinct()
+      // of them gives.
+      const groups = selectDistinct(spec, {
+        ...ast,
+        groupBy: ast.aggregate.distinct,
+        aggregate: undefined,
+      });
+      return sql`SELECT to_json(COUNT(*))::text AS ${ZQL_RESULT_KEY_IDENT}
+        FROM (${groups}) ${ZQL_RESULT_TABLE_IDENT}`;
+    }
     // Top-level (ungrouped) aggregate: the result is a single scalar, not rows.
     // It reduces the same normalized projection a relationship aggregate does,
     // so values such as timestamps come back in the form ZQL uses. Like the
@@ -113,9 +129,50 @@ export function compile(
       FROM (${inner}) ${ZQL_RESULT_TABLE_IDENT}`;
   }
 
+  if (ast.groupBy) {
+    return sql`SELECT ${toJSON(ZQL_RESULT_TABLE_KEY)}::text AS ${ZQL_RESULT_KEY_IDENT}
+      FROM (${selectDistinct(spec, ast)}) ${ZQL_RESULT_TABLE_IDENT}`;
+  }
+
   return sql`SELECT 
     ${toJSON(ZQL_RESULT_TABLE_KEY, format?.singular)}::text AS ${ZQL_RESULT_KEY_IDENT}
     FROM (${select(spec, ast, format)}) ${ZQL_RESULT_TABLE_IDENT}`;
+}
+
+/**
+ * The distinct values of `ast.groupBy` among the rows that pass `ast.where`,
+ * one row of those columns each, in the order a distinct query's rows have
+ * (see `distinctOrdering`). It groups by the columns rather than selecting
+ * DISTINCT, which would need the converted values {@link selectIdent} selects
+ * to appear in the ORDER BY too. Like the IVM operator, it ignores `related`.
+ */
+function selectDistinct(spec: Spec, ast: AST): SQLQuery {
+  const table = makeTable(spec, ast.table);
+  const columns = must(ast.groupBy).map(zql => ({table, zql}));
+  return sql`SELECT ${sql.join(
+    columns.map(c => selectIdent(spec.server, c)),
+    ',',
+  )}
+    FROM ${fromIdent(spec.server, table)}
+    ${ast.where ? sql`WHERE ${where(spec, ast.where, table)}` : sql``}
+    GROUP BY ${sql.join(
+      columns.map(c => colIdent(spec.server, c)),
+      ', ',
+    )}
+    ORDER BY ${sql.join(
+      distinctOrdering(ast).map(([col, dir]) => {
+        const value = orderedValue(
+          spec,
+          ast.table,
+          col,
+          colIdent(spec.server, {table, zql: col}),
+        );
+        return dir === 'asc'
+          ? sql`${value} ASC NULLS FIRST`
+          : sql`${value} DESC NULLS LAST`;
+      }),
+      ', ',
+    )}`;
 }
 
 /**
@@ -134,6 +191,10 @@ export function compile(
  * network order, and a `uuid` would fail (it has no `MIN`).
  */
 function aggregateExpr(spec: Spec, zqlTable: string, agg: Aggregate): SQLQuery {
+  assert(
+    agg.distinct === undefined,
+    'a count of distinct values is not supported in a relationship yet',
+  );
   const {fn, field, path} = agg;
   if (path !== undefined) {
     return jsonAggregateExpr(spec, zqlTable, agg, path);
@@ -209,6 +270,21 @@ function orderedAggregateArg(
   zqlTable: string,
   field: string,
 ): SQLQuery {
+  return orderedValue(spec, zqlTable, field, sql.ident(field));
+}
+
+/**
+ * `value`, the value of `zqlTable`'s column `field`, in a form Postgres
+ * orders as the IVM does: an enum, or a type Zero represents as text, by that
+ * text byte by byte. Otherwise an enum would use its declaration order and an
+ * `inet` its network order.
+ */
+function orderedValue(
+  spec: Spec,
+  zqlTable: string,
+  field: string,
+  value: SQLQuery,
+): SQLQuery {
   const {server} = spec;
   const column =
     server.schema[server.mapper.tableName(zqlTable)][
@@ -216,8 +292,8 @@ function orderedAggregateArg(
     ];
   // `format` gives the type's own text: `::text` adds the netmask to an `inet`.
   return column.isEnum || isPgTextRepresentedType(column.type)
-    ? sql`format('%s', ${sql.ident(field)}) COLLATE "C"`
-    : sql`${sql.ident(field)}`;
+    ? sql`format('%s', ${value}) COLLATE "C"`
+    : value;
 }
 
 function select(

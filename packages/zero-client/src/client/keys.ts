@@ -5,7 +5,11 @@ import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {MutationID} from '../../../zero-protocol/src/mutation-id.ts';
 import {primaryKeyValueSchema} from '../../../zero-protocol/src/primary-key.ts';
-import {AGGREGATE_PAYLOAD_COLUMNS} from '../../../zql/src/ivm/aggregate.ts';
+import {isKeyedAggregateTableName} from '../../../zql/src/builder/builder.ts';
+import {
+  AGGREGATE_KEY_COLUMN,
+  AGGREGATE_PAYLOAD_COLUMNS,
+} from '../../../zql/src/ivm/aggregate.ts';
 
 // The replicated row-version column the server stamps on synced rows; not part
 // of an aggregate's key. (Mirrors zero-cache's ZERO_VERSION_COLUMN_NAME, which
@@ -122,13 +126,28 @@ export function sourceNameFromKey(key: string): string {
  * relationship (`{…childFields, …}`) rows.
  */
 export function aggregateRowKey(tableName: string, row: Row): string {
-  const keyColumns = Object.keys(row)
-    .filter(k => !AGGREGATE_PAYLOAD_COLUMNS.has(k) && k !== ROW_VERSION_COLUMN)
-    .sort();
+  const keyColumns = aggregateRowKeyColumns(tableName, row);
   return rowKey(
     AGGREGATES_KEY_PREFIX,
     tableName.slice(AGGREGATE_TABLE_PREFIX.length),
     keyColumns as unknown as CompoundKey,
     row,
   );
+}
+
+/**
+ * The key columns of a row of the synthetic aggregate table `tableName`:
+ * `_0_key` for a top-level aggregate's or a distinct's, which also carries
+ * the columns it encodes, and otherwise, for a relationship aggregate's,
+ * every column except the payload and the row-version, sorted. The table
+ * name decides, not the row, so a relationship aggregate's key is the same
+ * whatever its columns are named.
+ */
+export function aggregateRowKeyColumns(tableName: string, row: Row): string[] {
+  if (isKeyedAggregateTableName(tableName)) {
+    return [AGGREGATE_KEY_COLUMN];
+  }
+  return Object.keys(row)
+    .filter(k => !AGGREGATE_PAYLOAD_COLUMNS.has(k) && k !== ROW_VERSION_COLUMN)
+    .sort();
 }

@@ -154,6 +154,8 @@ const TAG_SYSTEM_TEST = 0x200c;
 const TAG_JUNCTION = 0x200d;
 const TAG_AGGREGATE = 0x200e;
 const TAG_JSON = 0x200f;
+const TAG_GROUP_BY = 0x2010;
+const TAG_DISTINCT = 0x2011;
 
 // Set on a string's length word. High enough that no array length reaches it.
 const STR_MARK = 0x40000000;
@@ -385,6 +387,14 @@ function visitAggregate(aggregate: Aggregate | undefined): void {
     mix(TAG_JSON);
     visitValue(aggregate.path);
   }
+  // Absent, it writes nothing too.
+  if (aggregate.distinct !== undefined) {
+    mix(TAG_DISTINCT);
+    mix(aggregate.distinct.length);
+    for (const col of aggregate.distinct) {
+      mixString(col);
+    }
+  }
 }
 
 function visitAST(ast: AST): void {
@@ -432,6 +442,15 @@ function visitAST(ast: AST): void {
 
   visitOrdering(ast.orderBy);
   visitAggregate(ast.aggregate);
+  // Like the aggregate, an absent groupBy writes nothing, so other queries
+  // hash as before.
+  if (ast.groupBy !== undefined) {
+    mix(TAG_GROUP_BY);
+    mix(ast.groupBy.length);
+    for (const col of ast.groupBy) {
+      mixString(col);
+    }
+  }
   mix(TAG_END);
 }
 

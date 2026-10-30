@@ -895,6 +895,29 @@ export interface Query<
   >;
 
   /**
+   * Reduces the query to the distinct values of `columns`, as
+   * `SELECT DISTINCT` does: one row per combination that a row passing
+   * `where` has, e.g. `issue.where('open', true).distinct('assigneeID')`.
+   * `null` is a value like any other. An `orderBy` may only name these
+   * columns, and they order the rows by default. Follow it with
+   * {@link count} for the number of distinct combinations, with `null`
+   * counting as one. `limit`, `start`, `one`, `related` and the other
+   * aggregates are not supported with it yet.
+   */
+  distinct<
+    const TColumns extends readonly (NoCompoundTypeSelector<
+      PullTableSchema<TTable, TSchema>
+    > &
+      string)[],
+  >(
+    ...columns: TColumns
+  ): Query<
+    TTable,
+    TSchema,
+    Pick<PullRow<TTable, TSchema>, TColumns[number] & string>
+  >;
+
+  /**
    * @deprecated Use {@link RunOptions} with {@link zero.run} instead.
    */
   run(options?: RunOptions): Promise<HumanReadable<TReturn>>;

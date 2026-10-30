@@ -31,10 +31,16 @@ import {
   AGGREGATE_KEY_COLUMN,
   Aggregate,
   aggregateSourceSchema,
-  assertNotPayloadColumn,
+  assertNotSyntheticColumn,
   isInvertible,
 } from '../ivm/aggregate.ts';
 import {Cap} from '../ivm/cap.ts';
+import {
+  Distinct,
+  distinctOrdering,
+  DistinctProjection,
+  distinctSourceSchema,
+} from '../ivm/distinct.ts';
 import {Exists} from '../ivm/exists.ts';
 import {FanIn} from '../ivm/fan-in.ts';
 import {FanOut} from '../ivm/fan-out.ts';
@@ -229,12 +235,23 @@ export function buildPipeline(
 ): Input {
   ast = delegate.mapAst ? delegate.mapAst(ast) : ast;
 
+  assert(
+    ast.groupBy === undefined || ast.aggregate === undefined,
+    'groupBy with an aggregate is not supported yet',
+  );
+
   // Synced client reading a top-level (ungrouped) aggregate: the underlying
   // table is not synced and has no source here, and ordering/planning don't
   // apply to a scalar result. Read the precomputed row directly from the
   // synthetic source (see buildPipelineInternal's short-circuit).
-  if (ast.aggregate && delegate.aggregatesFromSource) {
+  if ((ast.aggregate || ast.groupBy) && delegate.aggregatesFromSource) {
     return buildPipelineInternal(ast, delegate, queryID, '');
+  }
+
+  if (ast.groupBy || ast.aggregate?.distinct) {
+    // The input of a distinct is sorted by its columns first, so the rows of
+    // each combination are adjacent (see Distinct).
+    ast = {...ast, orderBy: distinctOrdering(ast)};
   }
 
   ast = completeOrdering(
@@ -406,6 +423,10 @@ function buildPipelineInternal(
   partitionKey?: CompoundKey,
   isNonFlippedExistsChild?: boolean,
 ): Input {
+  assert(
+    ast.groupBy === undefined || name === '',
+    'groupBy is only supported at the top level',
+  );
   // Synced client reading a top-level (ungrouped) aggregate: the precomputed
   // single row is read from the synthetic source `aggregate:<queryID>`; the
   // underlying table is never synced, so its pipeline is not built at all.
@@ -420,6 +441,10 @@ function buildPipelineInternal(
       delegate.decorateSourceInput(conn, queryID),
       `${name}:aggregateSource`,
     );
+  }
+
+  if (ast.groupBy && delegate.aggregatesFromSource) {
+    return distinctFromSource(ast, delegate, queryID, name);
   }
 
   const source = delegate.getSource(ast.table);
@@ -598,6 +623,22 @@ function buildPipelineInternal(
       ast.limit === undefined &&
       csqConditions.length === 0 &&
       (!ast.where || (fullyAppliedFilters && !delegate.applyFiltersAnyway));
+    let countSource: SourceInput | undefined = conn;
+    if (ast.aggregate.distinct) {
+      // A count of the distinct combinations counts the rows of a Distinct,
+      // which gets the source's groups instead (see Distinct).
+      const distinctName = `${name}:distinct`;
+      const distinct = new Distinct(
+        end,
+        delegate.createStorage(distinctName),
+        distinctOrdering(ast),
+        distinctTableName(queryID),
+        sourceAppliesAll ? conn : undefined,
+      );
+      delegate.addEdge(end, distinct);
+      end = delegate.decorateInput(distinct, distinctName);
+      countSource = undefined;
+    }
     const aggName = `${name}:aggregate`;
     const aggregate = new Aggregate(
       end,
@@ -606,11 +647,37 @@ function buildPipelineInternal(
       ast.aggregate.fn,
       ast.aggregate.field,
       topLevelAggregateTableName(queryID),
-      sourceAppliesAll ? conn : undefined,
+      sourceAppliesAll ? countSource : undefined,
       ast.aggregate.path,
     );
     delegate.addEdge(end, aggregate);
     return delegate.decorateInput(aggregate, aggName);
+  }
+
+  if (ast.groupBy) {
+    // Distinct, compute mode (server / local). The synced client reads the
+    // rows from the synthetic source instead (see distinctFromSource). As for
+    // a count above, a source that applies every filter can count the
+    // combinations without the rows being read.
+    assert(
+      ast.start === undefined &&
+        ast.limit === undefined &&
+        ast.related === undefined,
+      'distinct does not support start, limit or related',
+    );
+    const sourceAppliesAll =
+      csqConditions.length === 0 &&
+      (!ast.where || (fullyAppliedFilters && !delegate.applyFiltersAnyway));
+    const distinctName = `${name}:distinct`;
+    const distinct = new Distinct(
+      end,
+      delegate.createStorage(distinctName),
+      distinctOrdering(ast),
+      distinctTableName(queryID),
+      sourceAppliesAll ? conn : undefined,
+    );
+    delegate.addEdge(end, distinct);
+    return delegate.decorateInput(distinct, distinctName);
   }
 
   if (ast.related) {
@@ -969,6 +1036,10 @@ function applyCorrelatedSubQuery(
   // aggregate these are the names the server streams the rows with.
   let childKey = sq.correlation.childField;
   if (sq.aggregate) {
+    assert(
+      sq.aggregate.distinct === undefined,
+      'a count of distinct values is not supported in a relationship yet',
+    );
     const aggTable = aggregateTableName(queryID, sq, name);
     if (delegate.aggregatesFromSource) {
       childKey =
@@ -979,7 +1050,7 @@ function applyCorrelatedSubQuery(
       // The server builds its operator with these names and rejects a
       // collision there; check here too so the client fails the same way.
       for (const col of childKey) {
-        assertNotPayloadColumn(col);
+        assertNotSyntheticColumn(col);
       }
       // Always go through getAggregateSource when the delegate has one, even
       // if the source already exists: on reload it is provisioned from the
@@ -1299,6 +1370,100 @@ export function topLevelAggregateTableName(queryID: string): string {
   return `${AGGREGATE_TABLE_PREFIX}${queryID}`;
 }
 
+/**
+ * The synthetic table of a distinct query's rows: `aggregate:<queryID>:` and
+ * a `#`, which an escaped relationship alias never contains, so it can't be a
+ * relationship aggregate's, and isn't a top-level aggregate's either, whose
+ * shape the client derives from the name.
+ */
+export function distinctTableName(queryID: string): string {
+  return `${AGGREGATE_TABLE_PREFIX}${queryID}${DISTINCT_TABLE_SUFFIX}`;
+}
+
+const DISTINCT_TABLE_SUFFIX = `${AGGREGATE_TABLE_SEPARATOR}#distinct`;
+
+/**
+ * The names a distinct query's input rows have its columns under: the
+ * query's own, or, for a synced client reading them from the synthetic
+ * source, the server's.
+ */
+function distinctInputNames(
+  ast: AST,
+  delegate: BuilderDelegate,
+): readonly string[] {
+  const distinct = must(ast.groupBy);
+  return delegate.aggregatesFromSource && delegate.aggregateKeyColumns
+    ? delegate.aggregateKeyColumns(
+        ast.table,
+        distinct as unknown as CompoundKey,
+      )
+    : distinct;
+}
+
+/**
+ * A synced client reads a distinct query's rows from the synthetic source the
+ * server streams them to; the table's rows are not synced for it.
+ */
+function distinctFromSource(
+  ast: AST,
+  delegate: BuilderDelegate,
+  queryID: string,
+  name: string,
+): Input {
+  const tableSource = must(
+    delegate.getSource(ast.table),
+    `Source not found: ${ast.table}`,
+  );
+  const distinct = must(ast.groupBy);
+  const inputNames = distinctInputNames(ast, delegate);
+  const inputName = (col: string) => inputNames[distinct.indexOf(col)];
+  const inputColumns: Record<string, SchemaValue> = {};
+  for (const col of distinct) {
+    assignProperty(
+      inputColumns,
+      inputName(col),
+      tableSource.tableSchema.columns[col],
+    );
+  }
+  const {columns, primaryKey, sort} = distinctSourceSchema(
+    inputColumns,
+    distinctOrdering(ast).map(([col, dir]) => [inputName(col), dir] as const),
+  );
+  const table = distinctTableName(queryID);
+  const source = delegate.getAggregateSource
+    ? delegate.getAggregateSource(table, columns, primaryKey)
+    : delegate.getSource(table);
+  if (!source) {
+    throw new Error(`Distinct source not found: ${table}`);
+  }
+  return delegate.decorateInput(
+    delegate.decorateSourceInput(source.connect(sort), queryID),
+    `${name}:distinctSource`,
+  );
+}
+
+/**
+ * The input of a view of a distinct query: its rows reduced to the distinct
+ * columns, under the names the view shows a row's columns by, those of the
+ * pipeline's AST (see {@link DistinctProjection}).
+ */
+export function distinctViewInput(
+  input: Input,
+  ast: AST,
+  delegate: BuilderDelegate,
+): Input {
+  const viewNames = must(
+    (delegate.mapAst ? delegate.mapAst(ast) : ast).groupBy,
+  );
+  const inputNames = delegate.aggregatesFromSource
+    ? distinctInputNames(ast, delegate)
+    : viewNames;
+  return new DistinctProjection(
+    input,
+    viewNames.map((col, i) => [col, inputNames[i]] as const),
+  );
+}
+
 /** True if `name` is a synthetic aggregate table (any kind). */
 export function isAggregateTableName(name: string): boolean {
   return name.startsWith(AGGREGATE_TABLE_PREFIX);
@@ -1317,6 +1482,20 @@ export function isTopLevelAggregateTableName(name: string): boolean {
     !name
       .slice(AGGREGATE_TABLE_PREFIX.length)
       .includes(AGGREGATE_TABLE_SEPARATOR)
+  );
+}
+
+/**
+ * True if the rows of the synthetic table `name` are keyed by `_0_key`
+ * alone: a top-level aggregate's ({@link topLevelAggregateTableName}) or a
+ * distinct query's ({@link distinctTableName}). A relationship aggregate's
+ * rows are keyed by their correlation columns, whatever they are named.
+ */
+export function isKeyedAggregateTableName(name: string): boolean {
+  return (
+    isTopLevelAggregateTableName(name) ||
+    (name.startsWith(AGGREGATE_TABLE_PREFIX) &&
+      name.endsWith(DISTINCT_TABLE_SUFFIX))
   );
 }
 

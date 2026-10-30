@@ -6,6 +6,7 @@ import type {
   PrimaryKeyValueRecord,
 } from '../../../zero-protocol/src/primary-key.ts';
 import {
+  aggregateRowKeyColumns,
   toPrimaryKeyString as toPrimaryKeyStringImpl,
   toMutationResponseKey,
 } from './keys.ts';
@@ -162,6 +163,30 @@ test('compound keys are the decimal h128 of the JSON key values', () => {
       );
     }),
   );
+});
+
+test('aggregate row key columns follow the table, not the row', () => {
+  // A top-level aggregate's and a distinct's rows are keyed by `_0_key`.
+  expect(
+    aggregateRowKeyColumns('aggregate:q1', {_0_key: 0, _0_value: 3}),
+  ).toEqual(['_0_key']);
+  expect(
+    aggregateRowKeyColumns('aggregate:q1:#distinct', {
+      owner: 'u1',
+      _0_key: 's' + 'u1',
+      _0_count: 2,
+    }),
+  ).toEqual(['_0_key']);
+  // A relationship aggregate's by its correlation columns, sorted, even one
+  // named like the synthetic key.
+  expect(
+    aggregateRowKeyColumns('aggregate:q1:comments', {
+      issueId: 'i1',
+      _0_key: 'k',
+      _0_value: 3,
+      _0_version: '01',
+    }),
+  ).toEqual(['_0_key', 'issueId']);
 });
 
 test('toMutationResponseKey', () => {

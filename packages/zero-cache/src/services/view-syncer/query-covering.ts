@@ -129,12 +129,14 @@ function astCoveredBy(
   covered: NormalizedAST,
   covering: NormalizedAST,
 ): boolean {
-  // An aggregate's result lives in rows synthesized for its own query, so no
-  // other query's rows can stand in for it, and an aggregate query does not
-  // sync the rows it reduces.
+  // The result of an aggregate or a distinct lives in rows synthesized for
+  // its own query, so no other query's rows can stand in for it, and such a
+  // query does not sync the rows it reduces.
   return (
     covered.aggregate === undefined &&
     covering.aggregate === undefined &&
+    covered.groupBy === undefined &&
+    covering.groupBy === undefined &&
     covered.schema === covering.schema &&
     covered.table === covering.table &&
     covered.alias === covering.alias &&

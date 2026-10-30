@@ -523,6 +523,31 @@ describe('custom mutators compute aggregates from the rows they can read', () =>
     expect(results).toEqual([0, null, 2, 1, 5]);
   });
 
+  test('a distinct', async () => {
+    const results: unknown[] = [];
+    const z = zeroForTest({
+      schema: legacySchema,
+      mutators: {
+        issue: {
+          distinct: async (tx: MutatorTx) => {
+            await tx.mutate.issue.insert(issue('1'));
+            await tx.mutate.issue.insert(issue('2', 1, true));
+            await tx.mutate.issue.insert(issue('3', 2));
+            results.push(await tx.run(zql.issue.distinct('closed')));
+          },
+        },
+      } as const,
+    });
+
+    await z.mutate.issue.distinct().client;
+    expect(results).toEqual([
+      [
+        {closed: false, [refCountSymbol]: 1},
+        {closed: true, [refCountSymbol]: 1},
+      ],
+    ]);
+  });
+
   test('a relationship aggregate', async () => {
     const results: unknown[] = [];
     const z = zeroForTest({

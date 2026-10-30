@@ -40,6 +40,7 @@ import {SourceChangeIndex} from '../../zql/src/ivm/source-change-index.ts';
 import {
   type Source,
   type SourceChange,
+  type GroupCount,
   type SourceInput,
 } from '../../zql/src/ivm/source.ts';
 import type {Stream} from '../../zql/src/ivm/stream.ts';
@@ -55,7 +56,11 @@ import {
   NOT_OVERRIDDEN,
   PendingDelta,
 } from './pending-delta.ts';
-import {buildCountQuery, toSQLiteType} from './query-builder.ts';
+import {
+  buildCountQuery,
+  buildGroupCountsQuery,
+  toSQLiteType,
+} from './query-builder.ts';
 
 type Statements = {
   readonly cache: StatementCache;
@@ -351,6 +356,8 @@ export class TableSource implements Source {
       getSchema: () => schema,
       fetch: req => this.#fetch(req, connection, fetchSQL),
       count: constraint => this.#count(constraint, transformedFilters.filters),
+      groupCounts: columns =>
+        this.#groupCounts(columns, transformedFilters.filters),
       setOutput: output => {
         connection.output = output;
       },
@@ -420,6 +427,40 @@ export class TableSource implements Source {
         .get<number>(...values);
       recordIndexUsage(statement, this.#table);
       return count;
+    });
+  }
+
+  /**
+   * The distinct values of `columns` among the rows that pass `filters`, each
+   * with its number of rows, grouped by SQLite. `undefined` while a push is in
+   * flight, as for {@link #count}.
+   */
+  #groupCounts(
+    columns: readonly string[],
+    filters: StrictNoSubqueryCondition | undefined,
+  ): GroupCount[] | undefined {
+    if (
+      this.#overlay !== undefined ||
+      (this.#delta !== undefined && !this.#delta.isEmpty)
+    ) {
+      return undefined;
+    }
+    const rawColumns = columns.map(c =>
+      rawColumn(this.#columns, c, this.#table),
+    );
+    const {text, values} = format(
+      buildGroupCountsQuery(this.#table, columns, filters),
+    );
+    return this.#stmts.cache.use(text, ({statement}) => {
+      const rows = statement
+        .safeIntegers(true)
+        .raw(true)
+        .all<SQLiteValue[]>(...values);
+      recordIndexUsage(statement, this.#table);
+      return rows.map(values => ({
+        row: fromSQLiteRawRow(rawColumns, values, this.#table),
+        count: Number(values[columns.length]),
+      }));
     });
   }
 

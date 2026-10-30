@@ -344,10 +344,17 @@ const aggregateSchema = v
     fn: v.literalUnion('count', 'sum', 'avg', 'min', 'max'),
     field: v.string().optional(),
     path: jsonPathSchema.optional(),
+    distinct: v.readonlyArray(v.string()).optional(),
   })
   .assert(
     a => a.path === undefined || (a.field !== undefined && a.fn !== 'count'),
     'expected an aggregate JSON path to have a field and not be a count',
+  )
+  .assert(
+    a =>
+      a.distinct === undefined ||
+      (a.fn === 'count' && a.field === undefined && a.distinct.length > 0),
+    'expected an aggregate over distinct columns to be a count of at least one',
   );
 
 export const correlatedSubquerySchemaOmitSubquery = v.readonlyObject({
@@ -377,6 +384,10 @@ export const astSchema: v.Type<AST> = v.readonlyObject({
     })
     .optional(),
   aggregate: aggregateSchema.optional(),
+  groupBy: v
+    .readonlyArray(v.string())
+    .assert(cols => cols.length > 0, 'expected groupBy to name a column')
+    .optional(),
 });
 
 /**
@@ -520,6 +531,16 @@ export type AST = {
    * is present; `related` does not apply. See zql's `ivm/aggregate.ts`.
    */
   readonly aggregate?: Aggregate | undefined;
+
+  /**
+   * Groups the rows that pass `where` by these columns: one row per
+   * combination of their values, as in `GROUP BY`. Without an `aggregate` it
+   * is a `SELECT DISTINCT` of the columns, which is all that is supported so
+   * far; with one it would be that aggregate per group. `NULL` is a value like
+   * any other. `orderBy` orders the groups and may only name these columns;
+   * `start`, `limit` and `related` do not apply. See zql's `ivm/distinct.ts`.
+   */
+  readonly groupBy?: readonly string[] | undefined;
 };
 
 export type Correlation = {
@@ -563,6 +584,11 @@ export type Aggregate = {
   // Navigates into `field`, which is then a `json()` column, to a scalar leaf.
   // Data, not a schema name: name mapping leaves it alone. Not for `count`.
   readonly path?: readonly (string | number)[] | undefined;
+  // For `count`: counts the distinct combinations of these columns among the
+  // rows, the rows a `groupBy` of them would give, rather than the rows. A
+  // `NULL` is a value like any other, unlike in SQL's `COUNT(DISTINCT x)`.
+  // Subject to name mapping.
+  readonly distinct?: readonly string[] | undefined;
 };
 
 /**
@@ -784,6 +810,7 @@ function transformAST(ast: AST, transform: ASTTransform): Required<AST> {
     aggregate: ast.aggregate
       ? transformAggregate(ast.aggregate, ast.table, transform)
       : undefined,
+    groupBy: ast.groupBy?.map(colName),
   };
 
   return transformed;
@@ -798,7 +825,10 @@ function transformAggregate(
   table: string,
   {columnName, jsonColumnName}: ASTTransform,
 ): Aggregate {
-  const {fn, field, path} = agg;
+  const {fn, field, path, distinct} = agg;
+  if (distinct !== undefined) {
+    return {fn, distinct: distinct.map(col => columnName(table, col))};
+  }
   if (field === undefined) {
     return {fn, field: undefined};
   }
@@ -954,6 +984,7 @@ export function normalizedAST(ast: AST): NormalizedAST {
     limit,
     orderBy,
     aggregate,
+    groupBy,
   } = ast;
   // Every field is written, in the same order, so that all normalized ASTs
   // have the same shape (one hidden class) and the same JSON encoding (and
@@ -969,6 +1000,7 @@ export function normalizedAST(ast: AST): NormalizedAST {
     limit,
     orderBy,
     aggregate,
+    groupBy,
   });
 }
 
@@ -991,6 +1023,7 @@ export function tableAST(
     limit: undefined,
     orderBy: undefined,
     aggregate: undefined,
+    groupBy: undefined,
   });
 }
 

@@ -73,15 +73,24 @@ export const AGGREGATE_SUM_COLUMN = '_0_sum';
 export const AGGREGATE_COUNT_COLUMN = '_0_count';
 
 /**
- * Asserts that the aggregate group key column `col` is not one of the payload
- * columns. The payload columns are written over the group key in the emitted
- * row and stripped from it by the client's row key, so a collision would
- * silently merge every group into one. Their reserved `_0_` prefix keeps real
- * schemas clear of this; the check guards the invariant.
+ * Whether `col` is the name of a synthetic column of an aggregate or distinct
+ * row: `_0_key` or a payload column.
  */
-export function assertNotPayloadColumn(col: string): void {
+export function isSyntheticColumn(col: string): boolean {
+  return col === AGGREGATE_KEY_COLUMN || AGGREGATE_PAYLOAD_COLUMNS.has(col);
+}
+
+/**
+ * Asserts that the group key column `col` of an aggregate, or a column of a
+ * distinct, is not a synthetic column. The synthetic columns are written over
+ * the group's columns in the emitted row, the payload is stripped from it by
+ * the client's row key and `_0_key` alone keys a row that has it, so a
+ * collision would silently merge or corrupt the groups. Their reserved `_0_`
+ * prefix keeps real schemas clear of this; the check guards the invariant.
+ */
+export function assertNotSyntheticColumn(col: string): void {
   assert(
-    !AGGREGATE_PAYLOAD_COLUMNS.has(col),
+    !isSyntheticColumn(col),
     () =>
       `Aggregate: group key column "${col}" collides with the synthetic ` +
       `aggregate column of the same name`,
@@ -150,7 +159,7 @@ export function aggregateSourceSchema(
 ): {columns: Record<string, SchemaValue>; primaryKey: readonly string[]} {
   const columns: Record<string, SchemaValue> = {};
   for (const col of groupKey) {
-    assertNotPayloadColumn(col);
+    assertNotSyntheticColumn(col);
     const colSchema = inputColumns[col];
     assert(colSchema, () => `Aggregate: group key column "${col}" missing`);
     assignProperty(columns, col, colSchema);
