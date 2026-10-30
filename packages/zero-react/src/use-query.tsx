@@ -150,7 +150,9 @@ export type UseSuspenseQueryOptions = UseQueryOptions & {
    *   results may be empty: a server-confirmed empty answer, from this
    *   connection or a previous one, is something to render). This is useful
    *   for suspending until there are partial optimistic local results, or
-   *   the query has completed loading from the server.
+   *   the query has completed loading from the server. A top-level aggregate,
+   *   such as `count()`, has no partial result: its value is `0` or `null`
+   *   until the server answers, so it waits for 'complete' or 'cached'.
    * - 'complete': the query result type is 'complete'.
    *
    * Default is 'partial'.
@@ -640,6 +642,9 @@ class ViewWrapper<
   #nonEmptyResolver = resolver<void>();
   readonly #zero: Pick<Zero<TSchema, undefined, TContext>, 'materialize'>;
   readonly #singular: boolean;
+  // A top-level aggregate reads its empty value (0 or null) until the server's
+  // result arrives, so its value never says there is something to render.
+  readonly #aggregate: boolean;
   #destroyTimer: ReturnType<typeof setTimeout> | undefined;
 
   // Inputs of the previous #onData call. When a view flush delivers
@@ -664,8 +669,9 @@ class ViewWrapper<
     this.#zero = zero;
     this.#ttl = ttl;
     this.#onDematerialized = onDematerialized;
-    const {singular} = asQueryInternals(query).format;
+    const {singular, aggregate} = asQueryInternals(query).format;
     this.#singular = singular;
+    this.#aggregate = aggregate !== undefined;
     this.#snapshot = getDefaultSnapshot(singular);
     this.#materializeIfNeeded();
   }
@@ -708,9 +714,11 @@ class ViewWrapper<
       this.#nonEmptyResolver.resolve();
     }
 
-    const hasData = this.#singular
-      ? this.#snapshot[0] !== undefined
-      : (this.#snapshot[0] as unknown[]).length !== 0;
+    const hasData =
+      !this.#aggregate &&
+      (this.#singular
+        ? this.#snapshot[0] !== undefined
+        : (this.#snapshot[0] as unknown[]).length !== 0);
     // A 'cached' result is the server-confirmed answer from a previous
     // session, so even an empty one is something to render. It never
     // satisfies `complete`; only a confirmation on this connection does.

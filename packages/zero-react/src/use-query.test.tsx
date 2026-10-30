@@ -517,6 +517,31 @@ describe('ViewStore', () => {
       cleanup();
     });
 
+    test.each(['cached', 'complete'] as const)(
+      'a top-level aggregate is nonEmpty once %s, not at its empty value',
+      resultType => {
+        const zero = newMockZero('client1');
+        const view = getView(new ViewStore(), {
+          zero,
+          query: newMockQueryWithFormat('query1', {
+            singular: true,
+            relationships: {},
+            aggregate: {fn: 'count'},
+          }),
+        });
+        const cleanup = view.subscribeReactInternals(() => {});
+
+        // The view reads 0 until the server has counted.
+        materializedView(zero).emit(0, 'unknown');
+        expect(view.nonEmpty).toBe(false);
+
+        materializedView(zero).emit(7, resultType);
+        expect(view.nonEmpty).toBe(true);
+
+        cleanup();
+      },
+    );
+
     test('a revoked empty cached result suspends again', async () => {
       const {view, emit} = newMaterializedView();
       const cleanup = view.subscribeReactInternals(() => {});
