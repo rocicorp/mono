@@ -80,6 +80,7 @@ const EXPRESSION_BUILDER_METHODS = {
   not: true,
   exists: true,
   eb: true,
+  json: true,
 } satisfies Record<MethodName<ExpressionBuilder<string, Schema>>, boolean>;
 
 const ALLOWED_METHODS: ReadonlySet<string> = new Set(

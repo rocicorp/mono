@@ -24,14 +24,15 @@ function createMapperFrom(
       ([tableName, {serverName: serverTableName, columns}]) => {
         let allColumnsSame = true;
         const names: Record<string, string> = {};
-        for (const [name, {serverName}] of Object.entries(columns)) {
+        const jsonColumns = new Set<string>();
+        for (const [name, {serverName, type}] of Object.entries(columns)) {
           if (serverName && serverName !== name) {
             allColumnsSame = false;
           }
-          if (src === 'client') {
-            names[name] = serverName ?? name;
-          } else {
-            names[serverName ?? name] = name;
+          const srcName = src === 'client' ? name : (serverName ?? name);
+          names[srcName] = src === 'client' ? (serverName ?? name) : name;
+          if (type === 'json') {
+            jsonColumns.add(srcName);
           }
         }
         return [
@@ -41,6 +42,7 @@ function createMapperFrom(
               src === 'client' ? (serverTableName ?? tableName) : tableName,
             columns: names,
             allColumnsSame,
+            jsonColumns,
           },
         ];
       },

@@ -1304,10 +1304,19 @@ function tri(b: boolean | undefined): string {
 function condKey(cond: Condition): string | undefined {
   switch (cond.type) {
     case 'simple': {
-      if (cond.left.type !== 'column') {
-        return undefined;
+      const {left} = cond;
+      switch (left.type) {
+        case 'column':
+          return `S${enc(left.name)}${enc(cond.op)}${rightTag(cond.right)}`;
+        case 'json':
+          // The path is strings and numbers, which valueTag keeps apart, so
+          // `['0']` (an object key) and `[0]` (an array index) differ.
+          return `J${enc(left.value.name)}${valueTag(left.path)}${enc(
+            cond.op,
+          )}${rightTag(cond.right)}`;
+        default:
+          return undefined;
       }
-      return `S${enc(cond.left.name)}${enc(cond.op)}${rightTag(cond.right)}`;
     }
     case 'correlatedSubquery': {
       const id = astIDs.get(cond.related.subquery);

@@ -65,7 +65,8 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 53 adds 'filter' node type to AnalyzeQueryResult
 // -- version 54 adds `aggregate` {fn,field} (count/sum/avg/min/max) to
 //    CorrelatedSubquery and, top-level, to AST
-export const PROTOCOL_VERSION = 54;
+// -- version 55 adds the `json` (JsonPathReference) condition value for JSON path filters
+export const PROTOCOL_VERSION = 55;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version

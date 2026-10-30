@@ -156,5 +156,8 @@ function extractColumn(
     return {name: condition.left.name, value: condition.right.value};
   }
 
+  // A 'json' reference reads a value *inside* a JSON column. That value is not
+  // a stored/indexed column, so it can never be a primary-key or join
+  // constraint key; it falls through and is excluded from extraction.
   return undefined;
 }

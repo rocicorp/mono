@@ -153,6 +153,7 @@ const TAG_SYSTEM_CLIENT = 0x200b;
 const TAG_SYSTEM_TEST = 0x200c;
 const TAG_JUNCTION = 0x200d;
 const TAG_AGGREGATE = 0x200e;
+const TAG_JSON = 0x200f;
 
 // Set on a string's length word. High enough that no array length reaches it.
 const STR_MARK = 0x40000000;
@@ -311,6 +312,14 @@ function visitValuePosition(v: ValuePosition): void {
       }
       return;
     }
+    case 'json':
+      // The wrapped column, then the path as a value: a string segment and a
+      // numeric one are tagged differently there, so `['0']` and `[0]` (an
+      // object key and an array index) never fold together.
+      mix(TAG_JSON);
+      visitValuePosition(v.value);
+      visitValue(v.path);
+      return;
     default:
       unreachable(v);
   }
