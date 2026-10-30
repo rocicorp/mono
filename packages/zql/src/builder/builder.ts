@@ -1334,8 +1334,9 @@ export type AggregateOptimisticDelta = {
   /**
    * The aggregate rows are the groups of a grouped query (a `distinct()` or a
    * `groupBy()`) rather than one per parent: keyed by `_0_key`, which a row's
-   * values of `childField` give, `null` included. A count's group is added
-   * with its first row and removed with its last.
+   * values of `childField` give, `null` included. A group is added with its
+   * first row and removed with its last (a sum/avg row carries its row count
+   * for that).
    */
   readonly grouped?: boolean | undefined;
 };

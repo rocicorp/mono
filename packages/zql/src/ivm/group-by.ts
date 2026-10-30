@@ -12,8 +12,10 @@ import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../zero-types/src/schema-value.ts';
 import {
   AGGREGATE_KEY_COLUMN,
+  AGGREGATE_ROWS_COLUMN,
   AGGREGATE_VALUE_COLUMN,
   aggregateSourceSchema,
+  carriesComponents,
   isInvertible,
   type AggState,
   type AggStorage,
@@ -52,7 +54,8 @@ import type {Stream} from './stream.ts';
 /**
  * The synthetic schema (columns, primary key and sort) of the rows
  * {@link GroupBy} emits: the group columns, the key of the group (`_0_key`)
- * and the aggregate's payload (`_0_value`, and for sum/avg its components).
+ * and the aggregate's payload (`_0_value`, and for sum/avg its components and
+ * the group's number of rows, `_0_rows`).
  * Shared by the operator (compute mode) and the client query builder
  * (`aggregatesFromSource` mode) so both agree on the synthetic source's shape.
  *
@@ -77,6 +80,9 @@ export function groupSourceSchema(
     reducer.path,
   );
   columns[AGGREGATE_KEY_COLUMN] = {type: 'string'};
+  if (carriesComponents(reducer.fn)) {
+    columns[AGGREGATE_ROWS_COLUMN] = {type: 'number'};
+  }
   return {
     columns,
     primaryKey: [AGGREGATE_KEY_COLUMN],
@@ -125,6 +131,8 @@ export class GroupBy implements Operator {
   readonly #storage: AggStorage;
   readonly #columns: CompoundKey;
   readonly #reducer: Reducer;
+  // A sum/avg row also carries its group's row count (`_0_rows`).
+  readonly #carriesRows: boolean;
   readonly #schema: SourceSchema;
   // The source connection `input` reads straight from, when nothing between
   // them drops rows. It can count the groups without the rows being read
@@ -160,6 +168,7 @@ export class GroupBy implements Operator {
     this.#storage = storage as AggStorage;
     this.#columns = ordering.map(([col]) => col) as unknown as CompoundKey;
     this.#reducer = reducer;
+    this.#carriesRows = carriesComponents(reducer.fn);
     this.#groupSource = reducer.fn === 'count' ? groupSource : undefined;
     input.setOutput(this);
 
@@ -401,7 +410,11 @@ export class GroupBy implements Operator {
     state: AggState,
   ): Stream<'yield'> {
     this.#storage.set(groupKey(values), state);
-    if (!this.#reducer.changed(stored, state)) {
+    if (
+      !this.#reducer.changed(stored, state) &&
+      // A row whose field is null moves only a sum/avg group's row count.
+      !(this.#carriesRows && stored.count !== state.count)
+    ) {
       return emptyArray;
     }
     return this.#output.push(
@@ -430,6 +443,9 @@ export class GroupBy implements Operator {
     }
     row[AGGREGATE_KEY_COLUMN] = groupKey(values);
     this.#reducer.writePayload(row, state);
+    if (this.#carriesRows) {
+      row[AGGREGATE_ROWS_COLUMN] = state.count;
+    }
     return {row, relationships: {}};
   }
 

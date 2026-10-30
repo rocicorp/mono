@@ -73,6 +73,13 @@ export const AGGREGATE_SUM_COLUMN = '_0_sum';
 export const AGGREGATE_COUNT_COLUMN = '_0_count';
 
 /**
+ * A grouped `sum`/`avg` row also carries its group's number of rows, nulls
+ * included, which neither component gives: the synced client adds a group with
+ * its first row and removes it with its last, as it does a count's.
+ */
+export const AGGREGATE_ROWS_COLUMN = '_0_rows';
+
+/**
  * Whether `col` is the name of a synthetic column of an aggregate or grouped
  * row: `_0_key` or a payload column.
  */
@@ -98,7 +105,7 @@ export function assertNotSyntheticColumn(col: string): void {
 }
 
 /** Whether `fn`'s rows carry the sum and count components. */
-function carriesComponents(fn: AggregateFunction): boolean {
+export function carriesComponents(fn: AggregateFunction): boolean {
   return fn === 'sum' || fn === 'avg';
 }
 
@@ -107,6 +114,7 @@ export const AGGREGATE_PAYLOAD_COLUMNS: ReadonlySet<string> = new Set([
   AGGREGATE_VALUE_COLUMN,
   AGGREGATE_SUM_COLUMN,
   AGGREGATE_COUNT_COLUMN,
+  AGGREGATE_ROWS_COLUMN,
 ]);
 
 /**

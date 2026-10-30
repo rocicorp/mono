@@ -175,6 +175,8 @@ test.each(['sum', 'avg'] as const)(
         issue: {
           insertAndRead: async (tx: Transaction<typeof legacySchema>) => {
             await tx.mutate.issue.insert(issue('i9', false, 7));
+            // The first row of the closed group, which isn't synced, adds it.
+            await tx.mutate.issue.insert(issue('i10', true, 4));
             reads.push(await tx.run(q));
           },
         },
@@ -197,6 +199,7 @@ test.each(['sum', 'avg'] as const)(
               _0_value: fn === 'sum' ? 3 : 1.5,
               _0_sum: 3,
               _0_count: 2,
+              _0_rows: 2,
             },
           },
         ],
@@ -208,7 +211,10 @@ test.each(['sum', 'avg'] as const)(
 
       await z.mutate.issue.insertAndRead().client;
       await tickAFewTimes(vi);
-      const after = [rc({closed: false, [fn]: fn === 'sum' ? 10 : 10 / 3})];
+      const after = [
+        rc({closed: false, [fn]: fn === 'sum' ? 10 : 10 / 3}),
+        rc({closed: true, [fn]: 4}),
+      ];
       expect(reads).toEqual([after]);
       expect(view.data).toEqual(after);
     } finally {

@@ -481,6 +481,7 @@ test('getSource provisions a synthetic source for a top-level aggregate table', 
   expect(Object.keys(source.tableSchema.columns).sort()).toEqual([
     '_0_count',
     '_0_key',
+    '_0_rows',
     '_0_sum',
     '_0_value',
   ]);

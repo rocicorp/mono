@@ -7,6 +7,7 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
+import {groupKey} from '../../../zql/src/ivm/group-by.ts';
 import * as crudImpl from './crud-impl.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import {aggregateRowKey} from './keys.ts';
@@ -37,6 +38,7 @@ const schema = createSchema({
 
 const AGG = 'aggregate:q1:commentCount';
 const SUM_AGG = 'aggregate:q2:pointsSum';
+const GROUP_SUM = 'aggregate:q3:#group';
 
 function makeTx() {
   const map = new Map<string, unknown>();
@@ -69,6 +71,33 @@ function branchWithCommentCount() {
       fn: 'count',
       field: undefined,
       predicate: undefined,
+    },
+  );
+  return branch;
+}
+
+function branchWithGroupedPointsSum() {
+  const branch = new IVMSourceBranch(schema.tables);
+  // Mirror `comment.groupBy('issueId').sum('points')`.
+  branch.getOrCreateAggregateSource(
+    GROUP_SUM,
+    {
+      issueId: {type: 'string', optional: true},
+      _0_key: {type: 'string'},
+      _0_value: {type: 'number', optional: true},
+      _0_sum: {type: 'number'},
+      _0_count: {type: 'number'},
+      _0_rows: {type: 'number'},
+    },
+    ['_0_key'],
+    {
+      table: 'comment',
+      childField: ['issueId'],
+      keyField: ['issueId'],
+      fn: 'sum',
+      field: 'points',
+      predicate: undefined,
+      grouped: true,
     },
   );
   return branch;
@@ -874,4 +903,119 @@ test('optimistic sum over a JSON path: only the number leaf moves the sum', asyn
     branch,
   );
   expect(map.get(aggKey)).toMatchObject({_0_value: 10, _0_count: 2});
+});
+
+test('optimistic grouped sum: a group comes with its first row and goes with its last', async () => {
+  const branch = branchWithGroupedPointsSum();
+  const {map, tx} = makeTx();
+  const key = aggregateRowKey(GROUP_SUM, {_0_key: groupKey(['i1'])});
+  const insert = (id: string, points: number | null) =>
+    crudImpl.insert(
+      tx,
+      {
+        op: 'insert',
+        tableName: 'comment',
+        primaryKey: ['id'],
+        value: {id, issueId: 'i1', points},
+      },
+      schema,
+      branch,
+    );
+  const remove = (id: string) =>
+    crudImpl.delete(
+      tx,
+      {op: 'delete', tableName: 'comment', primaryKey: ['id'], value: {id}},
+      schema,
+      branch,
+    );
+  const group = (
+    value: number | null,
+    sum: number,
+    count: number,
+    rows: number,
+  ) => ({
+    issueId: 'i1',
+    _0_key: groupKey(['i1']),
+    _0_value: value,
+    _0_sum: sum,
+    _0_count: count,
+    _0_rows: rows,
+  });
+
+  await insert('c1', 5);
+  expect(map.get(key)).toEqual(group(5, 5, 1, 1));
+  // A null value moves only the row count, which keeps the group.
+  await insert('c2', null);
+  expect(map.get(key)).toEqual(group(5, 5, 1, 2));
+  await remove('c1');
+  expect(map.get(key)).toEqual(group(null, 0, 0, 1));
+  await remove('c2');
+  expect(map.has(key)).toBe(false);
+});
+
+test('optimistic grouped sum: a group the client lacks only comes with a new row', async () => {
+  const branch = branchWithGroupedPointsSum();
+  const {map, tx} = makeTx();
+  const key = aggregateRowKey(GROUP_SUM, {_0_key: groupKey(['i1'])});
+  await crudImpl.insert(
+    tx,
+    {
+      op: 'insert',
+      tableName: 'comment',
+      primaryKey: ['id'],
+      value: {id: 'c1', issueId: 'i1', points: 5},
+    },
+    schema,
+    branch,
+  );
+  // c1 is on the client but its group isn't (say the query hasn't synced):
+  // editing its value adds nothing, since only the server knows the sum.
+  map.delete(key);
+  await crudImpl.update(
+    tx,
+    {
+      op: 'update',
+      tableName: 'comment',
+      primaryKey: ['id'],
+      value: {id: 'c1', points: 7},
+    },
+    schema,
+    branch,
+  );
+  expect(map.has(key)).toBe(false);
+});
+
+test('optimistic grouped sum: a row stored without its row count is never removed', async () => {
+  const branch = branchWithGroupedPointsSum();
+  const {map, tx} = makeTx();
+  const key = aggregateRowKey(GROUP_SUM, {_0_key: groupKey(['i1'])});
+  await crudImpl.insert(
+    tx,
+    {
+      op: 'insert',
+      tableName: 'comment',
+      primaryKey: ['id'],
+      value: {id: 'c1', issueId: 'i1', points: 5},
+    },
+    schema,
+    branch,
+  );
+  // As a client stored the group before rows carried `_0_rows`.
+  const {['_0_rows']: _, ...stored} = map.get(key) as Record<string, unknown>;
+  map.set(key, stored);
+
+  await crudImpl.delete(
+    tx,
+    {op: 'delete', tableName: 'comment', primaryKey: ['id'], value: {id: 'c1'}},
+    schema,
+    branch,
+  );
+  // Its sum moves, but without a row count it can't tell it's empty.
+  expect(map.get(key)).toEqual({
+    issueId: 'i1',
+    _0_key: groupKey(['i1']),
+    _0_value: null,
+    _0_sum: 0,
+    _0_count: 0,
+  });
 });

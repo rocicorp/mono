@@ -131,7 +131,8 @@ function isRootAST(ast: NormalizedAST, tableName: string): boolean {
     ast.start === undefined &&
     ast.limit === undefined &&
     ast.orderBy === undefined &&
-    ast.aggregate === undefined
+    ast.aggregate === undefined &&
+    ast.groupBy === undefined
   );
 }
 

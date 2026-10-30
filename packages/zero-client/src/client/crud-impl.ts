@@ -1,4 +1,5 @@
 import {unreachable} from '../../../shared/src/asserts.ts';
+import {hasOwn} from '../../../shared/src/has-own.ts';
 import type {ReadonlyJSONObject} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {assignProperty} from '../../../shared/src/objects.ts';
@@ -15,6 +16,7 @@ import type {Schema} from '../../../zero-types/src/schema.ts';
 import {
   AGGREGATE_COUNT_COLUMN,
   AGGREGATE_KEY_COLUMN,
+  AGGREGATE_ROWS_COLUMN,
   AGGREGATE_SUM_COLUMN,
   AGGREGATE_VALUE_COLUMN,
 } from '../../../zql/src/ivm/aggregate.ts';
@@ -87,22 +89,31 @@ function nextAggregateRow(
       }
       // The synced row carries the sum of non-null values and their count, so
       // adjust both and derive the value: SQL's sum/avg ignore nulls and are
-      // null over no contributors.
+      // null over no contributors. A group's row also carries its number of
+      // rows, nulls included, except one stored before it did, which gets it
+      // when the server next sends the group.
       const sumDelta = fieldNumber(agg, newRow) - fieldNumber(agg, oldRow);
       const countDelta =
         (contributes(agg, newRow) ? 1 : 0) - (contributes(agg, oldRow) ? 1 : 0);
-      if (sumDelta === 0 && countDelta === 0) {
+      const hasRows = hasOwn(curRow, AGGREGATE_ROWS_COLUMN);
+      const rowsDelta = hasRows ? (newRow ? 1 : 0) - (oldRow ? 1 : 0) : 0;
+      if (sumDelta === 0 && countDelta === 0 && rowsDelta === 0) {
         return undefined;
       }
       const sum = numberOr0(curRow[AGGREGATE_SUM_COLUMN]) + sumDelta;
       const count = numberOr0(curRow[AGGREGATE_COUNT_COLUMN]) + countDelta;
       const result = agg.fn === 'sum' ? sum : sum / count;
-      return {
+      const next: Record<string, Value> = {
         ...curRow,
         [AGGREGATE_VALUE_COLUMN]: count > 0 ? result : null,
         [AGGREGATE_SUM_COLUMN]: sum,
         [AGGREGATE_COUNT_COLUMN]: count,
       };
+      if (hasRows) {
+        next[AGGREGATE_ROWS_COLUMN] =
+          numberOr0(curRow[AGGREGATE_ROWS_COLUMN]) + rowsDelta;
+      }
+      return next;
     }
     // `min`/`max` are non-invertible; they update on the server poke.
     case 'min':
@@ -145,7 +156,7 @@ function aggregateKeyFor(
  * also pushed to the transaction's branch, so a query the mutator runs after
  * the change reads the new value.
  *
- * A grouped count's row is the group's: a row joining a group that isn't on
+ * A grouped query's row is the group's: a row joining a group that isn't on
  * the client adds it, and the last row leaving one removes it.
  */
 async function applyAggregateDelta(
@@ -160,10 +171,7 @@ async function applyAggregateDelta(
   const source = ivmBranch.getSource(agg.aggTableName);
   const cur = await tx.get(aggKey);
   if (cur === undefined) {
-    const added =
-      agg.grouped && agg.fn === 'count'
-        ? newGroupRow(agg, oldRow, newRow)
-        : undefined;
+    const added = agg.grouped ? newGroupRow(agg, oldRow, newRow) : undefined;
     if (added !== undefined) {
       await tx.set(aggKey, added);
       if (source) {
@@ -177,11 +185,7 @@ async function applyAggregateDelta(
     return;
   }
   const inBranch = source?.data.has(cur as Row) ?? false;
-  if (
-    agg.grouped &&
-    agg.fn === 'count' &&
-    updated[AGGREGATE_VALUE_COLUMN] === 0
-  ) {
+  if (agg.grouped && groupRowCount(agg, updated) === 0) {
     await tx.del(aggKey);
     if (inBranch) {
       consume(must(source).push(makeSourceChangeRemove(cur as Row)));
@@ -195,7 +199,17 @@ async function applyAggregateDelta(
 }
 
 /**
- * The row of a group of a grouped count that isn't on the client, when the
+ * The number of rows of the group whose synced row is `row`, or `undefined`
+ * for a sum/avg row stored before the rows carried it.
+ */
+function groupRowCount(agg: OptimisticAggregate, row: Row): Value {
+  return row[
+    agg.fn === 'count' ? AGGREGATE_VALUE_COLUMN : AGGREGATE_ROWS_COLUMN
+  ];
+}
+
+/**
+ * The row of a group of a grouped query that isn't on the client, when the
  * change from `oldRow` to `newRow` makes `newRow` its first row: `newRow`
  * passes the query's `where` and `oldRow` wasn't counted in the group
  * already. Otherwise `undefined`.
@@ -211,11 +225,19 @@ function newGroupRow(
     return undefined;
   }
   const values = groupValues(newRow, agg.childField);
-  const added: Record<string, Value> = {};
-  agg.keyField.forEach((col, i) => assignProperty(added, col, values[i]));
-  added[AGGREGATE_KEY_COLUMN] = groupKey(values);
-  added[AGGREGATE_VALUE_COLUMN] = 1;
-  return added;
+  // The group with no rows, which `newRow` then joins.
+  const empty: Record<string, Value> = {};
+  agg.keyField.forEach((col, i) => assignProperty(empty, col, values[i]));
+  empty[AGGREGATE_KEY_COLUMN] = groupKey(values);
+  if (agg.fn === 'count') {
+    empty[AGGREGATE_VALUE_COLUMN] = 0;
+  } else {
+    empty[AGGREGATE_VALUE_COLUMN] = null;
+    empty[AGGREGATE_SUM_COLUMN] = 0;
+    empty[AGGREGATE_COUNT_COLUMN] = 0;
+    empty[AGGREGATE_ROWS_COLUMN] = 0;
+  }
+  return nextAggregateRow(agg, empty, undefined, newRow);
 }
 
 /**
@@ -227,7 +249,7 @@ function newGroupRow(
  * authoritative value when it pokes back (the pending mutation's delta is
  * replayed while pending and absorbed into the base once confirmed — no
  * double-count). An aggregate row that is not on the client is left alone,
- * except that a grouped count's row is added by the first row of its group.
+ * except that a grouped query's row is added by the first row of its group.
  */
 async function applyOptimisticAggregateDeltas(
   tx: WriteTransaction,
