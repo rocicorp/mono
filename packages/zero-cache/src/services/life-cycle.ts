@@ -1,3 +1,4 @@
+import {EventEmitter as NodeEventEmitter} from 'node:events';
 import type {IncomingHttpHeaders} from 'node:http';
 import {pid} from 'node:process';
 import type {EventEmitter} from 'stream';
@@ -523,6 +524,70 @@ export class SelfDrain {
         this.#proc.emit('SIGTERM', 'SIGTERM');
       }
     }, this.#delayMs);
+  }
+}
+
+/**
+ * The event that a {@link PreDrain} emits immediately upon the first graceful
+ * shutdown signal, with that signal as its argument, before the delay.
+ */
+export const PRE_DRAIN = 'preDrain';
+
+/**
+ * Delays graceful shutdown signals (`SIGTERM`, `SIGINT`), e.g. so that load
+ * balancers can observe a failed readiness check before the server begins
+ * to drain. The first graceful signal is announced immediately with a
+ * {@link PRE_DRAIN} event, and is re-emitted to listeners of the signal, such
+ * as those of the {@link ProcessManager} and {@link runUntilKilled}, once the
+ * delay has elapsed. Repeated graceful signals are dropped. All other events,
+ * including forceful signals, are forwarded immediately.
+ */
+export class PreDrain extends NodeEventEmitter {
+  readonly #lc: LogContext;
+  readonly #proc: EventEmitter;
+  readonly #delayMs: number;
+  readonly #forwarded = new Set<string | symbol>(['newListener', PRE_DRAIN]);
+  #signaled = false;
+  #timer: ReturnType<typeof setTimeout> | undefined;
+
+  constructor(lc: LogContext, proc: EventEmitter, delayMs: number) {
+    super();
+    this.#lc = lc.withContext('component', 'pre-drain');
+    this.#proc = proc;
+    this.#delayMs = delayMs;
+
+    for (const signal of GRACEFUL_SHUTDOWN) {
+      this.#forwarded.add(signal);
+      proc.on(signal, () => this.#onGracefulSignal(signal));
+    }
+    this.on('newListener', (event: string | symbol) => this.#forward(event));
+  }
+
+  #forward(event: string | symbol) {
+    if (this.#forwarded.has(event)) {
+      return;
+    }
+    this.#forwarded.add(event);
+    this.#proc.on(event, (...args: unknown[]) => {
+      if (
+        event === 'disconnect' ||
+        (FORCEFUL_SHUTDOWN as readonly (string | symbol)[]).includes(event)
+      ) {
+        clearTimeout(this.#timer); // Stopping without a drain.
+      }
+      this.emit(event, ...args);
+    });
+  }
+
+  #onGracefulSignal(signal: GracefulShutdownSignal) {
+    if (this.#signaled) {
+      this.#lc.info?.(`already shutting down. ignoring ${signal}`);
+      return;
+    }
+    this.#signaled = true;
+    this.#lc.info?.(`received ${signal}. draining in ${this.#delayMs} ms`);
+    this.emit(PRE_DRAIN, signal);
+    this.#timer = setTimeout(() => this.emit(signal, signal), this.#delayMs);
   }
 }
 

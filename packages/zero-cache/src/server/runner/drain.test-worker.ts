@@ -2,7 +2,12 @@ import {LogContext, consoleLogSink} from '@rocicorp/logger';
 import {must} from '../../../../shared/src/must.ts';
 import {normalizeZeroConfig} from '../../config/normalize.ts';
 import {getZeroConfig} from '../../config/zero-config.ts';
-import {ProcessManager, runUntilKilled} from '../../services/life-cycle.ts';
+import {
+  PRE_DRAIN,
+  PreDrain,
+  ProcessManager,
+  runUntilKilled,
+} from '../../services/life-cycle.ts';
 import type {ActivityBasedService} from '../../services/service.ts';
 import {ConnectionContextManagerImpl} from '../../services/view-syncer/connection-context-manager.ts';
 import type {ViewSyncer} from '../../services/view-syncer/view-syncer.ts';
@@ -41,6 +46,7 @@ const config = normalizeZeroConfig(
       ZERO_AFFINITY_COOKIE_NAME: 'zero-affinity',
       ZERO_TASK_ID: 'drain-test',
       ZERO_PORT: '0',
+      ZERO_PRE_DRAIN_DELAY_MS: process.env.ZERO_PRE_DRAIN_DELAY_MS ?? '0',
     },
   }),
   {},
@@ -99,7 +105,14 @@ async function run() {
     return runSyncer();
   }
 
-  const processes = new ProcessManager(lc, parent);
+  // As in run-worker.ts, the runner's ProcessManager and dispatcher receive
+  // graceful signals only after the pre-drain delay.
+  const preDrain =
+    role === 'runner' && config.preDrainDelayMs > 0
+      ? new PreDrain(lc, parent, config.preDrainDelayMs)
+      : undefined;
+  const signals = preDrain ?? parent;
+  const processes = new ProcessManager(lc, signals);
   const workers = Array.from({length: role === 'runner' ? 1 : 2}, (_, i) => {
     const child = forkChildWorker(
       new URL(import.meta.url),
@@ -160,8 +173,9 @@ async function run() {
     undefined,
     () => processes.shutdown(),
   );
+  preDrain?.on(PRE_DRAIN, () => dispatcher.failReadiness());
   try {
-    await runUntilKilled(lc, parent, dispatcher);
+    await runUntilKilled(lc, signals, dispatcher);
   } finally {
     await processes.shutdown();
   }

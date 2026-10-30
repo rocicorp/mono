@@ -963,6 +963,20 @@ export const zeroOptions = {
     ],
   },
 
+  preDrainDelayMs: {
+    type: v.number().optional(() => 0),
+    desc: [
+      `The time between receiving a {bold SIGTERM} (or {bold SIGINT}) and starting to drain.`,
+      `During this interval the server fails readiness checks at "/" so that load balancers stop`,
+      `routing to it, while it continues to accept and serve connections as usual. Liveness`,
+      `checks at "/keepalive" continue to succeed.`,
+      ``,
+      `This takes the place of a pre-stop delay. Set it to exceed the time for the load balancer`,
+      `to observe the failed readiness check, within the container runner's termination grace`,
+      `period. The default of 0 drains immediately.`,
+    ],
+  },
+
   keepaliveTimeoutMs: {
     type: v.number().optional(),
     desc: [
