@@ -262,6 +262,16 @@ export const queries = defineQueries({
   ),
 
   /**
+   * The number of issues in the list: the same filters and permissions as
+   * {@link issueListV2}, reduced to a `count()`.
+   */
+  issueListCount: defineQuery(
+    z.object({listContext: listContextParams}),
+    ({ctx: auth, args: {listContext}}) =>
+      filterListQuery(builder.issue, listContext, auth?.role).count(),
+  ),
+
+  /**
    * This is used to get a single issue so that we can get the order for start at.
    */
   listIssueByID: defineQuery(
@@ -414,14 +424,6 @@ function buildListQuery(args: ListQueryArgs) {
     return alwaysFalse(q);
   }
 
-  const {projectName = ZERO_PROJECT_NAME} = listContext;
-
-  q = q.whereExists(
-    'project',
-    q => q.where('lowerCaseName', projectName.toLocaleLowerCase()),
-    {scalar: true},
-  );
-
   const {sortField, sortDirection} = listContext;
   const orderByDir =
     dir === 'forward'
@@ -437,6 +439,26 @@ function buildListQuery(args: ListQueryArgs) {
   if (limit) {
     q = q.limit(limit);
   }
+
+  return filterListQuery(q, listContext, role);
+}
+
+/**
+ * Narrows `q` to the issues `listContext` selects that `role` may see. Shared by
+ * the list and its count so the two can't disagree.
+ */
+function filterListQuery<TQuery extends IssueQuery>(
+  q: TQuery,
+  listContext: ListContextParams,
+  role: Role | undefined,
+): TQuery {
+  const {projectName = ZERO_PROJECT_NAME} = listContext;
+
+  q = q.whereExists(
+    'project',
+    q => q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+    {scalar: true},
+  ) as TQuery;
 
   const {open, creator, assignee, labels, textFilter} = listContext;
   q = q.where(({and, cmp, exists, or}) =>
@@ -474,17 +496,17 @@ function buildListQuery(args: ListQueryArgs) {
         ),
       ),
     ),
-  );
+  ) as TQuery;
 
   if (creator) {
     q = q.whereExists('creator', q => q.where('login', creator), {
       scalar: true,
-    });
+    }) as TQuery;
   }
   if (assignee) {
     q = q.whereExists('assignee', q => q.where('login', assignee), {
       scalar: true,
-    });
+    }) as TQuery;
   }
 
   return applyIssuePermissions(q, role);

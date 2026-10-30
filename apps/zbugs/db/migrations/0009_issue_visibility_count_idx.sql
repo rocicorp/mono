@@ -1,0 +1,2 @@
+CREATE INDEX "issue_projectID_open_visibility_idx" ON "issue" USING btree ("projectID","open","visibility");--> statement-breakpoint
+CREATE INDEX "issue_projectID_visibility_idx" ON "issue" USING btree ("projectID","visibility");

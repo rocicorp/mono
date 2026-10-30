@@ -64,6 +64,13 @@
       "when": 1789695049703,
       "tag": "0008_emoji_modified_trigger_index_lookup",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793348634767,
+      "tag": "0009_issue_visibility_count_idx",
+      "breakpoints": true
     }
   ]
 }

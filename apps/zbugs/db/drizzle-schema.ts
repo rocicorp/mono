@@ -122,6 +122,19 @@ export const issue = pgTable(
       table.modified,
       table.id,
     ),
+    // Let a count() of the public issues in a project (optionally open or
+    // closed) be answered from the index alone.
+    index('issue_projectID_open_visibility_idx').using(
+      'btree',
+      table.projectID,
+      table.open,
+      table.visibility,
+    ),
+    index('issue_projectID_visibility_idx').using(
+      'btree',
+      table.projectID,
+      table.visibility,
+    ),
     index('issue_creatorID_idx').using('btree', table.creatorID, table.id),
     index('issue_assigneeID_idx').using('btree', table.assigneeID, table.id),
     foreignKey({

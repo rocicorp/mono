@@ -423,6 +423,20 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const queryOptions = textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE;
 
+  // The header falls back to the virtualizer's running total until the server
+  // has counted the list, in this session or a previous one: before that the
+  // count isn't the list's yet. A text search isn't counted: matching it
+  // checks every issue's comments, which takes seconds on gigabugs, and the
+  // filter changes with every keystroke.
+  const [syncedIssueCount, issueCountResult] = useQuery(
+    !textFilter && queries.issueListCount({listContext: listContextParams}),
+    queryOptions,
+  );
+  const issueCount =
+    issueCountResult.type === 'complete' || issueCountResult.type === 'cached'
+      ? syncedIssueCount
+      : undefined;
+
   const {
     items,
     spaceBefore,
@@ -706,13 +720,11 @@ export function ListPage({onReady}: {onReady: () => void}) {
                 </span>
               </>
             )}
-            {complete || total || estimatedTotal ? (
+            {issueCount !== undefined || complete || total || estimatedTotal ? (
               <>
                 <span className="issue-count">
-                  {project?.issueCountEstimate
-                    ? `${(total ?? roundEstimatedTotal(estimatedTotal)).toLocaleString()} of ${formatIssueCountEstimate(project.issueCountEstimate)}`
-                    : (total?.toLocaleString() ??
-                      `${roundEstimatedTotal(estimatedTotal).toLocaleString()}+`)}
+                  {(issueCount ?? total)?.toLocaleString() ??
+                    `${roundEstimatedTotal(estimatedTotal).toLocaleString()}+`}
                 </span>
                 {isGigabugs(projectName) && (
                   <button
@@ -878,11 +890,4 @@ function roundEstimatedTotal(estimatedTotal: number) {
   return estimatedTotal < 50
     ? estimatedTotal
     : estimatedTotal - (estimatedTotal % 50);
-}
-
-function formatIssueCountEstimate(count: number) {
-  if (count < 1000) {
-    return count;
-  }
-  return `~${Math.floor(count / 1000).toLocaleString()}k`;
 }
