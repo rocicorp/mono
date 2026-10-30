@@ -66,7 +66,8 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 54 adds `aggregate` {fn,field} (count/sum/avg/min/max) to
 //    CorrelatedSubquery and, top-level, to AST
 // -- version 55 adds the `json` (JsonPathReference) condition value for JSON path filters
-export const PROTOCOL_VERSION = 55;
+// -- version 56 adds an optional JSON `path` to `aggregate`
+export const PROTOCOL_VERSION = 56;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version

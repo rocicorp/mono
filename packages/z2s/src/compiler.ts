@@ -132,11 +132,11 @@ export function compile(
  * strings. Otherwise an enum would use its declaration order, an `inet` its
  * network order, and a `uuid` would fail (it has no `MIN`).
  */
-function aggregateExpr(
-  spec: Spec,
-  zqlTable: string,
-  {fn, field}: Aggregate,
-): SQLQuery {
+function aggregateExpr(spec: Spec, zqlTable: string, agg: Aggregate): SQLQuery {
+  const {fn, field, path} = agg;
+  if (path !== undefined) {
+    return jsonAggregateExpr(spec, zqlTable, agg, path);
+  }
   switch (fn) {
     case 'count':
       return sql`COUNT(*)`;
@@ -148,6 +148,56 @@ function aggregateExpr(
       return sql`MIN(${orderedAggregateArg(spec, zqlTable, must(field))})`;
     case 'max':
       return sql`MAX(${orderedAggregateArg(spec, zqlTable, must(field))})`;
+    default:
+      unreachable(fn);
+  }
+}
+
+/**
+ * The SQL aggregate over the JSON leaf at `path` inside the (client-named)
+ * json column `field` of the subquery. Only leaves the aggregate takes count
+ * (see `aggregateValue`): numbers for `sum`/`avg`, numbers and strings for
+ * `min`/`max`, each gated on `jsonb_typeof` so a mismatched leaf is SQL NULL
+ * (skipped) rather than a cast error.
+ *
+ * `min`/`max` reduce numbers and strings separately and combine them with the
+ * client's cross-type order, numbers before strings (`compareAggregateValues`),
+ * instead of Postgres's jsonb order, which puts strings first. The result is
+ * jsonb so either type comes back as itself.
+ */
+function jsonAggregateExpr(
+  spec: Spec,
+  zqlTable: string,
+  {fn, field}: Aggregate,
+  path: readonly (string | number)[],
+): SQLQuery {
+  const name = must(field);
+  const {type, isArray} = getServerColumn(
+    spec.server,
+    {zql: zqlTable, alias: zqlTable},
+    name,
+  );
+  assert(
+    isArray || type === 'json' || type === 'jsonb',
+    () => `JSON path on non-JSON column "${name}" of type ${type}`,
+  );
+  const {raw, jsonType} = jsonNavigate(
+    jsonBase(sql.ident(name), type, isArray),
+    path,
+  );
+  const num = sql`(CASE WHEN ${jsonType} = 'number' THEN ${raw}::float8 END)`;
+  const str = sql`(CASE WHEN ${jsonType} = 'string' THEN ${raw} END)`;
+  switch (fn) {
+    case 'sum':
+      return sql`SUM(${num})::float8`;
+    case 'avg':
+      return sql`AVG(${num})::float8`;
+    case 'min':
+      return sql`COALESCE(to_jsonb(MIN(${num})), to_jsonb(MIN(${str})))`;
+    case 'max':
+      return sql`COALESCE(to_jsonb(MAX(${str})), to_jsonb(MAX(${num})))`;
+    case 'count':
+      throw new Error('count() takes no JSON path');
     default:
       unreachable(fn);
   }
@@ -844,22 +894,35 @@ function jsonPathParts(
     isArray || type === 'json' || type === 'jsonb',
     () => `JSON path on non-JSON column "${name}" of type ${type}`,
   );
-  let obj: SQLQuery = isArray
+  return jsonNavigate(jsonBase(col, type, isArray), ref.path);
+}
+
+/** A json/jsonb/array column (or an expression of one) as jsonb. */
+function jsonBase(col: SQLQuery, type: string, isArray: boolean): SQLQuery {
+  return isArray
     ? sql`to_jsonb(${col})`
     : type === 'json'
       ? sql`${col}::jsonb`
       : col;
+}
+
+/** Navigates `path` from the jsonb `base`; see {@link jsonPathParts}. */
+function jsonNavigate(
+  base: SQLQuery,
+  path: readonly (string | number)[],
+): {value: SQLQuery; raw: SQLQuery; jsonType: SQLQuery} {
+  let obj = base;
   const operand = (seg: string | number): SQLQuery =>
     typeof seg === 'number'
       ? // A validated non-negative int32 (see isValidJsonPathIndex), so it is
         // safe to inline; `->` needs an integer operand to index an array.
         sql.__dangerous__rawValue(String(seg))
       : sqlConvertSingularLiteralArg(seg);
-  const last = ref.path.length - 1;
+  const last = path.length - 1;
   for (let i = 0; i < last; i++) {
-    obj = sql`(${obj} -> ${operand(ref.path[i])})`;
+    obj = sql`(${obj} -> ${operand(path[i])})`;
   }
-  const leaf = operand(ref.path[last]);
+  const leaf = operand(path[last]);
   return {
     // The leaf as jsonb; `raw` is its text form.
     value: sql`(${obj} -> ${leaf})`,

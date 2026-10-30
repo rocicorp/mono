@@ -1,6 +1,8 @@
 /* oxlint-disable @typescript-eslint/no-explicit-any */
 import {must} from '../../../shared/src/must.ts';
 import {
+  type Aggregate,
+  type AggregateFunction,
   isHomogeneousList,
   isValidJsonPathIndex,
   MAX_JSON_PATH_INDEX,
@@ -87,6 +89,39 @@ function makeColumnRef(
   const column: ColumnReference = {type: 'column', name};
   const ref: JsonPathReference = {type: 'json', value: column, path};
   return {[toColumnRef]: () => ref};
+}
+
+/**
+ * The callback form of an aggregate's argument: picks a scalar leaf inside a
+ * `json()` column, e.g. `c.sum(({json}) => json('metadata', 'points'))`.
+ */
+// Loosely typed: the public signatures (see `Query.sum`) type the builder and
+// the leaf; this is what the implementation accepts, checked at runtime.
+export type JsonAggregateSelector = (builder: any) => unknown;
+
+const jsonAggregateBuilder = {
+  json: (column: string, ...path: (string | number)[]) =>
+    makeColumnRef(column, path),
+};
+
+/**
+ * Builds the AST aggregate for `fn` over `selector`: nothing for `count`, a
+ * column name, or a {@link JsonAggregateSelector} picking a leaf inside a
+ * `json()` column.
+ */
+export function aggregateFromSelector(
+  fn: AggregateFunction,
+  selector: string | JsonAggregateSelector | undefined,
+): Aggregate {
+  if (typeof selector !== 'function') {
+    return {fn, field: selector};
+  }
+  const ref = selector(jsonAggregateBuilder);
+  if (!isColumnRef(ref)) {
+    throw new Error(`${fn}() expects the callback to return json(...)`);
+  }
+  const {value, path} = ref[toColumnRef]();
+  return {fn, field: value.name, path};
 }
 
 /**

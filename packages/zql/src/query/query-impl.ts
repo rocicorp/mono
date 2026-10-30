@@ -31,6 +31,8 @@ import {defaultFormat} from '../ivm/default-format.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import {
   type ExpressionFactory,
+  type JsonAggregateSelector,
+  aggregateFromSelector,
   ExpressionBuilder,
   and,
   cmp,
@@ -48,11 +50,8 @@ import type {
   AnyQuery,
   AggregateResult,
   ExistsOptions,
-  FieldTSType,
   GetFilterType,
   HumanReadable,
-  NumericSelector,
-  OrderedSelector,
   PreloadOptions,
   PullRow,
   Query,
@@ -460,7 +459,10 @@ export class QueryImpl<
     }
   }
 
-  #aggregate(fn: AggregateFunction, field?: string): AnyQuery {
+  #aggregate(
+    fn: AggregateFunction,
+    selector?: string | JsonAggregateSelector,
+  ): AnyQuery {
     this.#assertNotAggregated(fn);
     // A named query is synced by name and args: the server runs its own
     // definition, so an aggregate added here would never reach it and the
@@ -471,18 +473,20 @@ export class QueryImpl<
         `${fn}() cannot be applied to the named query "${this.customQueryID.name}": put it in the query's definition`,
       );
     }
+    const aggregate = aggregateFromSelector(fn, selector);
+    const {field, path} = aggregate;
     // Set the aggregate on both the AST (so a top-level query reduces to a
     // scalar) and the format (so the view projects the scalar and `related`
     // can lift it). When used inside `related`, the parent strips the AST
     // aggregate and lifts it onto the correlated-subquery entry instead.
-    return this.#derive(AGGREGATE_KEYS[fn], field, undefined, () =>
+    return this.#derive(AGGREGATE_KEYS[fn], field, path, () =>
       this.#newQuery(
         this.#tableName,
-        {...this.#ast, aggregate: {fn, field}},
+        {...this.#ast, aggregate},
         {
           ...this.format,
           singular: true,
-          aggregate: {fn, field},
+          aggregate,
         },
         this.customQueryID,
         this.#currentJunction,
@@ -498,51 +502,43 @@ export class QueryImpl<
     >;
   }
 
-  sum<TSelector extends NumericSelector<TSchema['tables'][TTable]>>(
-    field: TSelector,
+  sum(
+    field: string | JsonAggregateSelector,
   ): Query<TTable, TSchema, AggregateResult<number | null>> {
-    return this.#aggregate('sum', field as string) as unknown as Query<
+    return this.#aggregate('sum', field) as unknown as Query<
       TTable,
       TSchema,
       AggregateResult<number | null>
     >;
   }
 
-  avg<TSelector extends NumericSelector<TSchema['tables'][TTable]>>(
-    field: TSelector,
+  avg(
+    field: string | JsonAggregateSelector,
   ): Query<TTable, TSchema, AggregateResult<number | null>> {
-    return this.#aggregate('avg', field as string) as unknown as Query<
+    return this.#aggregate('avg', field) as unknown as Query<
       TTable,
       TSchema,
       AggregateResult<number | null>
     >;
   }
 
-  min<TSelector extends OrderedSelector<TSchema['tables'][TTable]>>(
-    field: TSelector,
-  ): Query<
-    TTable,
-    TSchema,
-    AggregateResult<FieldTSType<TTable, TSchema, TSelector & string> | null>
-  > {
-    return this.#aggregate('min', field as string) as unknown as Query<
+  min(
+    field: string | JsonAggregateSelector,
+  ): Query<TTable, TSchema, AggregateResult<any>> {
+    return this.#aggregate('min', field) as unknown as Query<
       TTable,
       TSchema,
-      AggregateResult<FieldTSType<TTable, TSchema, TSelector & string> | null>
+      AggregateResult<any>
     >;
   }
 
-  max<TSelector extends OrderedSelector<TSchema['tables'][TTable]>>(
-    field: TSelector,
-  ): Query<
-    TTable,
-    TSchema,
-    AggregateResult<FieldTSType<TTable, TSchema, TSelector & string> | null>
-  > {
-    return this.#aggregate('max', field as string) as unknown as Query<
+  max(
+    field: string | JsonAggregateSelector,
+  ): Query<TTable, TSchema, AggregateResult<any>> {
+    return this.#aggregate('max', field) as unknown as Query<
       TTable,
       TSchema,
-      AggregateResult<FieldTSType<TTable, TSchema, TSelector & string> | null>
+      AggregateResult<any>
     >;
   }
 
@@ -704,7 +700,8 @@ export class QueryImpl<
           'an aggregate over a junction relationship does not yet support ' +
             'related/limit/start on the destination',
         );
-        const {fn, field} = sq.format.aggregate;
+        const aggregate = sq.format.aggregate;
+        const {fn} = aggregate;
         const correlation = {parentField: firstSource, childField: firstDest};
         // `count` checks the destination with an EXISTS on the junction row
         // (keep only edges whose destination exists and matches its `where`),
@@ -779,7 +776,7 @@ export class QueryImpl<
                           ],
                         },
                         system: this.#system,
-                        aggregate: {fn, field},
+                        aggregate,
                       },
                 ),
               },

@@ -607,6 +607,7 @@ function buildPipelineInternal(
       ast.aggregate.field,
       topLevelAggregateTableName(queryID),
       sourceAppliesAll ? conn : undefined,
+      ast.aggregate.path,
     );
     delegate.addEdge(end, aggregate);
     return delegate.decorateInput(aggregate, aggName);
@@ -1017,6 +1018,7 @@ function applyCorrelatedSubQuery(
           sq.correlation.childField,
           sq.aggregate.fn,
           sq.aggregate.field,
+          sq.aggregate.path,
         );
         const columns = renameColumns(
           clientColumns,
@@ -1065,6 +1067,7 @@ function applyCorrelatedSubQuery(
                 keyField: childKey,
                 fn,
                 field: sq.aggregate.field,
+                path: sq.aggregate.path,
                 predicate: wherePredicate,
               }
             : undefined,
@@ -1099,12 +1102,21 @@ function applyCorrelatedSubQuery(
       // takes this path — it's collapsed to a plain count over the junction.
       let aggInput = child;
       let aggField = sq.aggregate.field;
+      // A JSON path is read by the Aggregate itself, or, for a junction, by the
+      // LiftField, which then lifts just the leaf.
+      let aggPath = sq.aggregate.path;
       if (sq.subquery.related && sq.subquery.related.length > 0) {
         const destAlias = must(sq.subquery.related[0].subquery.alias);
-        const lift = new LiftField(child, destAlias, must(sq.aggregate.field));
+        const lift = new LiftField(
+          child,
+          destAlias,
+          must(sq.aggregate.field),
+          aggPath === undefined ? undefined : sq.aggregate,
+        );
         delegate.addEdge(child, lift);
         aggInput = lift;
         aggField = LIFTED_FIELD_COLUMN;
+        aggPath = undefined;
       }
 
       const aggregate = new Aggregate(
@@ -1114,6 +1126,8 @@ function applyCorrelatedSubQuery(
         sq.aggregate.fn,
         aggField,
         aggTable,
+        undefined,
+        aggPath,
       );
       delegate.addEdge(aggInput, aggregate);
       childInput = delegate.decorateInput(aggregate, aggName);
@@ -1230,6 +1244,8 @@ export type AggregateOptimisticDelta = {
   readonly keyField: CompoundKey;
   readonly fn: AggregateFunction;
   readonly field: string | undefined;
+  /** A JSON path into `field` (see `Aggregate.path`). */
+  readonly path?: readonly (string | number)[] | undefined;
   /**
    * The child `where` compiled to a per-row predicate, or `undefined` when the
    * aggregate has no `where` (every child contributes).

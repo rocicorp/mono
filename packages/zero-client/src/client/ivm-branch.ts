@@ -84,6 +84,8 @@ export type OptimisticAggregate = {
   readonly fn: AggregateFunction;
   /** The aggregated field, for `sum`/`avg` (`undefined` for `count`). */
   readonly field: string | undefined;
+  /** A JSON path into `field` (see `Aggregate.path`). */
+  readonly path: readonly (string | number)[] | undefined;
   /**
    * The aggregate's `where`, compiled to a per-row predicate. A child row
    * contributes only when it returns true; `undefined` means no filter (every
@@ -191,6 +193,7 @@ export class IVMSourceBranch {
         keyField: optimistic.keyField,
         fn: optimistic.fn,
         field: optimistic.field,
+        path: optimistic.path,
         predicate: optimistic.predicate,
       });
     }

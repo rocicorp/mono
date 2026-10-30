@@ -2,6 +2,7 @@ import {unreachable} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONObject} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {assignProperty} from '../../../shared/src/objects.ts';
+import {aggregateValue} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import {
   type DeleteOp,
@@ -31,14 +32,22 @@ function numberOr0(v: unknown): number {
   return typeof v === 'number' ? v : 0;
 }
 
-/** A child row's aggregated field as a number (null/absent ⇒ 0, SQL-style). */
-function fieldNumber(row: Row | undefined, field: string): number {
-  return row ? numberOr0(row[field]) : 0;
+/**
+ * The value a child row contributes to a sum/avg: its field, or the JSON leaf
+ * at the aggregate's path (see `aggregateValue`).
+ */
+function contribution(agg: OptimisticAggregate, row: Row | undefined): unknown {
+  return row === undefined ? undefined : aggregateValue(agg, row);
+}
+
+/** A child row's contribution as a number (null/absent ⇒ 0, SQL-style). */
+function fieldNumber(agg: OptimisticAggregate, row: Row | undefined): number {
+  return numberOr0(contribution(agg, row));
 }
 
 /** Whether a child row contributes a non-null number to a sum/avg. */
-function contributes(row: Row | undefined, field: string): boolean {
-  return row !== undefined && typeof row[field] === 'number';
+function contributes(agg: OptimisticAggregate, row: Row | undefined): boolean {
+  return typeof contribution(agg, row) === 'number';
 }
 
 /**
@@ -77,11 +86,9 @@ function nextAggregateRow(
       // The synced row carries the sum of non-null values and their count, so
       // adjust both and derive the value: SQL's sum/avg ignore nulls and are
       // null over no contributors.
-      const sumDelta =
-        fieldNumber(newRow, agg.field) - fieldNumber(oldRow, agg.field);
+      const sumDelta = fieldNumber(agg, newRow) - fieldNumber(agg, oldRow);
       const countDelta =
-        (contributes(newRow, agg.field) ? 1 : 0) -
-        (contributes(oldRow, agg.field) ? 1 : 0);
+        (contributes(agg, newRow) ? 1 : 0) - (contributes(agg, oldRow) ? 1 : 0);
       if (sumDelta === 0 && countDelta === 0) {
         return undefined;
       }

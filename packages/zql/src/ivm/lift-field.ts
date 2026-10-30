@@ -1,6 +1,10 @@
 import {unreachable} from '../../../shared/src/asserts.ts';
 import {emptyArray} from '../../../shared/src/sentinels.ts';
-import type {Value} from '../../../zero-protocol/src/data.ts';
+import {
+  aggregateValue,
+  type Aggregate,
+} from '../../../zero-protocol/src/ast.ts';
+import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import {
@@ -49,18 +53,30 @@ export const LIFTED_FIELD_COLUMN = ' lifted';
  *    destination row, and so the lifted value, as it was.
  *
  * The output rows carry no relationships.
+ *
+ * For an aggregate over a JSON path, `jsonAggregate` (whose `field` is the
+ * destination's json column) makes it lift the extracted leaf, gated as
+ * `aggregateValue` does, instead of the whole document; the Aggregate then
+ * reads the lifted column as a plain field.
  */
 export class LiftField implements Operator {
   readonly #input: Input;
   readonly #sourceRelationship: string;
   readonly #field: string;
+  readonly #jsonAggregate: Aggregate | undefined;
   readonly #schema: SourceSchema;
   #output: Output = throwOutput;
 
-  constructor(input: Input, sourceRelationship: string, field: string) {
+  constructor(
+    input: Input,
+    sourceRelationship: string,
+    field: string,
+    jsonAggregate?: Aggregate,
+  ) {
     this.#input = input;
     this.#sourceRelationship = sourceRelationship;
     this.#field = field;
+    this.#jsonAggregate = jsonAggregate;
     input.setOutput(this);
 
     const inputSchema = input.getSchema();
@@ -71,12 +87,28 @@ export class LiftField implements Operator {
       columns: {
         ...inputSchema.columns,
         // Nullable: a junction row may (transiently) have no destination.
-        [LIFTED_FIELD_COLUMN]: fieldSchema
-          ? {...fieldSchema, optional: true}
-          : {type: 'number', optional: true},
+        [LIFTED_FIELD_COLUMN]:
+          jsonAggregate !== undefined
+            ? // A JSON leaf: a number for sum/avg, a number or a string for
+              // min/max.
+              jsonAggregate.fn === 'min' || jsonAggregate.fn === 'max'
+              ? {type: 'json', optional: true}
+              : {type: 'number', optional: true}
+            : fieldSchema
+              ? {...fieldSchema, optional: true}
+              : {type: 'number', optional: true},
       },
       relationships: {},
     };
+  }
+
+  /** The value to lift from a destination row. */
+  #read(row: Row): Value {
+    return (
+      (this.#jsonAggregate === undefined
+        ? row[this.#field]
+        : (aggregateValue(this.#jsonAggregate, row) as Value)) ?? null
+    );
   }
 
   setOutput(output: Output): void {
@@ -174,7 +206,7 @@ export class LiftField implements Operator {
     let value: Value = null;
     for (const child of rel()) {
       if (child !== 'yield') {
-        value = child.row[this.#field] ?? null;
+        value = this.#read(child.row);
       }
     }
     return value;
@@ -186,16 +218,15 @@ export class LiftField implements Operator {
    * from below it).
    */
   #valuesFromChildChange(childChange: Change): [Value, Value] | undefined {
-    const field = this.#field;
     switch (childChange[ChangeIndex.TYPE]) {
       case ChangeType.ADD:
-        return [null, childChange[ChangeIndex.NODE].row[field] ?? null];
+        return [null, this.#read(childChange[ChangeIndex.NODE].row)];
       case ChangeType.REMOVE:
-        return [childChange[ChangeIndex.NODE].row[field] ?? null, null];
+        return [this.#read(childChange[ChangeIndex.NODE].row), null];
       case ChangeType.EDIT:
         return [
-          childChange[ChangeIndex.OLD_NODE].row[field] ?? null,
-          childChange[ChangeIndex.NODE].row[field] ?? null,
+          this.#read(childChange[ChangeIndex.OLD_NODE].row),
+          this.#read(childChange[ChangeIndex.NODE].row),
         ];
       case ChangeType.CHILD:
         return undefined;

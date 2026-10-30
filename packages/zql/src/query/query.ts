@@ -14,18 +14,41 @@ import type {
   Schema as ZeroSchema,
 } from '../../../zero-types/src/schema.ts';
 import type {ViewFactory} from '../ivm/view.ts';
-import type {ExpressionFactory, ParameterReference} from './expression.ts';
+import type {
+  ColumnRef,
+  ExpressionBuilder,
+  ExpressionFactory,
+  ParameterReference,
+} from './expression.ts';
 import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
 type Selector<E extends TableSchema> = keyof E['columns'];
 
 /**
+ * The argument of an aggregate's callback form: just the `json` accessor, e.g.
+ * `c.sum(({json}) => json('metadata', 'points'))`.
+ */
+type JsonAggregateBuilder<
+  TTable extends keyof TSchema['tables'] & string,
+  TSchema extends ZeroSchema,
+> = Pick<ExpressionBuilder<TTable, TSchema>, 'json'>;
+
+/**
+ * Rejects a JSON leaf that can never hold a `K` (so `sum` of a string leaf is
+ * a type error), by intersecting the callback's result with an object it can't
+ * satisfy. An untyped `json()` leaf (`ReadonlyJSONValue`) can hold anything.
+ */
+type JsonLeafOf<V, K> = [Extract<V, K>] extends [never]
+  ? {readonly 'aggregate over a JSON leaf of the wrong type': never}
+  : unknown;
+
+/**
  * The columns of a table whose values are numbers (nullable or not): the only
  * ones `sum`/`avg` can aggregate. Anything else fails at runtime, in the IVM
  * operator's assert or as a Postgres error, so it is rejected here instead.
  */
-export type NumericSelector<E extends TableSchema> = ColumnsOfType<E, 'number'>;
+type NumericSelector<E extends TableSchema> = ColumnsOfType<E, 'number'>;
 
 /**
  * The columns of a table that `min`/`max` can aggregate: those holding numbers
@@ -33,7 +56,7 @@ export type NumericSelector<E extends TableSchema> = ColumnsOfType<E, 'number'>;
  * comparison throws on JSON and arrays, and Postgres has no MIN/MAX over a
  * boolean, so those are rejected here instead of failing at runtime.
  */
-export type OrderedSelector<E extends TableSchema> = ColumnsOfType<
+type OrderedSelector<E extends TableSchema> = ColumnsOfType<
   E,
   'number' | 'string'
 >;
@@ -477,7 +500,7 @@ type IsAggregate<T> = 0 extends 1 & T
 type AggregateValue<T> = [T] extends [AggregateResult<infer R>] ? R : never;
 
 /** The TypeScript type of a column, used as the result type of `min`/`max`. */
-export type FieldTSType<
+type FieldTSType<
   TTable extends string,
   TSchema extends ZeroSchema,
   TField extends string,
@@ -783,6 +806,17 @@ export interface Query<
   sum<TSelector extends NumericSelector<PullTableSchema<TTable, TSchema>>>(
     field: TSelector,
   ): Query<TTable, TSchema, AggregateResult<number | null>>;
+  /**
+   * Sums the number leaves at a path inside a `json()` column, e.g.
+   * `c.sum(({json}) => json('metadata', 'points'))`. A missing path, a JSON
+   * `null` or a leaf of another type is skipped, like a SQL NULL.
+   */
+  sum<TColumnType, const P extends readonly (string | number)[]>(
+    selector: (
+      builder: JsonAggregateBuilder<TTable, TSchema>,
+    ) => ColumnRef<TColumnType, P, TTable> &
+      JsonLeafOf<ValueAtPath<TColumnType, P>, number>,
+  ): Query<TTable, TSchema, AggregateResult<number | null>>;
 
   /**
    * Reduces this (sub)query to `avg(field)`. The value is `null` for an empty
@@ -790,6 +824,13 @@ export interface Query<
    */
   avg<TSelector extends NumericSelector<PullTableSchema<TTable, TSchema>>>(
     field: TSelector,
+  ): Query<TTable, TSchema, AggregateResult<number | null>>;
+  /** Averages the number leaves at a path inside a `json()` column. */
+  avg<TColumnType, const P extends readonly (string | number)[]>(
+    selector: (
+      builder: JsonAggregateBuilder<TTable, TSchema>,
+    ) => ColumnRef<TColumnType, P, TTable> &
+      JsonLeafOf<ValueAtPath<TColumnType, P>, number>,
   ): Query<TTable, TSchema, AggregateResult<number | null>>;
 
   /**
@@ -804,6 +845,24 @@ export interface Query<
     TSchema,
     AggregateResult<FieldTSType<TTable, TSchema, TSelector & string> | null>
   >;
+  /**
+   * The minimum of the number and string leaves at a path inside a `json()`
+   * column. Numbers order before strings (as in JS and SQLite), so a path
+   * holding both yields its smallest number. Other leaves are skipped.
+   */
+  min<TColumnType, const P extends readonly (string | number)[]>(
+    selector: (
+      builder: JsonAggregateBuilder<TTable, TSchema>,
+    ) => ColumnRef<TColumnType, P, TTable> &
+      JsonLeafOf<ValueAtPath<TColumnType, P>, number | string>,
+  ): Query<
+    TTable,
+    TSchema,
+    AggregateResult<Extract<
+      ValueAtPath<TColumnType, P>,
+      number | string
+    > | null>
+  >;
 
   /**
    * Reduces this (sub)query to `max(field)`. The result has the field's own
@@ -815,6 +874,24 @@ export interface Query<
     TTable,
     TSchema,
     AggregateResult<FieldTSType<TTable, TSchema, TSelector & string> | null>
+  >;
+  /**
+   * The maximum of the number and string leaves at a path inside a `json()`
+   * column. Numbers order before strings, so a path holding both yields its
+   * largest string. Other leaves are skipped.
+   */
+  max<TColumnType, const P extends readonly (string | number)[]>(
+    selector: (
+      builder: JsonAggregateBuilder<TTable, TSchema>,
+    ) => ColumnRef<TColumnType, P, TTable> &
+      JsonLeafOf<ValueAtPath<TColumnType, P>, number | string>,
+  ): Query<
+    TTable,
+    TSchema,
+    AggregateResult<Extract<
+      ValueAtPath<TColumnType, P>,
+      number | string
+    > | null>
   >;
 
   /**

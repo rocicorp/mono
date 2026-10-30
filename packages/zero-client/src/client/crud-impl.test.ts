@@ -2,6 +2,7 @@ import {expect, test} from 'vitest';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
+  json,
   number,
   string,
   table,
@@ -28,6 +29,7 @@ const schema = createSchema({
         // Nullable, as a foreign key often is: a comment may have no issue.
         issueId: string().optional(),
         points: number().optional(),
+        meta: json().optional(),
       })
       .primaryKey('id'),
   ],
@@ -792,4 +794,84 @@ test('optimistic sum + where: only matching children contribute the field', asyn
     branch,
   );
   expect(map.get(aggKey)).toMatchObject({_0_value: 32});
+});
+
+test('optimistic sum over a JSON path: only the number leaf moves the sum', async () => {
+  const JSON_AGG = 'aggregate:q3:metaPoints';
+  const branch = new IVMSourceBranch(schema.tables);
+  // Mirror `issue.related('comments', c => c.sum(({json}) => json('meta', 'p')))`.
+  branch.getOrCreateAggregateSource(
+    JSON_AGG,
+    {
+      issueId: {type: 'string'},
+      _0_value: {type: 'number'},
+      _0_sum: {type: 'number'},
+      _0_count: {type: 'number'},
+    },
+    ['issueId'],
+    {
+      table: 'comment',
+      childField: ['issueId'],
+      keyField: ['issueId'],
+      fn: 'sum',
+      field: 'meta',
+      path: ['p'],
+      predicate: undefined,
+    },
+  );
+  const {map, tx} = makeTx();
+  const aggKey = aggregateRowKey(JSON_AGG, {issueId: 'i1'});
+  map.set(aggKey, {
+    issueId: 'i1',
+    _0_value: null,
+    _0_sum: 0,
+    _0_count: 0,
+    ['_0_version']: '01',
+  });
+  const insert = (id: string, meta: unknown) =>
+    crudImpl.insert(
+      tx,
+      {
+        op: 'insert',
+        tableName: 'comment',
+        primaryKey: ['id'],
+        value: {id, issueId: 'i1', meta} as Row,
+      },
+      schema,
+      branch,
+    );
+
+  await insert('c1', {p: 4});
+  expect(map.get(aggKey)).toMatchObject({_0_value: 4, _0_count: 1});
+  // A string leaf, another key and a missing column contribute nothing.
+  await insert('c2', {p: '5'});
+  await insert('c3', {q: 5});
+  await insert('c4', null);
+  expect(map.get(aggKey)).toMatchObject({_0_value: 4, _0_count: 1});
+
+  // An edit elsewhere in the document leaves the sum; a leaf edit moves it.
+  await crudImpl.update(
+    tx,
+    {
+      op: 'update',
+      tableName: 'comment',
+      primaryKey: ['id'],
+      value: {id: 'c1', meta: {p: 4, note: 'x'}},
+    },
+    schema,
+    branch,
+  );
+  expect(map.get(aggKey)).toMatchObject({_0_value: 4, _0_count: 1});
+  await crudImpl.update(
+    tx,
+    {
+      op: 'update',
+      tableName: 'comment',
+      primaryKey: ['id'],
+      value: {id: 'c2', meta: {p: 6}},
+    },
+    schema,
+    branch,
+  );
+  expect(map.get(aggKey)).toMatchObject({_0_value: 10, _0_count: 2});
 });

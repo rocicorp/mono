@@ -1,9 +1,10 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {assignProperty} from '../../../shared/src/objects.ts';
-import type {
-  AggregateFunction,
-  Ordering,
+import {
+  aggregateValue,
+  type AggregateFunction,
+  type Ordering,
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
@@ -102,12 +103,14 @@ export const AGGREGATE_PAYLOAD_COLUMNS: ReadonlySet<string> = new Set([
 /**
  * The type of the synthetic value column for an aggregate result: `count` is a
  * non-null number; `sum`/`avg` are nullable numbers; `min`/`max` take the
- * field's own type and are nullable (empty group).
+ * field's own type (`json` for a JSON path, whose leaf can be a number or a
+ * string) and are nullable (empty group).
  */
 function aggregateValueColumn(
   fn: AggregateFunction,
   field: string | undefined,
   inputColumns: Record<string, SchemaValue>,
+  path: readonly (string | number)[] | undefined,
 ): SchemaValue {
   switch (fn) {
     case 'count':
@@ -117,6 +120,10 @@ function aggregateValueColumn(
       return {type: 'number', optional: true};
     case 'min':
     case 'max': {
+      if (path !== undefined) {
+        // A JSON leaf: a number or a string, decided per value.
+        return {type: 'json', optional: true};
+      }
       const fieldSchema = inputColumns[must(field)];
       assert(fieldSchema, () => `Aggregate: ${fn} field "${field}" missing`);
       return {...fieldSchema, optional: true};
@@ -139,6 +146,7 @@ export function aggregateSourceSchema(
   groupKey: readonly string[],
   fn: AggregateFunction,
   field: string | undefined,
+  path?: readonly (string | number)[] | undefined,
 ): {columns: Record<string, SchemaValue>; primaryKey: readonly string[]} {
   const columns: Record<string, SchemaValue> = {};
   for (const col of groupKey) {
@@ -155,6 +163,7 @@ export function aggregateSourceSchema(
     fn,
     field,
     inputColumns,
+    path,
   );
   if (carriesComponents(fn)) {
     // Components for optimistic adjustment on the synced client.
@@ -227,6 +236,7 @@ export class Aggregate implements Operator {
   readonly #groupKey: readonly string[];
   readonly #fn: AggregateFunction;
   readonly #field: string | undefined;
+  readonly #path: readonly (string | number)[] | undefined;
   readonly #schema: SourceSchema;
   // The source connection `input` reads straight from, when nothing between
   // them drops rows. A `count` asks it for the number instead of reading every
@@ -250,11 +260,16 @@ export class Aggregate implements Operator {
     field?: string,
     tableName?: string,
     countSource?: SourceInput,
+    path?: readonly (string | number)[],
   ) {
     assert(
       fn === 'count' ? field === undefined : field !== undefined,
       () =>
         `Aggregate: ${fn} ${fn === 'count' ? 'takes no' : 'requires a'} field`,
+    );
+    assert(
+      path === undefined || field !== undefined,
+      'Aggregate: a JSON path requires a field',
     );
     this.#input = input;
     this.#storage = storage as AggStorage;
@@ -262,6 +277,7 @@ export class Aggregate implements Operator {
     this.#fn = fn;
     this.#field = field;
     this.#countSource = fn === 'count' ? countSource : undefined;
+    this.#path = path;
     input.setOutput(this);
 
     const inputSchema = input.getSchema();
@@ -275,6 +291,7 @@ export class Aggregate implements Operator {
       groupKey,
       fn,
       field,
+      path,
     );
 
     // Exactly one row per key, so the key is the primary key and a valid
@@ -330,8 +347,24 @@ export class Aggregate implements Operator {
 
   /** Whether `v` should replace the current extreme for a min/max. */
   #beats(v: NormalizedValue, current: NormalizedValue): boolean {
-    const c = compareValues(v, current);
+    const c = compareAggregateValues(v, current);
     return this.#fn === 'max' ? c > 0 : c < 0;
+  }
+
+  /**
+   * The value `row` contributes: its field, or the JSON leaf at the path (see
+   * `aggregateValue`), `null` when it contributes nothing.
+   */
+  #read(row: Row): NormalizedValue {
+    const field = must(this.#field);
+    return normalizeUndefined(
+      this.#path === undefined
+        ? row[field]
+        : (aggregateValue(
+            {fn: this.#fn, field, path: this.#path},
+            row,
+          ) as Value),
+    );
   }
 
   /** Add one row's contribution to a (freshly accumulating) state. */
@@ -340,7 +373,7 @@ export class Aggregate implements Operator {
     if (this.#field === undefined) {
       return;
     }
-    const v = normalizeUndefined(row[this.#field]);
+    const v = this.#read(row);
     if (v === null) {
       return;
     }
@@ -447,12 +480,11 @@ export class Aggregate implements Operator {
           // value. count(*) is unaffected, and so is a sum/avg whose field kept
           // its value: subtracting and re-adding it would only add rounding
           // error.
-          const field = this.#field;
           if (
-            field === undefined ||
-            compareValues(
-              normalizeUndefined(change[ChangeIndex.OLD_NODE].row[field]),
-              normalizeUndefined(change[ChangeIndex.NODE].row[field]),
+            this.#field === undefined ||
+            compareAggregateValues(
+              this.#read(change[ChangeIndex.OLD_NODE].row),
+              this.#read(change[ChangeIndex.NODE].row),
             ) === 0
           ) {
             return;
@@ -522,7 +554,7 @@ export class Aggregate implements Operator {
       state.count += sign;
     }
     if (this.#field !== undefined) {
-      const v = normalizeUndefined(row[this.#field]);
+      const v = this.#read(row);
       if (v !== null) {
         assert(
           typeof v === 'number',
@@ -541,32 +573,32 @@ export class Aggregate implements Operator {
    * state, so the group has to be re-fetched.
    */
   #pushExtreme(state: AggState, change: Change): boolean {
-    const field = must(this.#field);
     switch (change[ChangeIndex.TYPE]) {
       case ChangeType.ADD:
         // Adding can only extend the extreme outward — O(1).
         this.#contribute(state, change[ChangeIndex.NODE].row);
         return true;
       case ChangeType.REMOVE: {
-        const v = normalizeUndefined(change[ChangeIndex.NODE].row[field]);
+        const v = this.#read(change[ChangeIndex.NODE].row);
         state.count--;
         if (v === null) {
           return true; // null never contributed to the extreme
         }
-        if (state.extreme !== null && compareValues(v, state.extreme) === 0) {
+        if (
+          state.extreme !== null &&
+          compareAggregateValues(v, state.extreme) === 0
+        ) {
           return false; // removed (one of) the extreme
         }
         state.nonNull--; // a non-extreme value left; extreme unchanged
         return true;
       }
       case ChangeType.EDIT: {
-        const oldV = normalizeUndefined(
-          change[ChangeIndex.OLD_NODE].row[field],
-        );
-        const newV = normalizeUndefined(change[ChangeIndex.NODE].row[field]);
+        const oldV = this.#read(change[ChangeIndex.OLD_NODE].row);
+        const newV = this.#read(change[ChangeIndex.NODE].row);
         // When the field moved, the extreme may have changed in either
         // direction.
-        return compareValues(oldV, newV) === 0;
+        return compareAggregateValues(oldV, newV) === 0;
       }
       case ChangeType.CHILD:
         return true;
@@ -623,6 +655,28 @@ export class Aggregate implements Operator {
   #groupValuesFromRow(row: Row): NormalizedValue[] {
     return this.#groupKey.map(col => normalizeUndefined(row[col]));
   }
+}
+
+/**
+ * Orders the values a min/max reduces. A JSON path's leaves can be numbers or
+ * strings, decided per value; numbers order before strings, as in JS and
+ * SQLite (z2s compiles the same rule rather than Postgres's jsonb ordering,
+ * which puts strings first). Otherwise it is {@link compareValues}.
+ */
+function compareAggregateValues(
+  a: NormalizedValue,
+  b: NormalizedValue,
+): number {
+  if (
+    a !== null &&
+    b !== null &&
+    typeof a !== typeof b &&
+    (typeof a === 'number' || typeof a === 'string') &&
+    (typeof b === 'number' || typeof b === 'string')
+  ) {
+    return typeof a === 'number' ? -1 : 1;
+  }
+  return compareValues(a, b);
 }
 
 /**

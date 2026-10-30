@@ -378,6 +378,13 @@ function visitAggregate(aggregate: Aggregate | undefined): void {
   mix(TAG_AGGREGATE);
   mixString(aggregate.fn);
   visitOptionalString(aggregate.field);
+  // Like the aggregate itself, an absent path writes nothing, so aggregates
+  // without one hash as before; a present one leads with TAG_JSON, which no
+  // following word (TAG_END, TAG_OBJ) can be confused with.
+  if (aggregate.path !== undefined) {
+    mix(TAG_JSON);
+    visitValue(aggregate.path);
+  }
 }
 
 function visitAST(ast: AST): void {

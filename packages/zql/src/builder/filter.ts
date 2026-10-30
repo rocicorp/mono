@@ -3,6 +3,7 @@ import {
   isLikeOperator,
   isNegatedOperator,
   jsonLiteralType,
+  jsonValueAtPath,
   type Condition,
   type SimpleCondition,
   type SimpleOperator,
@@ -32,23 +33,7 @@ export type SimplePredicateNoNull = (rhs: NonNullValue) => boolean;
  * against the replica.
  */
 function valueAtPath(value: Value, path: readonly (string | number)[]): Value {
-  let v: Value = value;
-  for (const seg of path) {
-    if (v === null || typeof v !== 'object') {
-      return null;
-    }
-    if (Array.isArray(v)) {
-      if (typeof seg !== 'number') {
-        return null;
-      }
-      v = v[seg];
-    } else if (typeof seg === 'string' && Object.hasOwn(v, seg)) {
-      v = (v as Record<string, Value>)[seg];
-    } else {
-      return null;
-    }
-  }
-  return v ?? null;
+  return jsonValueAtPath(value, path) as Value;
 }
 
 export type NoSubqueryCondition =

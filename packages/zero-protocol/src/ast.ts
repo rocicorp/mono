@@ -151,25 +151,31 @@ export function formatJsonPathReference(ref: JsonPathReference): string {
     .join('')}`;
 }
 
+/**
+ * A JSON path (object keys and array indices) into a `json()` column, shared by
+ * {@link JsonPathReference} and {@link Aggregate}.
+ */
+const jsonPathSchema = v
+  .readonlyArray(
+    v.union(
+      v.string(),
+      v
+        .number()
+        .assert(
+          isValidJsonPathIndex,
+          'expected a non-negative integer array index',
+        ),
+    ),
+  )
+  // `json(col, ...path)` types the path as non-empty; reject an empty one at
+  // the wire too, since the compilers address the last segment and a bare
+  // column is not a JSON leaf.
+  .assert(path => path.length > 0, 'expected a non-empty JSON path');
+
 const jsonPathReferenceSchema: v.Type<JsonPathReference> = v.readonlyObject({
   type: v.literal('json'),
   value: columnReferenceSchema,
-  path: v
-    .readonlyArray(
-      v.union(
-        v.string(),
-        v
-          .number()
-          .assert(
-            isValidJsonPathIndex,
-            'expected a non-negative integer array index',
-          ),
-      ),
-    )
-    // `json(col, ...path)` types the path as non-empty; reject an empty one at
-    // the wire too, since the compilers address the last segment and a bare
-    // column is not a JSON leaf.
-    .assert(path => path.length > 0, 'expected a non-empty JSON path'),
+  path: jsonPathSchema,
 });
 
 /**
@@ -333,10 +339,16 @@ const correlationSchema = v.readonlyObject({
 // is the only thing added in v.lazy.  The v.lazy is necessary due to the
 // mutually-recursive types, but v.lazy prevents inference of the resulting
 // type.
-const aggregateSchema = v.readonlyObject({
-  fn: v.literalUnion('count', 'sum', 'avg', 'min', 'max'),
-  field: v.string().optional(),
-});
+const aggregateSchema = v
+  .readonlyObject({
+    fn: v.literalUnion('count', 'sum', 'avg', 'min', 'max'),
+    field: v.string().optional(),
+    path: jsonPathSchema.optional(),
+  })
+  .assert(
+    a => a.path === undefined || (a.field !== undefined && a.fn !== 'count'),
+    'expected an aggregate JSON path to have a field and not be a count',
+  );
 
 export const correlatedSubquerySchemaOmitSubquery = v.readonlyObject({
   correlation: correlationSchema,
@@ -548,7 +560,67 @@ export type Aggregate = {
   // `count` (which is `count(*)`). Subject to client→server name mapping. For a
   // junction relationship it names a column of the destination table.
   readonly field?: string | undefined;
+  // Navigates into `field`, which is then a `json()` column, to a scalar leaf.
+  // Data, not a schema name: name mapping leaves it alone. Not for `count`.
+  readonly path?: readonly (string | number)[] | undefined;
 };
+
+/**
+ * The value an aggregate reduces for `row`: the `field` column itself, or, with
+ * a `path`, the JSON leaf at that path when it is one the aggregate takes: a
+ * number for `sum`/`avg`, a number or a string for `min`/`max` (numbers order
+ * before strings, see `compareAggregateValues`). Any other leaf, or a missing
+ * one, is `null`, which aggregates skip. Shared by the IVM operator, the
+ * junction lift and the client's optimistic delta so the rule cannot drift.
+ */
+export function aggregateValue(
+  agg: Aggregate,
+  row: Readonly<Record<string, unknown>>,
+): unknown {
+  const v = row[must(agg.field)];
+  if (agg.path === undefined) {
+    return v;
+  }
+  const leaf = jsonValueAtPath(v, agg.path);
+  switch (typeof leaf) {
+    case 'number':
+      return leaf;
+    case 'string':
+      return agg.fn === 'min' || agg.fn === 'max' ? leaf : null;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Navigates into a JSON value following `path`, strictly: a `number` segment
+ * indexes an array and a `string` segment reads an own property of a plain
+ * object. Any other step (a null/undefined or scalar intermediate, a segment of
+ * the wrong kind, a missing key) yields `null`. See `zql/src/builder/filter.ts`
+ * for why this is the rule.
+ */
+export function jsonValueAtPath(
+  value: unknown,
+  path: readonly (string | number)[],
+): unknown {
+  let v: unknown = value;
+  for (const seg of path) {
+    if (v === null || typeof v !== 'object') {
+      return null;
+    }
+    if (Array.isArray(v)) {
+      if (typeof seg !== 'number') {
+        return null;
+      }
+      v = v[seg];
+    } else if (typeof seg === 'string' && Object.hasOwn(v, seg)) {
+      v = (v as Record<string, unknown>)[seg];
+    } else {
+      return null;
+    }
+  }
+  return v ?? null;
+}
 
 export type ValuePosition =
   | LiteralReference
@@ -692,13 +764,7 @@ function transformAST(ast: AST, transform: ASTTransform): Required<AST> {
           subquery: transformAST(r.subquery, transform),
           system: r.system,
           aggregate: r.aggregate
-            ? {
-                fn: r.aggregate.fn,
-                field:
-                  r.aggregate.field === undefined
-                    ? undefined
-                    : columnName(aggregateFieldTable(r), r.aggregate.field),
-              }
+            ? transformAggregate(r.aggregate, aggregateFieldTable(r), transform)
             : undefined,
         }) satisfies Required<CorrelatedSubquery>,
     ),
@@ -716,17 +782,29 @@ function transformAST(ast: AST, transform: ASTTransform): Required<AST> {
     limit: ast.limit,
     orderBy: ast.orderBy?.map(([col, dir]) => [colName(col), dir] as const),
     aggregate: ast.aggregate
-      ? {
-          fn: ast.aggregate.fn,
-          field:
-            ast.aggregate.field === undefined
-              ? undefined
-              : colName(ast.aggregate.field),
-        }
+      ? transformAggregate(ast.aggregate, ast.table, transform)
       : undefined,
   };
 
   return transformed;
+}
+
+/**
+ * Maps an aggregate's `field` (validated to be a json column when the
+ * aggregate has a JSON path); the path is data and passes through.
+ */
+function transformAggregate(
+  agg: Aggregate,
+  table: string,
+  {columnName, jsonColumnName}: ASTTransform,
+): Aggregate {
+  const {fn, field, path} = agg;
+  if (field === undefined) {
+    return {fn, field: undefined};
+  }
+  return path === undefined
+    ? {fn, field: columnName(table, field)}
+    : {fn, field: jsonColumnName(table, field), path};
 }
 
 /**
