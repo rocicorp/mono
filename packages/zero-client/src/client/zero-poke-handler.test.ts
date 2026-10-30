@@ -1590,11 +1590,11 @@ describe('poke handler', () => {
         patch: [
           {
             op: 'put',
-            key: 'e/aggregate:q1/0',
+            key: 'a/q1/0',
             value: {_0_key: 0, _0_value: 5, ['_0_version']: '01'},
           },
           // 'notInSchema' row dropped — not present.
-          {op: 'del', key: 'e/aggregate:q1/0'},
+          {op: 'del', key: 'a/q1/0'},
         ],
       },
     });
@@ -1639,10 +1639,10 @@ describe('poke handler', () => {
         patch: [
           {
             op: 'put',
-            key: 'e/aggregate:q1:commentCount/i5',
+            key: 'a/q1:commentCount/i5',
             value: {issueID: 'i5', _0_value: 2, ['_0_version']: '01'},
           },
-          {op: 'del', key: 'e/aggregate:q1:commentCount/i5'},
+          {op: 'del', key: 'a/q1:commentCount/i5'},
         ],
       },
     });

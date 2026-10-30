@@ -1,10 +1,5 @@
-import type {
-  InternalDiff,
-  InternalDiffOperation,
-} from '../../../replicache/src/btree/node.ts';
+import type {InternalDiff} from '../../../replicache/src/btree/node.ts';
 import type {LazyStore} from '../../../replicache/src/dag/lazy-store.ts';
-import {readFromHash} from '../../../replicache/src/db/read.ts';
-import * as FormatVersion from '../../../replicache/src/format-version-enum.ts';
 import type {Hash} from '../../../replicache/src/hash.ts';
 import type {
   EphemeralID,
@@ -12,11 +7,9 @@ import type {
   ZeroOption,
   ZeroReadOptions,
 } from '../../../replicache/src/replicache-options.ts';
-import {withRead} from '../../../replicache/src/with-transactions.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {ZeroContext} from './context.ts';
-import type {IVMSourceBranch} from './ivm-branch.ts';
-import {ENTITIES_KEY_PREFIX} from './keys.ts';
+import {readRowDiffs, type IVMSourceBranch} from './ivm-branch.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 
 // Replicache doesn't support undefined auth tokens
@@ -62,20 +55,7 @@ export class ZeroRep implements ZeroOption {
   }
 
   async init(hash: Hash, store: LazyStore) {
-    const diffs: InternalDiffOperation[] = [];
-    await withRead(store, async dagRead => {
-      const read = await readFromHash(hash, dagRead, FormatVersion.Latest);
-      for await (const entry of read.map.scan(ENTITIES_KEY_PREFIX, true)) {
-        if (!entry[0].startsWith(ENTITIES_KEY_PREFIX)) {
-          break;
-        }
-        diffs.push({
-          op: 'add',
-          key: entry[0],
-          newValue: entry[1],
-        });
-      }
-    });
+    const diffs = await readRowDiffs(store, hash);
     this.#store = store;
 
     this.#context.processChanges(undefined, hash, diffs);

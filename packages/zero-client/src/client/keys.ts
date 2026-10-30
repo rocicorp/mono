@@ -1,5 +1,6 @@
 import {h128} from '../../../shared/src/hash.ts';
 import * as v from '../../../shared/src/valita.ts';
+import {AGGREGATE_TABLE_PREFIX} from '../../../zero-protocol/src/aggregate-table.ts';
 import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {MutationID} from '../../../zero-protocol/src/mutation-id.ts';
@@ -14,6 +15,18 @@ export const ROW_VERSION_COLUMN = '_0_version';
 const DESIRED_QUERIES_KEY_PREFIX = 'd/';
 export const GOT_QUERIES_KEY_PREFIX = 'g/';
 export const ENTITIES_KEY_PREFIX = 'e/';
+/**
+ * Synced aggregate results live outside `e/`. A client from before them loads
+ * every `e/` row into a table of its schema and fails to open a database that
+ * has rows of an `aggregate:` table there, while it skips keys outside `e/`.
+ * Keeping them apart lets both versions share a database (STORAGE_VERSION).
+ */
+export const AGGREGATES_KEY_PREFIX = 'a/';
+/** The prefixes of the rows the IVM sources hold, in key order. */
+export const ROW_KEY_PREFIXES = [
+  AGGREGATES_KEY_PREFIX,
+  ENTITIES_KEY_PREFIX,
+] as const;
 export const MUTATIONS_KEY_PREFIX = 'm/';
 
 export function toDesiredQueriesKey(clientID: string, hash: string): string {
@@ -37,9 +50,18 @@ export function toPrimaryKeyString(
   primaryKey: CompoundKey,
   value: Row,
 ): string {
+  return rowKey(ENTITIES_KEY_PREFIX, tableName, primaryKey, value);
+}
+
+function rowKey(
+  prefix: string,
+  tableName: string,
+  primaryKey: CompoundKey,
+  value: Row,
+): string {
   if (primaryKey.length === 1) {
     return (
-      ENTITIES_KEY_PREFIX +
+      prefix +
       tableName +
       '/' +
       v.parse(value[primaryKey[0]], primaryKeyValueSchema)
@@ -50,7 +72,7 @@ export function toPrimaryKeyString(
   const str = JSON.stringify(values);
 
   const idSegment = u128ToDecimal(h128(str));
-  return ENTITIES_KEY_PREFIX + tableName + '/' + idSegment;
+  return prefix + tableName + '/' + idSegment;
 }
 
 const E19 = 10n ** 19n;
@@ -77,15 +99,24 @@ function u128ToDecimal(x: bigint): string {
   return String(t / E19) + String(t % E19).padStart(19, '0') + low;
 }
 
+/**
+ * The source (table) name of an `e/` or `a/` row key. An `a/` key leaves out
+ * the `aggregate:` every aggregate table name starts with.
+ */
 export function sourceNameFromKey(key: string): string {
+  // Both prefixes are two characters long.
   const slash = key.indexOf('/', ENTITIES_KEY_PREFIX.length);
-  return key.slice(ENTITIES_KEY_PREFIX.length, slash);
+  const name = key.slice(ENTITIES_KEY_PREFIX.length, slash);
+  return key.startsWith(AGGREGATES_KEY_PREFIX)
+    ? AGGREGATE_TABLE_PREFIX + name
+    : name;
 }
 
 /**
- * The Replicache key for a synthetic aggregate row. The key columns are every
- * column except the payload (`_0_value`, plus `_0_sum`/`_0_count`) and the
- * row-version, sorted so a `put` (full
+ * The Replicache key for a synthetic aggregate row: `a/`, the table name
+ * without its `aggregate:`, and the row's key. The key columns
+ * are every column except the payload (`_0_value`, plus `_0_sum`/`_0_count`)
+ * and the row-version, sorted so a `put` (full
  * row), a `del`/`update` (row key only), and an optimistic delta from a mutation
  * all produce the same key. Works for both top-level (`{_0_key: 0, …}`) and
  * relationship (`{…childFields, …}`) rows.
@@ -94,8 +125,9 @@ export function aggregateRowKey(tableName: string, row: Row): string {
   const keyColumns = Object.keys(row)
     .filter(k => !AGGREGATE_PAYLOAD_COLUMNS.has(k) && k !== ROW_VERSION_COLUMN)
     .sort();
-  return toPrimaryKeyString(
-    tableName,
+  return rowKey(
+    AGGREGATES_KEY_PREFIX,
+    tableName.slice(AGGREGATE_TABLE_PREFIX.length),
     keyColumns as unknown as CompoundKey,
     row,
   );

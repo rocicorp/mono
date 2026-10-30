@@ -18,7 +18,7 @@ import type {Diff} from '../../../replicache/src/sync/patch.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {Node} from '../../../zql/src/ivm/data.ts';
 import {consume} from '../../../zql/src/ivm/stream.ts';
-import {ENTITIES_KEY_PREFIX} from './keys.ts';
+import {AGGREGATES_KEY_PREFIX, ENTITIES_KEY_PREFIX} from './keys.ts';
 import {createDb} from './test/create-db.ts';
 
 import {makeSourceChangeAdd} from '../../../zql/src/ivm/source.ts';
@@ -619,12 +619,39 @@ describe('forkToHead', () => {
   });
 });
 
+test('advance applies aggregate rows under a/ and table rows under e/', () => {
+  const branch = new IVMSourceBranch({
+    users: {
+      name: 'users',
+      columns: {id: {type: 'string'}, name: {type: 'string'}},
+      primaryKey: ['id'],
+    },
+  });
+  const aggregate = {['_0_key']: 0, ['_0_value']: 2, ['_0_version']: '01'};
+  branch.advance(undefined, 'h1' as Hash, [
+    {
+      op: 'add',
+      key: `${AGGREGATES_KEY_PREFIX}q/0`,
+      newValue: aggregate,
+    },
+    {
+      op: 'add',
+      key: `${ENTITIES_KEY_PREFIX}users/u1`,
+      newValue: {id: 'u1', name: 'A'},
+    },
+  ]);
+  expect([...must(branch.getSource('aggregate:q')).data]).toEqual([aggregate]);
+  expect([...must(branch.getSource('users')).data]).toEqual([
+    {id: 'u1', name: 'A'},
+  ]);
+});
+
 test('advance releases an aggregate source the server empties once no view reads it', () => {
   const name = 'aggregate:q:comments';
-  const e = ENTITIES_KEY_PREFIX;
+  const a = AGGREGATES_KEY_PREFIX;
   const row = {issueID: 'i1', value: 2, ['_0_version']: '01'};
-  const add = {op: 'add', key: `${e}${name}/i1`, newValue: row} as const;
-  const del = {op: 'del', key: `${e}${name}/i1`, oldValue: row} as const;
+  const add = {op: 'add', key: `${a}q:comments/i1`, newValue: row} as const;
+  const del = {op: 'del', key: `${a}q:comments/i1`, oldValue: row} as const;
 
   const branch = new IVMSourceBranch({});
   const source = branch.getOrCreateAggregateSource(
@@ -681,13 +708,13 @@ test('advance releases an aggregate source destroyed before it got a row', () =>
 
 test('an aggregate source emptied while read is released by a later advance once the view is gone', () => {
   const name = 'aggregate:q:comments';
-  const e = ENTITIES_KEY_PREFIX;
+  const a = AGGREGATES_KEY_PREFIX;
   const row = {issueID: 'i1', value: 2, ['_0_version']: '01'};
-  const add = {op: 'add', key: `${e}${name}/i1`, newValue: row} as const;
-  const del = {op: 'del', key: `${e}${name}/i1`, oldValue: row} as const;
+  const add = {op: 'add', key: `${a}q:comments/i1`, newValue: row} as const;
+  const del = {op: 'del', key: `${a}q:comments/i1`, oldValue: row} as const;
   const other = {
     op: 'add',
-    key: `${e}aggregate:other:comments/i1`,
+    key: `${a}other:comments/i1`,
     newValue: row,
   } as const;
 
@@ -722,10 +749,10 @@ test('an aggregate source emptied while read is released by a later advance once
 
 test('an aggregate source refilled before its view goes is kept', () => {
   const name = 'aggregate:q:comments';
-  const e = ENTITIES_KEY_PREFIX;
+  const a = AGGREGATES_KEY_PREFIX;
   const row = {issueID: 'i1', value: 2, ['_0_version']: '01'};
-  const add = {op: 'add', key: `${e}${name}/i1`, newValue: row} as const;
-  const del = {op: 'del', key: `${e}${name}/i1`, oldValue: row} as const;
+  const add = {op: 'add', key: `${a}q:comments/i1`, newValue: row} as const;
+  const del = {op: 'del', key: `${a}q:comments/i1`, oldValue: row} as const;
 
   const branch = new IVMSourceBranch({});
   const source = branch.getOrCreateAggregateSource(

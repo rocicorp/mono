@@ -41,7 +41,7 @@ import {
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import {consume} from '../../../zql/src/ivm/stream.ts';
 import {
-  ENTITIES_KEY_PREFIX,
+  ROW_KEY_PREFIXES,
   ROW_VERSION_COLUMN,
   sourceNameFromKey,
 } from './keys.ts';
@@ -342,22 +342,34 @@ export async function initFromStore(
   hash: Hash,
   store: Store,
 ) {
+  branch.advance(undefined, hash, await readRowDiffs(store, hash));
+}
+
+/**
+ * An `add` diff for each row at `hash` that the IVM sources hold: the table
+ * rows under `e/` and the aggregate rows under `a/`, in key order.
+ */
+export async function readRowDiffs(
+  store: Store,
+  hash: Hash,
+): Promise<InternalDiffOperation[]> {
   const diffs: InternalDiffOperation[] = [];
   await withRead(store, async dagRead => {
     const read = await readFromHash(hash, dagRead, FormatVersion.Latest);
-    for await (const entry of read.map.scan(ENTITIES_KEY_PREFIX, true)) {
-      if (!entry[0].startsWith(ENTITIES_KEY_PREFIX)) {
-        break;
+    for (const prefix of ROW_KEY_PREFIXES) {
+      for await (const entry of read.map.scan(prefix, true)) {
+        if (!entry[0].startsWith(prefix)) {
+          break;
+        }
+        diffs.push({
+          op: 'add',
+          key: entry[0],
+          newValue: entry[1],
+        });
       }
-      diffs.push({
-        op: 'add',
-        key: entry[0],
-        newValue: entry[1],
-      });
     }
   });
-
-  branch.advance(undefined, hash, diffs);
+  return diffs;
 }
 
 async function patchBranch(
@@ -411,14 +423,25 @@ async function computeDiffs(
 }
 
 function applyDiffs(diffs: NoIndexDiff, branch: IVMSourceBranch) {
+  for (const prefix of ROW_KEY_PREFIXES) {
+    applyRowDiffs(diffs, prefix, branch);
+  }
+}
+
+/** Applies the diffs of the rows under `prefix`, `e/` or `a/`. */
+function applyRowDiffs(
+  diffs: NoIndexDiff,
+  prefix: string,
+  branch: IVMSourceBranch,
+) {
   for (
-    let i = diffBinarySearch(diffs, ENTITIES_KEY_PREFIX, diff => diff.key);
+    let i = diffBinarySearch(diffs, prefix, diff => diff.key);
     i < diffs.length;
     i++
   ) {
     const diff = diffs[i];
     const {key} = diff;
-    if (!key.startsWith(ENTITIES_KEY_PREFIX)) {
+    if (!key.startsWith(prefix)) {
       break;
     }
     const name = sourceNameFromKey(key);
@@ -440,7 +463,9 @@ function applyDiffs(diffs: NoIndexDiff, branch: IVMSourceBranch) {
         consume(source.push(makeSourceChangeRemove(diff.oldValue as Row)));
         break;
       case 'add': {
-        const rows = takeAddsForSource(diffs, i, name);
+        // The source's own prefix: the key up to the slash after its name.
+        const sourcePrefix = key.slice(0, key.indexOf('/', prefix.length) + 1);
+        const rows = takeAddsForSource(diffs, i, sourcePrefix);
         i += rows.length - 1;
         source.pushAdds(rows);
         break;
@@ -457,15 +482,15 @@ function applyDiffs(diffs: NoIndexDiff, branch: IVMSourceBranch) {
 }
 
 /**
- * Returns the rows of the run of `add` diffs for the source `name` that starts
- * at `start`. Diffs are ordered by key so a table's rows are contiguous.
+ * Returns the rows of the run of `add` diffs under `prefix` (a source's key
+ * prefix, e.g. `e/issue/`) that starts at `start`. Diffs are ordered by key so
+ * a table's rows are contiguous.
  */
 function takeAddsForSource(
   diffs: NoIndexDiff,
   start: number,
-  name: string,
+  prefix: string,
 ): Row[] {
-  const prefix = ENTITIES_KEY_PREFIX + name + '/';
   const rows: Row[] = [];
   for (let i = start; i < diffs.length; i++) {
     const diff = diffs[i];

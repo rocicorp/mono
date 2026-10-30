@@ -145,6 +145,22 @@ test('When what a client stores changes we may need to bump the storage version'
                   tableName: 'issue_labels',
                   id: {['issue_id']: 'i1', ['label_id']: 'l1'},
                 },
+                // The results of a top-level and a relationship aggregate,
+                // which aren't tables of the schema.
+                {
+                  op: 'put',
+                  tableName: 'aggregate:q1',
+                  value: {['_0_key']: 0, ['_0_value']: 3, ['_0_version']: 'a1'},
+                },
+                {
+                  op: 'put',
+                  tableName: 'aggregate:q2:labels',
+                  value: {
+                    ['issue_id']: 'i1',
+                    ['_0_value']: 2,
+                    ['_0_version']: 'a1',
+                  },
+                },
               ],
               mutationsPatch: [
                 {
@@ -194,6 +210,16 @@ test('When what a client stores changes we may need to bump the storage version'
       {
         op: 'del',
         key: 'e/issueLabel/139976146940794883839417541154829961763',
+      },
+      {
+        op: 'put',
+        key: 'a/q1/0',
+        value: {['_0_key']: 0, ['_0_value']: 3, ['_0_version']: 'a1'},
+      },
+      {
+        op: 'put',
+        key: 'a/q2:labels/i1',
+        value: {['issue_id']: 'i1', ['_0_value']: 2, ['_0_version']: 'a1'},
       },
       {op: 'put', key: 'm/c1/1', value: {data: {ok: true}}},
       {
