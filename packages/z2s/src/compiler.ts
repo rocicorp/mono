@@ -8,7 +8,9 @@ import {
 import {hasOwn} from '../../shared/src/has-own.ts';
 import {type JSONValue} from '../../shared/src/json.ts';
 import {must} from '../../shared/src/must.ts';
+import {isPgTextRepresentedType} from '../../zero-cache/src/types/pg-data-type.ts';
 import type {
+  Aggregate,
   AST,
   Bound,
   Condition,
@@ -82,9 +84,84 @@ export function compile(
     },
     zql: zqlSchema.tables,
   };
+  if (ast.aggregate) {
+    // Top-level (ungrouped) aggregate: the result is a single scalar, not rows.
+    // It reduces the same normalized projection a relationship aggregate does,
+    // so values such as timestamps come back in the form ZQL uses. Like the
+    // IVM operator, it reduces the rows left after `start`/`limit` and ignores
+    // `related`. The order only matters for picking those rows.
+    const bounded = ast.limit !== undefined || ast.start !== undefined;
+    const inner = select(
+      spec,
+      {
+        ...ast,
+        aggregate: undefined,
+        related: undefined,
+        orderBy: bounded ? ast.orderBy : undefined,
+      },
+      undefined,
+    );
+    // An aggregate over no rows (other than COUNT) is SQL NULL, and to_json()
+    // of NULL is NULL rather than the JSON text `null` the result parser reads.
+    return sql`SELECT COALESCE(to_json(${aggregateExpr(spec, ast.table, ast.aggregate)}), 'null'::json)::text AS ${ZQL_RESULT_KEY_IDENT}
+      FROM (${inner}) ${ZQL_RESULT_TABLE_IDENT}`;
+  }
+
   return sql`SELECT 
     ${toJSON(ZQL_RESULT_TABLE_KEY, format?.singular)}::text AS ${ZQL_RESULT_KEY_IDENT}
     FROM (${select(spec, ast, format)}) ${ZQL_RESULT_TABLE_IDENT}`;
+}
+
+/**
+ * The SQL aggregate for `aggregate`, over a subquery that exposes the
+ * aggregated column by its client name (as {@link select} does).
+ *
+ * `COUNT(*)` is left as Postgres's 64-bit count: the result parser rejects a
+ * value outside the safe integer range rather than rounding it.
+ *
+ * `SUM`/`AVG` add the values as float8, as the IVM operator adds JS numbers:
+ * Postgres would otherwise sum a `real` in float4 and a `numeric` exactly.
+ *
+ * `MIN`/`MAX` of an enum, or of a type Zero represents as text (`uuid`,
+ * `inet`, …), compare that text byte by byte, as the IVM operator compares
+ * strings. Otherwise an enum would use its declaration order, an `inet` its
+ * network order, and a `uuid` would fail (it has no `MIN`).
+ */
+function aggregateExpr(
+  spec: Spec,
+  zqlTable: string,
+  {fn, field}: Aggregate,
+): SQLQuery {
+  switch (fn) {
+    case 'count':
+      return sql`COUNT(*)`;
+    case 'sum':
+      return sql`SUM(${sql.ident(must(field))}::float8)`;
+    case 'avg':
+      return sql`AVG(${sql.ident(must(field))}::float8)`;
+    case 'min':
+      return sql`MIN(${orderedAggregateArg(spec, zqlTable, must(field))})`;
+    case 'max':
+      return sql`MAX(${orderedAggregateArg(spec, zqlTable, must(field))})`;
+    default:
+      unreachable(fn);
+  }
+}
+
+function orderedAggregateArg(
+  spec: Spec,
+  zqlTable: string,
+  field: string,
+): SQLQuery {
+  const {server} = spec;
+  const column =
+    server.schema[server.mapper.tableName(zqlTable)][
+      server.mapper.columnName(zqlTable, field)
+    ];
+  // `format` gives the type's own text: `::text` adds the netmask to an `inet`.
+  return column.isEnum || isPgTextRepresentedType(column.type)
+    ? sql`format('%s', ${sql.ident(field)}) COLLATE "C"`
+    : sql`${sql.ident(field)}`;
 }
 
 function select(
@@ -258,6 +335,68 @@ function relationshipSubquery(
   parentTable: Table,
 ): SQLQuery {
   const innerAlias = `inner_${relationship.subquery.alias}`;
+  if (relationship.aggregate) {
+    // Aggregate relationship: emit a correlated scalar subquery returning the
+    // aggregate over the matching child rows, instead of aggregating the rows
+    // to JSON. No rows are materialized. The inner subquery exposes columns by
+    // their client names, so the aggregated field is referenced as-is.
+    const {field} = relationship.aggregate;
+    const isJunction = !!relationship.subquery.related?.length;
+    const aggExpr = aggregateExpr(
+      spec,
+      isJunction
+        ? must(relationship.subquery.related)[0].subquery.table
+        : relationship.subquery.table,
+      relationship.aggregate,
+    );
+
+    let inner: SQLQuery;
+    if (isJunction) {
+      // Junction (many-to-many) aggregate: the value lives on the destination,
+      // one hop past the junction. Aggregate over the junction join, exposing
+      // the destination field by its client name so `aggExpr` references it. A
+      // `where` on the destination filters the joined rows before aggregating.
+      const {join, participatingTables} = makeJunctionJoin(spec, relationship);
+      const lastTable = must(last(participatingTables)).table;
+      const destWhere = relationship.subquery.related[0].subquery.where;
+      inner = sql`SELECT ${
+        field
+          ? selectIdent(spec.server, {table: lastTable, zql: field})
+          : sql`NULL`
+      } FROM ${join} WHERE (${makeCorrelator(
+        spec,
+        relationship.correlation.parentField.map(f => ({
+          table: parentTable,
+          zql: f,
+        })),
+        relationship.correlation.childField,
+      )(participatingTables[0].table)})${
+        destWhere ? sql` AND (${where(spec, destWhere, lastTable)})` : sql``
+      }`;
+    } else {
+      // As for a top-level aggregate, the order only matters for picking the
+      // rows a `limit`/`start` keeps; otherwise it is a needless sort per parent.
+      const {subquery} = relationship;
+      const bounded =
+        subquery.limit !== undefined || subquery.start !== undefined;
+      inner = select(
+        spec,
+        bounded ? subquery : {...subquery, orderBy: undefined},
+        undefined,
+        makeCorrelator(
+          spec,
+          relationship.correlation.parentField.map(f => ({
+            table: parentTable,
+            zql: f,
+          })),
+          relationship.correlation.childField,
+        ),
+      );
+    }
+    return sql`(
+        SELECT ${aggExpr} FROM (${inner}) ${sql.ident(innerAlias)}
+      ) as ${sql.ident(relationship.subquery.alias)}`;
+  }
   if (relationship.hidden) {
     const {join, participatingTables} = makeJunctionJoin(spec, relationship);
     const lastTable = must(last(participatingTables)).table;

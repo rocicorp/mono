@@ -1,16 +1,23 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
+import {stringify} from '../../../../shared/src/bigint-json.ts';
+import {h32} from '../../../../shared/src/hash.ts';
 import {deepEqual, type JSONValue} from '../../../../shared/src/json.ts';
 import {getOrInsertComputed} from '../../../../shared/src/map.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {assignProperty} from '../../../../shared/src/objects.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
 import type {Writable} from '../../../../shared/src/writable.ts';
+import {AGGREGATE_TABLE_SEPARATOR} from '../../../../zero-protocol/src/aggregate-table.ts';
 import type {AST, LiteralValue} from '../../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.ts';
-import {buildPipeline} from '../../../../zql/src/builder/builder.ts';
+import {
+  buildPipeline,
+  isAggregateTableName,
+  topLevelAggregateTableName,
+} from '../../../../zql/src/builder/builder.ts';
 import {
   Debug,
   runtimeDebugFlags,
@@ -77,7 +84,8 @@ import {
   getOrCreateLatencyHistogram,
 } from '../../observability/metrics.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
-import {type RowKey} from '../../types/row-key.ts';
+import {versionToLexi} from '../../types/lexi-version.ts';
+import {rowKeyString, type RowKey} from '../../types/row-key.ts';
 import {type ShardID} from '../../types/shards.ts';
 import {
   getSubscriptionState,
@@ -501,11 +509,25 @@ function formatAdvancementBreakdown(
 }
 
 /**
+ * A synthetic aggregate row remembered for catch-up, with the number of
+ * streamed ADDs not yet matched by a REMOVE (one per parent row that shares
+ * it).
+ */
+type AggregateRowEntry = {row: Row; refs: number};
+
+/**
  * Manages the state of IVM pipelines for a given ViewSyncer (i.e. client group).
  */
 export class PipelineDriver {
   // Retain sources until reset or destroy so getRow can serve catch-up reads.
   readonly #tables = new Map<string, TableSource>();
+  /**
+   * The latest synthetic aggregate row streamed for each key, by synthetic
+   * table. Aggregate tables have no {@link TableSource}, so this is what
+   * {@link getRow} reads for them when the view-syncer rebuilds a put patch on
+   * client catch-up. Entries live as long as the query that produced them.
+   */
+  readonly #aggregateRows = new Map<string, Map<string, AggregateRowEntry>>();
   // Query id to pipeline
   readonly #pipelines = new Map<string, Pipeline>();
   /**
@@ -670,6 +692,7 @@ export class PipelineDriver {
     this.#abandoned.clear();
     this.#costBasedAdvanceIncomplete = false;
     this.#tables.clear();
+    this.#aggregateRows.clear();
     this.#allTableNames.clear();
     this.#rowSetSignatures.clear();
     this.#changedRowSetSignatures.clear();
@@ -709,7 +732,12 @@ export class PipelineDriver {
       this.#primaryKeys ?? undefined,
     );
     this.#primaryKeys = primaryKeys;
-    this.#streamer ??= new Streamer(primaryKeys, this.#tableSpecs);
+    this.#streamer ??= new Streamer(
+      primaryKeys,
+      this.#tableSpecs,
+      () => this.currentVersion(),
+      this.#aggregateRows,
+    );
     const {replicaVersion} = getSubscriptionState(db);
     this.#replicaVersion = replicaVersion;
   }
@@ -807,6 +835,7 @@ export class PipelineDriver {
       this.#destroyPipeline(queryID, pipeline, 'destroy');
     }
     this.#tables.clear();
+    this.#aggregateRows.clear();
     this.#rowSetSignatures.clear();
     this.#changedRowSetSignatures.clear();
     this.#storage.destroy();
@@ -1436,6 +1465,24 @@ export class PipelineDriver {
     }
     this.#rowSetSignatures.delete(queryID);
     this.#changedRowSetSignatures.delete(queryID);
+    // The query's synthetic aggregate tables (`aggregate:<queryID>` and
+    // `aggregate:<queryID>:<path>`) go with it. A query hydrated again keeps
+    // them: the rows it streams then must not be stamped with a version below
+    // one already sent for them in the same update (see #stampAggregateRow).
+    // Its rows keep no references either way: a hydration adds them again.
+    const topLevel = topLevelAggregateTableName(queryID);
+    const prefix = topLevel + AGGREGATE_TABLE_SEPARATOR;
+    for (const [table, byKey] of this.#aggregateRows) {
+      if (table === topLevel || table.startsWith(prefix)) {
+        if (stopReason === 'remove-query') {
+          this.#aggregateRows.delete(table);
+        } else {
+          for (const entry of byKey.values()) {
+            entry.refs = 0;
+          }
+        }
+      }
+    }
     if (stopReason !== 'replace-query') {
       // A query that is being hydrated again stays abandoned until that
       // succeeds (see addQuery()).
@@ -1533,6 +1580,9 @@ export class PipelineDriver {
    */
   getRow(table: string, pk: RowKey): Row | undefined {
     assert(this.initialized(), 'Not yet initialized');
+    if (isAggregateTableName(table)) {
+      return this.#aggregateRows.get(table)?.get(rowKeyString(pk))?.row;
+    }
     const source = must(this.#tables.get(table));
     return source.getRow(pk as Row);
   }
@@ -2728,13 +2778,30 @@ export class PipelineDriver {
 class Streamer {
   readonly #primaryKeys: Map<string, PrimaryKey>;
   readonly #tableSpecs: Map<string, LiteAndZqlSpec>;
+  // The current replica state version, stamped onto synthetic aggregate
+  // rows (which have no replicated `_0_version`). Read per row because the
+  // Streamer outlives a single advance.
+  readonly #version: () => string;
+  // See PipelineDriver.#aggregateRows. Absent for the one-off hydrations of
+  // {@link hydrate}, which nothing catches up from.
+  readonly #aggregateRows:
+    | Map<string, Map<string, AggregateRowEntry>>
+    | undefined;
+  // The replica version of the last stamp, and how many stamps were made at
+  // it. See #stampAggregateRow.
+  #stampVersion: string | undefined;
+  #stampCount = 0;
 
   constructor(
     primaryKeys: Map<string, PrimaryKey>,
     tableSpecs: Map<string, LiteAndZqlSpec>,
+    version: () => string,
+    aggregateRows?: Map<string, Map<string, AggregateRowEntry>>,
   ) {
     this.#primaryKeys = primaryKeys;
     this.#tableSpecs = tableSpecs;
+    this.#version = version;
+    this.#aggregateRows = aggregateRows;
   }
 
   /** The row changes for a change pushed out of the pipeline of `queryID`. */
@@ -2791,8 +2858,17 @@ class Streamer {
       return;
     }
 
-    const primaryKey = must(this.#primaryKeys.get(table));
-    const spec = must(this.#tableSpecs.get(table)).tableSpec;
+    // The Aggregate operator emits synthetic rows for a synthetic table that is
+    // not in the replica schema. Key them by the operator's own primary key and
+    // stamp the current state version (they have no replicated `_0_version`),
+    // rather than looking the table up in the replica's tableSpecs.
+    const isAggregate = schema.isAggregate ?? false;
+    const primaryKey = isAggregate
+      ? schema.primaryKey
+      : must(this.#primaryKeys.get(table));
+    const minRowVersion = isAggregate
+      ? undefined
+      : must(this.#tableSpecs.get(table)).tableSpec.minRowVersion;
 
     for (const node of nodes) {
       if (node === 'yield') {
@@ -2803,13 +2879,21 @@ class Streamer {
       let {row} = node;
       const rowKey = getRowKey(primaryKey, row);
       if (op !== ChangeType.REMOVE) {
-        const rowVersion = row[ZERO_VERSION_COLUMN_NAME];
-        if (
-          typeof rowVersion === 'string' &&
-          rowVersion < (spec.minRowVersion ?? '00')
-        ) {
-          row = {...row, [ZERO_VERSION_COLUMN_NAME]: spec.minRowVersion};
+        if (isAggregate) {
+          row = this.#stampAggregateRow(table, rowKey as RowKey, row, op);
+        } else {
+          const rowVersion = row[ZERO_VERSION_COLUMN_NAME];
+          if (
+            typeof rowVersion === 'string' &&
+            rowVersion < (minRowVersion ?? '00')
+          ) {
+            row = {...row, [ZERO_VERSION_COLUMN_NAME]: minRowVersion};
+          }
         }
+      }
+
+      if (op === ChangeType.REMOVE && isAggregate) {
+        this.#releaseAggregateRow(table, rowKeyString(rowKey as RowKey));
       }
 
       yield {
@@ -2832,6 +2916,77 @@ class Streamer {
           );
         }
       }
+    }
+  }
+
+  /**
+   * Stamps a synthetic aggregate row with the replica state version and
+   * remembers it for {@link PipelineDriver.getRow}.
+   *
+   * The CVR only sends a put whose version is strictly greater than the last
+   * one it sent for that row, and the rows of one advance reach it in pages.
+   * An aggregate row is emitted once per changed child, so a stamp is the
+   * replica version plus a count of the stamps made at it, which keeps a row's
+   * stamps strictly increasing however often it is removed and re-added. The
+   * count is a LexiVersion, and a LexiVersion is never a proper prefix of a
+   * later one, so the stamp stays below the next replica version.
+   *
+   * The CVR also takes an equal version to mean equal contents, but the count
+   * starts over in a new process, so the stamp ends in a hash of the contents.
+   */
+  #stampAggregateRow(
+    table: string,
+    rowKey: RowKey,
+    row: Row,
+    op: ChangeType.ADD | ChangeType.EDIT,
+  ): Row {
+    const key = rowKeyString(rowKey);
+    // The replica's state version, a LexiVersion: it never contains a `.`
+    // (minor versions belong to the CVR's own version, not to row versions).
+    const version = this.#version();
+    if (version !== this.#stampVersion) {
+      this.#stampVersion = version;
+      this.#stampCount = 0;
+    }
+    const count = versionToLexi(this.#stampCount++);
+    const hash = h32(stringify(row)).toString(36);
+    const stamped = {
+      ...row,
+      [ZERO_VERSION_COLUMN_NAME]: `${version}.${count}.${hash}`,
+    };
+    this.#rememberAggregateRow(table, key, stamped, op === ChangeType.ADD);
+    return stamped;
+  }
+
+  #rememberAggregateRow(table: string, key: string, row: Row, add: boolean) {
+    const rows = this.#aggregateRows;
+    if (!rows) {
+      return;
+    }
+    let byKey = rows.get(table);
+    if (!byKey) {
+      byKey = new Map();
+      rows.set(table, byKey);
+    }
+    const entry = byKey.get(key);
+    if (entry) {
+      entry.row = row;
+      entry.refs += add ? 1 : 0;
+    } else {
+      byKey.set(key, {row, refs: add ? 1 : 0});
+    }
+  }
+
+  /**
+   * Drops one reference to an aggregate row. Parents that share a correlation
+   * value share the row, so it is forgotten only when the last one is removed,
+   * as the CVR counts it.
+   */
+  #releaseAggregateRow(table: string, key: string) {
+    const byKey = this.#aggregateRows?.get(table);
+    const entry = byKey?.get(key);
+    if (entry && --entry.refs <= 0) {
+      byKey?.delete(key);
     }
   }
 }
@@ -2972,6 +3127,9 @@ export function hydrate(
   return new Streamer(
     buildRowKeys(clientSchema, tableSpecs),
     tableSpecs,
+    // One-off hydrations (analyze-query, benchmarks) are never caught up from
+    // or deduped by a CVR, so the synthetic aggregate version is a constant.
+    () => '00',
   ).streamNodes(hash, input.getSchema(), ChangeType.ADD, input.fetch({}));
 }
 

@@ -3,6 +3,7 @@ import {BTreeSet} from '../../../shared/src/btree-set.ts';
 import {hasOwn} from '../../../shared/src/has-own.ts';
 import {once, toSorted} from '../../../shared/src/iterables.ts';
 import {must} from '../../../shared/src/must.ts';
+import {assignProperty} from '../../../shared/src/objects.ts';
 import type {
   Condition,
   Ordering,
@@ -142,6 +143,11 @@ export class MemorySource implements Source {
 
   get data(): BTreeSet<Row> {
     return this.#getPrimaryIndex().data;
+  }
+
+  /** Whether any input is connected to this source. */
+  get connected(): boolean {
+    return this.#connections.length > 0;
   }
 
   #getSchema(connection: Connection, unordered: boolean): SourceSchema {
@@ -342,12 +348,12 @@ export class MemorySource implements Source {
       scanStart = {};
       for (const [key, dir] of indexSort) {
         if (hasOwn(fetchOrPkConstraint, key)) {
-          scanStart[key] = fetchOrPkConstraint[key];
+          assignProperty(scanStart, key, fetchOrPkConstraint[key]);
         } else {
           if (req.reverse) {
-            scanStart[key] = dir === 'asc' ? maxValue : minValue;
+            assignProperty(scanStart, key, dir === 'asc' ? maxValue : minValue);
           } else {
-            scanStart[key] = dir === 'asc' ? minValue : maxValue;
+            assignProperty(scanStart, key, dir === 'asc' ? minValue : maxValue);
           }
         }
       }

@@ -618,3 +618,171 @@ describe('forkToHead', () => {
     `);
   });
 });
+
+test('advance releases an aggregate source the server empties once no view reads it', () => {
+  const name = 'aggregate:q:comments';
+  const e = ENTITIES_KEY_PREFIX;
+  const row = {issueID: 'i1', value: 2, ['_0_version']: '01'};
+  const add = {op: 'add', key: `${e}${name}/i1`, newValue: row} as const;
+  const del = {op: 'del', key: `${e}${name}/i1`, oldValue: row} as const;
+
+  const branch = new IVMSourceBranch({});
+  const source = branch.getOrCreateAggregateSource(
+    name,
+    {issueID: {type: 'string'}, value: {type: 'number'}},
+    ['issueID'],
+    {
+      table: 'comment',
+      childField: ['issueID'],
+      keyField: ['issueID'],
+      fn: 'count',
+      field: undefined,
+      predicate: undefined,
+    },
+  );
+  const registrations = () => [...branch.getOptimisticAggregates('comment')];
+
+  // While a view reads it, an emptied source stays.
+  const conn = source.connect([['issueID', 'asc']]);
+  branch.advance(undefined, 'h1' as Hash, [add]);
+  branch.advance('h1' as Hash, 'h2' as Hash, [del]);
+  expect(branch.getSource(name)).toBe(source);
+  expect(registrations()).toHaveLength(1);
+
+  // Once nothing reads it, emptying it drops the source and its registration.
+  conn.destroy();
+  branch.advance('h2' as Hash, 'h3' as Hash, [add]);
+  branch.advance('h3' as Hash, 'h4' as Hash, [del]);
+  expect(branch.getSource(name)).toBeUndefined();
+  expect(registrations()).toHaveLength(0);
+});
+
+test('advance releases an aggregate source destroyed before it got a row', () => {
+  const name = 'aggregate:q:comments';
+  const branch = new IVMSourceBranch({});
+  const source = branch.getOrCreateAggregateSource(
+    name,
+    {issueID: {type: 'string'}, value: {type: 'number'}},
+    ['issueID'],
+    {
+      table: 'comment',
+      childField: ['issueID'],
+      keyField: ['issueID'],
+      fn: 'count',
+      field: undefined,
+      predicate: undefined,
+    },
+  );
+  source.connect([['issueID', 'asc']]).destroy();
+  branch.advance(undefined, 'h1' as Hash, []);
+  expect(branch.getSource(name)).toBeUndefined();
+  expect([...branch.getOptimisticAggregates('comment')]).toHaveLength(0);
+});
+
+test('an aggregate source emptied while read is released by a later advance once the view is gone', () => {
+  const name = 'aggregate:q:comments';
+  const e = ENTITIES_KEY_PREFIX;
+  const row = {issueID: 'i1', value: 2, ['_0_version']: '01'};
+  const add = {op: 'add', key: `${e}${name}/i1`, newValue: row} as const;
+  const del = {op: 'del', key: `${e}${name}/i1`, oldValue: row} as const;
+  const other = {
+    op: 'add',
+    key: `${e}aggregate:other:comments/i1`,
+    newValue: row,
+  } as const;
+
+  const branch = new IVMSourceBranch({});
+  const source = branch.getOrCreateAggregateSource(
+    name,
+    {issueID: {type: 'string'}, value: {type: 'number'}},
+    ['issueID'],
+    {
+      table: 'comment',
+      childField: ['issueID'],
+      keyField: ['issueID'],
+      fn: 'count',
+      field: undefined,
+      predicate: undefined,
+    },
+  );
+  const registrations = () => [...branch.getOptimisticAggregates('comment')];
+
+  // The server empties the source while a view reads it, then the view goes.
+  const conn = source.connect([['issueID', 'asc']]);
+  branch.advance(undefined, 'h1' as Hash, [add]);
+  branch.advance('h1' as Hash, 'h2' as Hash, [del]);
+  conn.destroy();
+  expect(branch.getSource(name)).toBe(source);
+
+  // The next advance releases it, even though it touches no row of it.
+  branch.advance('h2' as Hash, 'h3' as Hash, [other]);
+  expect(branch.getSource(name)).toBeUndefined();
+  expect(registrations()).toHaveLength(0);
+});
+
+test('an aggregate source refilled before its view goes is kept', () => {
+  const name = 'aggregate:q:comments';
+  const e = ENTITIES_KEY_PREFIX;
+  const row = {issueID: 'i1', value: 2, ['_0_version']: '01'};
+  const add = {op: 'add', key: `${e}${name}/i1`, newValue: row} as const;
+  const del = {op: 'del', key: `${e}${name}/i1`, oldValue: row} as const;
+
+  const branch = new IVMSourceBranch({});
+  const source = branch.getOrCreateAggregateSource(
+    name,
+    {issueID: {type: 'string'}, value: {type: 'number'}},
+    ['issueID'],
+  );
+  const conn = source.connect([['issueID', 'asc']]);
+  branch.advance(undefined, 'h1' as Hash, [add]);
+  branch.advance('h1' as Hash, 'h2' as Hash, [del]);
+  branch.advance('h2' as Hash, 'h3' as Hash, [add]);
+  conn.destroy();
+  branch.advance('h3' as Hash, 'h4' as Hash, []);
+  expect(branch.getSource(name)).toBe(source);
+});
+
+test('only the main branch registers optimistic aggregates', () => {
+  const optimistic = {
+    table: 'comment',
+    childField: ['issueID'],
+    keyField: ['issueID'],
+    fn: 'count',
+    field: undefined,
+    predicate: undefined,
+  } as const;
+  const columns = {
+    issueID: {type: 'string'},
+    _0_value: {type: 'number'},
+  } as const;
+  const branch = new IVMSourceBranch({});
+  const registrations = () => [...branch.getOptimisticAggregates('comment')];
+
+  // A query materialized on a fork (a mutator's `tx.run`) is never synced, so
+  // nothing would ever release its registration.
+  const fork = branch.fork();
+  fork.getOrCreateAggregateSource(
+    'aggregate:q1:comments',
+    columns,
+    ['issueID'],
+    optimistic,
+  );
+  expect(registrations()).toHaveLength(0);
+
+  // The fork shares the registrations of the main branch's views.
+  branch.getOrCreateAggregateSource(
+    'aggregate:q2:comments',
+    columns,
+    ['issueID'],
+    optimistic,
+  );
+  expect(registrations().map(r => r.aggTableName)).toEqual([
+    'aggregate:q2:comments',
+  ]);
+  expect(
+    Array.from(
+      branch.fork().getOptimisticAggregates('comment'),
+      r => r.aggTableName,
+    ),
+  ).toEqual(['aggregate:q2:comments']);
+});

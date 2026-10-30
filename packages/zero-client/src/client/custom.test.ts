@@ -487,6 +487,96 @@ describe('custom mutators can query the local store during an optimistic mutatio
   });
 });
 
+describe('custom mutators compute aggregates from the rows they can read', () => {
+  const zql = createBuilder(legacySchema);
+  const issue = (id: string, createdAt = 1, closed = false) => ({
+    id,
+    title: `issue ${id}`,
+    description: '',
+    closed,
+    createdAt,
+  });
+
+  test('a top-level aggregate', async () => {
+    const results: unknown[] = [];
+    const z = zeroForTest({
+      schema: legacySchema,
+      mutators: {
+        issue: {
+          count: async (tx: MutatorTx) => {
+            // No rows: the empty values, not undefined.
+            results.push(await tx.run(zql.issue.count()));
+            results.push(await tx.run(zql.issue.max('createdAt')));
+            await tx.mutate.issue.insert(issue('1'));
+            await tx.mutate.issue.insert(issue('2', 5, true));
+            results.push(await tx.run(zql.issue.count()));
+            results.push(
+              await tx.run(zql.issue.where('closed', false).count()),
+            );
+            results.push(await tx.run(zql.issue.max('createdAt')));
+          },
+        },
+      } as const,
+    });
+
+    await z.mutate.issue.count().client;
+    expect(results).toEqual([0, null, 2, 1, 5]);
+  });
+
+  test('a relationship aggregate', async () => {
+    const results: unknown[] = [];
+    const z = zeroForTest({
+      schema: legacySchema,
+      mutators: {
+        issue: {
+          count: async (tx: MutatorTx) => {
+            await tx.mutate.issue.insert(issue('1'));
+            await tx.mutate.issue.insert(issue('2'));
+            for (const [id, createdAt] of [
+              ['c1', 2],
+              ['c2', 3],
+            ] as const) {
+              await tx.mutate.comment.insert({
+                id,
+                authorId: 'u1',
+                issueId: '1',
+                text: '',
+                createdAt,
+              });
+            }
+            await tx.mutate.label.insert({id: 'l1', name: 'bug'});
+            await tx.mutate.issueLabel.insert({issueId: '1', labelId: 'l1'});
+            // An edge to a label that isn't there doesn't count.
+            await tx.mutate.issueLabel.insert({issueId: '2', labelId: 'l2'});
+            results.push(
+              await tx.run(
+                zql.issue
+                  .related('comments', c => c.count())
+                  .related('labels', l => l.count()),
+              ),
+              await tx.run(
+                zql.issue.related('comments', c => c.sum('createdAt')),
+              ),
+            );
+          },
+        },
+      } as const,
+    });
+
+    await z.mutate.issue.count().client;
+    expect(results).toEqual([
+      [
+        expect.objectContaining({id: '1', comments: 2, labels: 1}),
+        expect.objectContaining({id: '2', comments: 0, labels: 0}),
+      ],
+      [
+        expect.objectContaining({id: '1', comments: 5}),
+        expect.objectContaining({id: '2', comments: null}),
+      ],
+    ]);
+  });
+});
+
 describe('rebasing custom mutators', () => {
   let branch: IVMSourceBranch;
   beforeEach(async () => {

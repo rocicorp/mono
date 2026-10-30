@@ -199,6 +199,7 @@ export {
 } from '../../zql/src/query/query-registry.ts';
 export {type MaterializeOptions} from '../../zql/src/query/query.ts';
 export type {
+  AggregateResult,
   AnyQuery,
   HumanReadable,
   PullRow,

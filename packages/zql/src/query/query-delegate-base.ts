@@ -367,6 +367,22 @@ function preloadImpl<
   };
 }
 
+/**
+ * The ID a materialized query is registered with the server under: the hash of
+ * its name and args for a named query, of its AST otherwise.
+ */
+export function queryIDOf({
+  ast,
+  customQueryID,
+}: {
+  readonly ast: AST;
+  readonly customQueryID: CustomQueryID | undefined;
+}): string {
+  return customQueryID
+    ? hashOfNameAndArgs(customQueryID.name, customQueryID.args)
+    : hashOfAST(ast);
+}
+
 function materializeImpl<
   TTable extends keyof TSchema['tables'] & string,
   TSchema extends Schema,
@@ -389,9 +405,7 @@ function materializeImpl<
   const qi = asQueryInternals(query);
   const {ast, format, customQueryID} = qi;
 
-  const queryID = customQueryID
-    ? hashOfNameAndArgs(customQueryID.name, customQueryID.args)
-    : hashOfAST(qi.ast);
+  const queryID = queryIDOf(qi);
   const queryCompleteResolver = resolver<true>();
   // When the delegate cannot build pipelines yet, the view starts over an
   // empty DeferredInput and is hydrated later. A view must not report

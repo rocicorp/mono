@@ -1,4 +1,5 @@
 import {assert} from '../../../shared/src/asserts.ts';
+import {assignProperty} from '../../../shared/src/objects.ts';
 import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import {ChangeIndex} from './change-index.ts';
@@ -246,7 +247,7 @@ export function buildJoinConstraint(
     if (value === null) {
       return undefined;
     }
-    constraint[targetKey[i]] = value;
+    assignProperty(constraint, targetKey[i], value);
   }
   return constraint;
 }

@@ -3,6 +3,23 @@
  */
 export type ValueType = 'string' | 'number' | 'boolean' | 'null' | 'json';
 
+/** The {@link ValueType} of `value` as it appears in a row. */
+export function valueTypeOf(value: unknown): ValueType {
+  if (value === null) {
+    return 'null';
+  }
+  switch (typeof value) {
+    case 'string':
+      return 'string';
+    case 'number':
+      return 'number';
+    case 'boolean':
+      return 'boolean';
+    default:
+      return 'json';
+  }
+}
+
 /**
  * Schema value definition with optional custom type support.
  */

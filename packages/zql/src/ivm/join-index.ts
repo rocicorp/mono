@@ -1,4 +1,5 @@
 import {must} from '../../../shared/src/must.ts';
+import {assignProperty} from '../../../shared/src/objects.ts';
 import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import {canonicalKey} from './join-utils.ts';
@@ -83,7 +84,7 @@ export class JoinIndex {
     if (partition === undefined) {
       const constraint: Record<string, Value> = {};
       for (const key of partitionKey) {
-        constraint[key] = row[key];
+        assignProperty(constraint, key, row[key]);
       }
       partition = {constraint, pks: new Set()};
       partitions.set(partKey, partition);

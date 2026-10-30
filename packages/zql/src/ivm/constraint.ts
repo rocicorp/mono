@@ -1,4 +1,5 @@
 import {assert} from '../../../shared/src/asserts.ts';
+import {assignProperty} from '../../../shared/src/objects.ts';
 import {stringCompare} from '../../../shared/src/string-compare.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {
@@ -131,7 +132,7 @@ export function primaryKeyConstraintFromFilters(
         if (!primary.includes(column.name)) {
           continue;
         }
-        ret[column.name] = column.value;
+        assignProperty(ret, column.name, column.value);
       }
     }
   }

@@ -1,5 +1,6 @@
 import {BTreeSet} from '../../shared/src/btree-set.ts';
 import {hasOwn} from '../../shared/src/has-own.ts';
+import {assignProperty} from '../../shared/src/objects.ts';
 import type {Ordering, OrderPart} from '../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
@@ -284,11 +285,11 @@ export class PendingDelta {
       scanStart = {};
       for (const [key, dir] of indexSort) {
         if (hasOwn(constraint, key)) {
-          scanStart[key] = constraint[key] as Value;
+          assignProperty(scanStart, key, constraint[key] as Value);
         } else if (reverse) {
-          scanStart[key] = dir === 'asc' ? maxValue : minValue;
+          assignProperty(scanStart, key, dir === 'asc' ? maxValue : minValue);
         } else {
-          scanStart[key] = dir === 'asc' ? minValue : maxValue;
+          assignProperty(scanStart, key, dir === 'asc' ? minValue : maxValue);
         }
       }
     }

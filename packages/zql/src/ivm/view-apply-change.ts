@@ -7,6 +7,7 @@ import {must} from '../../../shared/src/must.ts';
 import {assignProperty} from '../../../shared/src/objects.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
+import {AGGREGATE_VALUE_COLUMN} from './aggregate.ts';
 import {type Comparator, type Node} from './data.ts';
 import {skipYields} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
@@ -248,6 +249,34 @@ function applyChangeInternal<M extends Mutate>(
           mutate,
         );
       }
+      default:
+        unreachable(change);
+    }
+  }
+
+  // An `aggregate` relationship (see aggregate.ts) materializes as the bare
+  // scalar value rather than the synthetic child row. It is singular and
+  // childless, so add/edit set the value, remove resets it to the empty value,
+  // no child changes.
+  if (format.aggregate) {
+    switch (change.type) {
+      case 'add':
+      case 'edit':
+        return setProperty(
+          mutate,
+          parentEntry,
+          relationship,
+          change.node.row[AGGREGATE_VALUE_COLUMN],
+        );
+      case 'remove':
+        return setProperty(
+          mutate,
+          parentEntry,
+          relationship,
+          emptyAggregateValue(format.aggregate),
+        );
+      case 'child':
+        return parentEntry;
       default:
         unreachable(change);
     }
@@ -598,9 +627,14 @@ function initializeRelationshipsForNewEntryIfAny(
 
     // Hidden/singular: use applyChange to handle properly
     if (childSchema.isHidden || childFormat.singular) {
-      const newView = childFormat.singular
-        ? undefined
-        : track([] as MutableMetaEntryList);
+      // An aggregate starts at its empty value: a parent whose correlation
+      // value is null gets no aggregate row from the Join, but SQL still gives
+      // it `0` (count) or `null`.
+      const newView = childFormat.aggregate
+        ? emptyAggregateValue(childFormat.aggregate)
+        : childFormat.singular
+          ? undefined
+          : track([] as MutableMetaEntryList);
       result[relationship] = newView;
 
       for (const childNode of getChildNodes(node, relationship)) {
@@ -877,6 +911,13 @@ function arrayWith<M extends Mutate, T>(
     return array as T[];
   }
   return track(array.with(index, value));
+}
+
+/** An aggregate over no rows, as in SQL: `count` is `0`, the rest `null`. */
+function emptyAggregateValue(
+  aggregate: NonNullable<Format['aggregate']>,
+): 0 | null {
+  return aggregate.fn === 'count' ? 0 : null;
 }
 
 function setProperty<

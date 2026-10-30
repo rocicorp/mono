@@ -17,6 +17,8 @@ import type {
   Transaction,
 } from '../../../zql/src/mutate/custom.ts';
 import {createRunnableBuilder} from '../../../zql/src/query/create-builder.ts';
+import {queryIDOf} from '../../../zql/src/query/query-delegate-base.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import {
   type HumanReadable,
   type Query,
@@ -27,6 +29,7 @@ import type {ClientID} from '../types/client-state.ts';
 import {ZeroContext} from './context.ts';
 import {makeCRUDExecutor} from './crud.ts';
 import type {IVMSourceBranch} from './ivm-branch.ts';
+import {toGotQueriesKey} from './keys.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 
 /**
@@ -141,6 +144,7 @@ export class TransactionImpl<
     const zeroContext = newZeroContext(
       lc,
       txData.ivmSources as IVMSourceBranch,
+      repTx,
     );
 
     this.query = createRunnableBuilder(zeroContext, schema);
@@ -207,9 +211,17 @@ function assertValidRunOptions(options: RunOptions | undefined): void {
   );
 }
 
-function newZeroContext(lc: LogContext, ivmBranch: IVMSourceBranch) {
+function newZeroContext(
+  lc: LogContext,
+  ivmBranch: IVMSourceBranch,
+  repTx: WriteTransaction,
+) {
   // The forked branch is already populated, so there is nothing to defer.
-  return new ZeroContext(
+  return new MutatorContext(lc, ivmBranch, repTx).markPipelinesReady();
+}
+
+function newContextArgs(lc: LogContext, ivmBranch: IVMSourceBranch) {
+  return [
     lc,
     ivmBranch,
     () => emptyFunction,
@@ -217,8 +229,48 @@ function newZeroContext(lc: LogContext, ivmBranch: IVMSourceBranch) {
     emptyFunction,
     emptyFunction,
     emptyFunction,
-    applyViewUpdates => applyViewUpdates(),
+    (applyViewUpdates: () => void) => applyViewUpdates(),
     emptyFunction,
     assertValidRunOptions,
-  ).markPipelinesReady();
+  ] as const;
+}
+
+/**
+ * The query delegate of a custom mutator. A query whose result the server has
+ * sent reads its aggregates from the rows the server synced, with this
+ * client's pending changes applied, as a view of it does. Any other query has
+ * no synced aggregate rows to read, so it computes its aggregates from the
+ * rows in the mutator's branch, like every other read the mutator makes. The
+ * server's run of the mutator computes them from all the rows.
+ */
+class MutatorContext extends ZeroContext {
+  override readonly aggregatesFromSource = false;
+  readonly #repTx: WriteTransaction;
+  readonly #synced: ZeroContext;
+
+  constructor(
+    lc: LogContext,
+    ivmBranch: IVMSourceBranch,
+    repTx: WriteTransaction,
+  ) {
+    super(...newContextArgs(lc, ivmBranch));
+    this.#repTx = repTx;
+    this.#synced = new ZeroContext(
+      ...newContextArgs(lc, ivmBranch),
+    ).markPipelinesReady();
+  }
+
+  override async run<
+    TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
+    TReturn,
+  >(
+    query: Query<TTable, TSchema, TReturn>,
+    options?: RunOptions,
+  ): Promise<HumanReadable<TReturn>> {
+    const queryID = queryIDOf(asQueryInternals(query));
+    return (await this.#repTx.has(toGotQueriesKey(queryID)))
+      ? this.#synced.run(query, options)
+      : super.run(query, options);
+  }
 }

@@ -16,11 +16,35 @@ import {using, withRead} from '../../../replicache/src/with-transactions.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {wrapIterable} from '../../../shared/src/iterables.ts';
 import {must} from '../../../shared/src/must.ts';
+import {assignProperty} from '../../../shared/src/objects.ts';
+import type {
+  AggregateFunction,
+  CompoundKey,
+} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
+import {
+  valueTypeOf,
+  type SchemaValue,
+} from '../../../zero-types/src/schema-value.ts';
+import {
+  isAggregateTableName,
+  isTopLevelAggregateTableName,
+  type AggregateOptimisticDelta,
+} from '../../../zql/src/builder/builder.ts';
+import {
+  AGGREGATE_KEY_COLUMN,
+  AGGREGATE_PAYLOAD_COLUMNS,
+  AGGREGATE_VALUE_COLUMN,
+} from '../../../zql/src/ivm/aggregate.ts';
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import {consume} from '../../../zql/src/ivm/stream.ts';
-import {ENTITIES_KEY_PREFIX, sourceNameFromKey} from './keys.ts';
+import {
+  ENTITIES_KEY_PREFIX,
+  ROW_VERSION_COLUMN,
+  sourceNameFromKey,
+} from './keys.ts';
 
 import {
   makeSourceChangeEdit,
@@ -42,9 +66,45 @@ import {
  * ever be a few outstanding diffs to apply given Zero is meant
  * to be run in a connected state.
  */
+/**
+ * Metadata for optimistically updating a synced aggregate when a child row is
+ * locally mutated. Registered when a relationship-aggregate query materializes.
+ */
+export type OptimisticAggregate = {
+  /** The synthetic aggregate table, e.g. `aggregate:<queryID>:<alias>`. */
+  readonly aggTableName: string;
+  /** The correlation columns of a child row, as the client names them. */
+  readonly childField: readonly string[];
+  /**
+   * The same columns as the synced aggregate rows name them (server names), in
+   * the same order. An aggregate row's key is built from these.
+   */
+  readonly keyField: readonly string[];
+  /** The aggregate function (`count`/`sum`/`avg` are optimistically deltaed). */
+  readonly fn: AggregateFunction;
+  /** The aggregated field, for `sum`/`avg` (`undefined` for `count`). */
+  readonly field: string | undefined;
+  /**
+   * The aggregate's `where`, compiled to a per-row predicate. A child row
+   * contributes only when it returns true; `undefined` means no filter (every
+   * child contributes). Only set when the whole `where` is per-row evaluable —
+   * a correlated subquery in the `where` makes the aggregate
+   * server-authoritative (it is never registered for optimism at all).
+   */
+  readonly predicate: ((row: Row) => boolean) | undefined;
+};
+
 export class IVMSourceBranch {
   readonly #sources: Map<string, MemorySource | undefined>;
   readonly #tables: Record<string, TableSchema>;
+  // Registry for optimistic aggregate deltas: child table name -> (synthetic
+  // aggregate table name -> metadata). Lets an optimistic child mutation find
+  // the aggregate rows it should bump. Shared by reference across forks (it is
+  // query metadata, independent of branch row state).
+  readonly #aggregateOptimism: Map<string, Map<string, OptimisticAggregate>>;
+  // Only the main branch registers optimistic aggregates: see
+  // getOrCreateAggregateSource.
+  readonly #isFork: boolean;
   #advanceError: unknown;
   hash: Hash | undefined;
 
@@ -52,9 +112,16 @@ export class IVMSourceBranch {
     tables: Record<string, TableSchema>,
     hash?: Hash,
     sources: Map<string, MemorySource | undefined> = new Map(),
+    aggregateOptimism: Map<
+      string,
+      Map<string, OptimisticAggregate>
+    > = new Map(),
+    isFork = false,
   ) {
     this.#tables = tables;
     this.#sources = sources;
+    this.#aggregateOptimism = aggregateOptimism;
+    this.#isFork = isFork;
     this.hash = hash;
   }
 
@@ -66,15 +133,126 @@ export class IVMSourceBranch {
     }
 
     const schema = this.#tables[name];
-    const source = schema
-      ? new MemorySource(name, schema.columns, schema.primaryKey)
-      : undefined;
+    let source: MemorySource | undefined;
+    if (schema) {
+      source = new MemorySource(name, schema.columns, schema.primaryKey);
+    } else if (isTopLevelAggregateTableName(name)) {
+      // Synthetic source for a synced top-level aggregate (e.g. `count()`). It
+      // is not in the static schema; its shape is fixed (the singleton key
+      // column + the result value), so it can be provisioned from the name
+      // alone — including at reload time, before the query re-materializes. The
+      // server streams the precomputed value here; the underlying rows are never
+      // synced. The payload is typed as `inferAggregateSchema` types it: the
+      // value is null over no rows, and `sum`/`avg` add their components.
+      const columns: Record<string, SchemaValue> = {
+        [AGGREGATE_KEY_COLUMN]: {type: 'number'},
+      };
+      for (const col of AGGREGATE_PAYLOAD_COLUMNS) {
+        columns[col] = {type: 'number', optional: true};
+      }
+      source = new MemorySource(name, columns, [AGGREGATE_KEY_COLUMN]);
+    } else {
+      source = undefined;
+    }
     this.#sources.set(name, source);
     return source;
   }
 
+  /**
+   * Get-or-create the synthetic source for a *relationship* aggregate
+   * (`aggregate:<queryID>:<alias>`), whose shape (the correlation-key columns +
+   * value) cannot be derived from the name. The query builder supplies the
+   * schema when a query materializes; {@link applyDiffs} supplies an inferred
+   * one when persisted rows are replayed before the query re-materializes (e.g.
+   * on reload). Idempotent — the first caller wins.
+   */
+  getOrCreateAggregateSource(
+    name: string,
+    columns: Record<string, SchemaValue>,
+    primaryKey: PrimaryKey,
+    optimistic?: AggregateOptimisticDelta,
+  ): MemorySource {
+    // A fork (a mutator's `tx.run`, or a rebase) shares the main branch's
+    // registry, but only the main branch releases registrations, when the
+    // server empties a source a view of it holds. A query materialized on a
+    // fork is never synced, so its registration would never be released, and
+    // a synced one is registered by the main branch already.
+    if (optimistic && !this.#isFork) {
+      let byTable = this.#aggregateOptimism.get(optimistic.table);
+      if (!byTable) {
+        byTable = new Map();
+        this.#aggregateOptimism.set(optimistic.table, byTable);
+      }
+      // Keyed by aggregate table name so re-registering the same query is a
+      // no-op (idempotent).
+      byTable.set(name, {
+        aggTableName: name,
+        childField: optimistic.childField,
+        keyField: optimistic.keyField,
+        fn: optimistic.fn,
+        field: optimistic.field,
+        predicate: optimistic.predicate,
+      });
+    }
+    const existing = this.#sources.get(name);
+    if (existing) {
+      return existing;
+    }
+    const source = new MemorySource(name, columns, primaryKey);
+    this.#sources.set(name, source);
+    return source;
+  }
+
+  /**
+   * The server names of `columns` of `table`, in the same order. A column with
+   * no server name of its own, or of a table not in the schema, keeps its name.
+   */
+  serverColumnNames(table: string, columns: CompoundKey): CompoundKey {
+    const tableColumns = this.#tables[table]?.columns;
+    return columns.map(
+      c => tableColumns?.[c]?.serverName ?? c,
+    ) as unknown as CompoundKey;
+  }
+
+  /**
+   * The optimistic-aggregate registrations whose child rows live in `table`.
+   * An optimistic insert/delete of such a child row bumps these aggregates.
+   */
+  getOptimisticAggregates(table: string): Iterable<OptimisticAggregate> {
+    return this.#aggregateOptimism.get(table)?.values() ?? [];
+  }
+
   clear() {
     this.#sources.clear();
+  }
+
+  /**
+   * Drops the synthetic aggregate sources that are empty and that no view
+   * reads, with their optimistic registrations. The server deletes an
+   * aggregate's rows when its query is removed, so this is how the query's
+   * client state goes away. A later materialization recreates both.
+   *
+   * Every advance checks every aggregate source, not just the ones it emptied:
+   * the server can empty a source while a view still reads it, and a source
+   * can be destroyed without ever getting a row.
+   *
+   * Only the main branch does this: a fork's sources have no views, and the
+   * registrations are shared with the main branch.
+   */
+  #releaseAggregateSources() {
+    for (const [name, source] of this.#sources) {
+      if (
+        source &&
+        isAggregateTableName(name) &&
+        source.data.size === 0 &&
+        !source.connected
+      ) {
+        this.#sources.delete(name);
+        for (const byTable of this.#aggregateOptimism.values()) {
+          byTable.delete(name);
+        }
+      }
+    }
   }
 
   #throwIfInvalid() {
@@ -98,6 +276,7 @@ export class IVMSourceBranch {
 
     try {
       applyDiffs(diffs, this);
+      this.#releaseAggregateSources();
       this.hash = newHead;
     } catch (e) {
       this.#advanceError = e;
@@ -147,6 +326,10 @@ export class IVMSourceBranch {
           source?.fork(),
         ]),
       ),
+      // Share the optimistic-aggregate registry by reference: it is query
+      // metadata, the same for the fork as for the main branch.
+      this.#aggregateOptimism,
+      true,
     );
   }
 }
@@ -236,7 +419,19 @@ function applyDiffs(diffs: NoIndexDiff, branch: IVMSourceBranch) {
       break;
     }
     const name = sourceNameFromKey(key);
-    const source = must(branch.getSource(name));
+    let source = branch.getSource(name);
+    if (!source && isAggregateTableName(name)) {
+      // A relationship aggregate source isn't derivable from the name, so it
+      // may not exist yet when persisted rows are replayed before the query
+      // re-materializes (reload). Provision it from the row's own shape; the
+      // builder will reuse this same source when the query materializes.
+      const row = (diff.op === 'del' ? diff.oldValue : diff.newValue) as Row;
+      source = branch.getOrCreateAggregateSource(
+        name,
+        ...inferAggregateSchema(row),
+      );
+    }
+    source = must(source);
     switch (diff.op) {
       case 'del':
         consume(source.push(makeSourceChangeRemove(diff.oldValue as Row)));
@@ -277,4 +472,36 @@ function takeAddsForSource(
     rows.push(diff.newValue as Row);
   }
   return rows;
+}
+
+/**
+ * Infers a synthetic aggregate source's schema from one of its rows: the key
+ * columns are every column except the payload and the row-version, with types
+ * read off the actual values. Used only on the reload path, where a
+ * relationship aggregate's rows are replayed before its query (which would
+ * otherwise supply the exact schema) materializes.
+ */
+function inferAggregateSchema(
+  row: Row,
+): [columns: Record<string, SchemaValue>, primaryKey: PrimaryKey] {
+  const columns: Record<string, SchemaValue> = {};
+  const keyColumns: string[] = [];
+  for (const k of Object.keys(row)) {
+    if (k === ROW_VERSION_COLUMN) {
+      continue;
+    }
+    if (AGGREGATE_PAYLOAD_COLUMNS.has(k)) {
+      // The result (and, for sum/avg, its components) — numeric payload, never part of the key.
+      assignProperty(columns, k, {type: 'number', optional: true});
+    } else {
+      assignProperty(columns, k, {type: valueTypeOf(row[k])});
+      keyColumns.push(k);
+    }
+  }
+  keyColumns.sort();
+  // The result column is always present even if absent from this particular row.
+  if (!(AGGREGATE_VALUE_COLUMN in columns)) {
+    columns[AGGREGATE_VALUE_COLUMN] = {type: 'number', optional: true};
+  }
+  return [columns, keyColumns as unknown as PrimaryKey];
 }

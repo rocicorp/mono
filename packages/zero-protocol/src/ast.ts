@@ -164,10 +164,16 @@ const correlationSchema = v.readonlyObject({
 // is the only thing added in v.lazy.  The v.lazy is necessary due to the
 // mutually-recursive types, but v.lazy prevents inference of the resulting
 // type.
+const aggregateSchema = v.readonlyObject({
+  fn: v.literalUnion('count', 'sum', 'avg', 'min', 'max'),
+  field: v.string().optional(),
+});
+
 export const correlatedSubquerySchemaOmitSubquery = v.readonlyObject({
   correlation: correlationSchema,
   hidden: v.boolean().optional(),
   system: v.literalUnion('permissions', 'client', 'test').optional(),
+  aggregate: aggregateSchema.optional(),
 });
 
 export const correlatedSubquerySchema: v.Type<CorrelatedSubquery> =
@@ -189,6 +195,7 @@ export const astSchema: v.Type<AST> = v.readonlyObject({
       exclusive: v.boolean(),
     })
     .optional(),
+  aggregate: aggregateSchema.optional(),
 });
 
 /**
@@ -324,6 +331,14 @@ export type AST = {
   readonly start?: Bound | undefined;
   readonly limit?: number | undefined;
   readonly orderBy?: Ordering | undefined;
+
+  /**
+   * Reduces the query to a single aggregate over its rows: the result is that
+   * scalar rather than a list of rows. As in SQL, it reduces the rows left
+   * after `where`, `start` and `limit`, so `orderBy` matters only when a bound
+   * is present; `related` does not apply. See zql's `ivm/aggregate.ts`.
+   */
+  readonly aggregate?: Aggregate | undefined;
 };
 
 export type Correlation = {
@@ -346,6 +361,24 @@ export type CorrelatedSubquery = {
   // When `hidden` is set to true, this hop will not be included in the output view
   // but its children will be.
   readonly hidden?: boolean | undefined;
+
+  /**
+   * Reduces the subquery to one aggregate per parent row: the relationship
+   * is that scalar rather than the child rows. The aggregate is on this entry,
+   * not on `subquery`, whose own `aggregate` stays unset. See zql's
+   * `ivm/aggregate.ts`.
+   */
+  readonly aggregate?: Aggregate | undefined;
+};
+
+export type AggregateFunction = 'count' | 'sum' | 'avg' | 'min' | 'max';
+
+export type Aggregate = {
+  readonly fn: AggregateFunction;
+  // The column to aggregate. Required for `sum`/`avg`/`min`/`max`; absent for
+  // `count` (which is `count(*)`). Subject to client→server name mapping. For a
+  // junction relationship it names a column of the destination table.
+  readonly field?: string | undefined;
 };
 
 export type ValuePosition = LiteralReference | Parameter | ColumnReference;
@@ -447,6 +480,15 @@ function transformAST(ast: AST, transform: ASTTransform): Required<AST> {
           hidden: r.hidden,
           subquery: transformAST(r.subquery, transform),
           system: r.system,
+          aggregate: r.aggregate
+            ? {
+                fn: r.aggregate.fn,
+                field:
+                  r.aggregate.field === undefined
+                    ? undefined
+                    : columnName(aggregateFieldTable(r), r.aggregate.field),
+              }
+            : undefined,
         }) satisfies Required<CorrelatedSubquery>,
     ),
     start: ast.start
@@ -462,9 +504,30 @@ function transformAST(ast: AST, transform: ASTTransform): Required<AST> {
       : undefined,
     limit: ast.limit,
     orderBy: ast.orderBy?.map(([col, dir]) => [colName(col), dir] as const),
+    aggregate: ast.aggregate
+      ? {
+          fn: ast.aggregate.fn,
+          field:
+            ast.aggregate.field === undefined
+              ? undefined
+              : colName(ast.aggregate.field),
+        }
+      : undefined,
   };
 
   return transformed;
+}
+
+/**
+ * The table an aggregate relationship's `field` belongs to. For a junction
+ * (many-to-many) aggregate the subquery is the junction table and its single
+ * `related` entry is the destination the field lives on. The query builder
+ * rejects any other `related` under an aggregate, so one being present means
+ * a junction.
+ */
+function aggregateFieldTable(r: CorrelatedSubquery): string {
+  const dest = r.subquery.related?.[0];
+  return dest ? dest.subquery.table : r.subquery.table;
 }
 
 function transformWhere(
@@ -579,7 +642,17 @@ function normalizeSubqueries(cond: Condition): Condition {
  * {@link normalizeCondition}).
  */
 export function normalizedAST(ast: AST): NormalizedAST {
-  const {schema, table, alias, where, related, start, limit, orderBy} = ast;
+  const {
+    schema,
+    table,
+    alias,
+    where,
+    related,
+    start,
+    limit,
+    orderBy,
+    aggregate,
+  } = ast;
   // Every field is written, in the same order, so that all normalized ASTs
   // have the same shape (one hidden class) and the same JSON encoding (and
   // thus the same hash) no matter how they were put together. The fields that
@@ -593,6 +666,7 @@ export function normalizedAST(ast: AST): NormalizedAST {
     start,
     limit,
     orderBy,
+    aggregate,
   });
 }
 
@@ -614,6 +688,7 @@ export function tableAST(
     start: undefined,
     limit: undefined,
     orderBy: undefined,
+    aggregate: undefined,
   });
 }
 
@@ -663,7 +738,7 @@ function normalizeRelated(
 export function normalizedRelated(
   related: CorrelatedSubquery,
 ): Required<CorrelatedSubquery> {
-  const {correlation, hidden, subquery, system} = related;
+  const {correlation, hidden, subquery, system, aggregate} = related;
   return {
     correlation: {
       parentField: correlation.parentField,
@@ -672,6 +747,7 @@ export function normalizedRelated(
     hidden,
     subquery,
     system,
+    aggregate,
   };
 }
 

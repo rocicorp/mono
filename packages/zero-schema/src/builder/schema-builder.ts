@@ -1,6 +1,7 @@
 /* oxlint-disable @typescript-eslint/no-explicit-any */
 import {h64} from '../../../shared/src/hash.ts';
 import {assignProperty, mapEntries} from '../../../shared/src/objects.ts';
+import {AGGREGATE_TABLE_PREFIX} from '../../../zero-protocol/src/aggregate-table.ts';
 import {
   normalizeClientSchema,
   type ClientSchema,
@@ -55,6 +56,13 @@ export function createSchema<
 
   options.tables.forEach(table => {
     const {serverName = table.schema.name} = table.schema;
+    for (const name of [table.schema.name, serverName]) {
+      if (name.startsWith(AGGREGATE_TABLE_PREFIX)) {
+        throw new Error(
+          `Table name "${name}" uses the reserved prefix "${AGGREGATE_TABLE_PREFIX}"`,
+        );
+      }
+    }
     if (serverNames.has(serverName)) {
       throw new Error(`Multiple tables reference the name "${serverName}"`);
     }

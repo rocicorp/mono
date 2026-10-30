@@ -5,6 +5,7 @@ import type {DefaultSchema} from '../../../zero-types/src/default-types.ts';
 import type {
   SchemaValueToTSType,
   SchemaValueWithCustomType,
+  ValueType,
 } from '../../../zero-types/src/schema-value.ts';
 import type {
   LastInTuple,
@@ -17,6 +18,39 @@ import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
 type Selector<E extends TableSchema> = keyof E['columns'];
+
+/**
+ * The columns of a table whose values are numbers (nullable or not): the only
+ * ones `sum`/`avg` can aggregate. Anything else fails at runtime, in the IVM
+ * operator's assert or as a Postgres error, so it is rejected here instead.
+ */
+export type NumericSelector<E extends TableSchema> = ColumnsOfType<E, 'number'>;
+
+/**
+ * The columns of a table that `min`/`max` can aggregate: those holding numbers
+ * (timestamps included) or strings (enums included). The IVM operator's value
+ * comparison throws on JSON and arrays, and Postgres has no MIN/MAX over a
+ * boolean, so those are rejected here instead of failing at runtime.
+ */
+export type OrderedSelector<E extends TableSchema> = ColumnsOfType<
+  E,
+  'number' | 'string'
+>;
+
+/**
+ * The columns of `E` whose schema `type` is one of `T`. Columns are picked by
+ * schema type, not TypeScript type, which is `any` for a plain `json` column
+ * and can be `number` for a `json<number>()` one. A schema whose column names
+ * aren't known (as in `AnyQuery`) allows every column.
+ */
+type ColumnsOfType<
+  E extends TableSchema,
+  T extends ValueType,
+> = string extends keyof E['columns']
+  ? keyof E['columns']
+  : {
+      [K in keyof E['columns']]: E['columns'][K] extends {type: T} ? K : never;
+    }[keyof E['columns']];
 
 export type NoCompoundTypeSelector<T extends TableSchema> = Exclude<
   Selector<T>,
@@ -189,10 +223,44 @@ type DestRow<
   ? PullRow<DestTableName<TTable, TSchema, TRelationship>, TSchema>
   : PullRow<DestTableName<TTable, TSchema, TRelationship>, TSchema> | undefined;
 
+declare const aggregateResultBrand: unique symbol;
+/**
+ * Phantom return type of an aggregate query ({@link Query.count} /
+ * {@link Query.sum} / {@link Query.avg} / {@link Query.min} /
+ * {@link Query.max}). A relationship whose subquery
+ * returns this is mapped by {@link AddSubreturn} to the bare scalar `T`
+ * (the aggregate value), rather than an array of rows.
+ */
+export type AggregateResult<T> = {readonly [aggregateResultBrand]: T};
+
+/**
+ * Whether `T` is an {@link AggregateResult}. `any` and `never` would match its
+ * brand, so they are ruled out first.
+ */
+type IsAggregate<T> = 0 extends 1 & T
+  ? false
+  : [T] extends [never]
+    ? false
+    : [T] extends [AggregateResult<unknown>]
+      ? true
+      : false;
+
+/** The value `R` of an {@link AggregateResult<R>}. */
+type AggregateValue<T> = [T] extends [AggregateResult<infer R>] ? R : never;
+
+/** The TypeScript type of a column, used as the result type of `min`/`max`. */
+export type FieldTSType<
+  TTable extends string,
+  TSchema extends ZeroSchema,
+  TField extends string,
+> = SchemaValueToTSType<PullTableSchema<TTable, TSchema>['columns'][TField]>;
+
 type AddSubreturn<TExistingReturn, TSubselectReturn, TAs extends string> = {
-  readonly [K in TAs]: undefined extends TSubselectReturn
-    ? TSubselectReturn
-    : readonly TSubselectReturn[];
+  readonly [K in TAs]: IsAggregate<TSubselectReturn> extends true
+    ? AggregateValue<TSubselectReturn>
+    : undefined extends TSubselectReturn
+      ? TSubselectReturn
+      : readonly TSubselectReturn[];
 } extends infer TNewRelationship
   ? undefined extends TExistingReturn
     ? (Exclude<TExistingReturn, undefined> & TNewRelationship) | undefined
@@ -471,6 +539,57 @@ export interface Query<
   one(): Query<TTable, TSchema, TReturn | undefined, TPinned>;
 
   /**
+   * Reduces this (sub)query to a `count(*)` of the rows left after `where`,
+   * `start` and `limit`, as in SQL: `issue.limit(10).count()` is at most 10.
+   * Inside {@link related} it counts a relationship without materializing its
+   * rows, e.g. `issue.related('comments', c => c.count())`, and the
+   * relationship value on the parent becomes a bare `number`.
+   */
+  count(): Query<TTable, TSchema, AggregateResult<number>>;
+
+  /**
+   * Reduces this (sub)query to `sum(field)`. Like {@link count}, but sums a
+   * numeric column, e.g. `issue.related('comments', c => c.sum('points'))`. The
+   * value is `null` for an empty (or all-null) group, matching SQL.
+   */
+  sum<TSelector extends NumericSelector<PullTableSchema<TTable, TSchema>>>(
+    field: TSelector,
+  ): Query<TTable, TSchema, AggregateResult<number | null>>;
+
+  /**
+   * Reduces this (sub)query to `avg(field)`. The value is `null` for an empty
+   * (or all-null) group, matching SQL.
+   */
+  avg<TSelector extends NumericSelector<PullTableSchema<TTable, TSchema>>>(
+    field: TSelector,
+  ): Query<TTable, TSchema, AggregateResult<number | null>>;
+
+  /**
+   * Reduces this (sub)query to `min(field)`. The result has the field's own
+   * type (so `min` of a string column is a string), and is `null` for an empty
+   * (or all-null) group, matching SQL.
+   */
+  min<TSelector extends OrderedSelector<PullTableSchema<TTable, TSchema>>>(
+    field: TSelector,
+  ): Query<
+    TTable,
+    TSchema,
+    AggregateResult<FieldTSType<TTable, TSchema, TSelector & string> | null>
+  >;
+
+  /**
+   * Reduces this (sub)query to `max(field)`. The result has the field's own
+   * type, and is `null` for an empty (or all-null) group, matching SQL.
+   */
+  max<TSelector extends OrderedSelector<PullTableSchema<TTable, TSchema>>>(
+    field: TSelector,
+  ): Query<
+    TTable,
+    TSchema,
+    AggregateResult<FieldTSType<TTable, TSchema, TSelector & string> | null>
+  >;
+
+  /**
    * @deprecated Use {@link RunOptions} with {@link zero.run} instead.
    */
   run(options?: RunOptions): Promise<HumanReadable<TReturn>>;
@@ -509,8 +628,17 @@ export type MaterializeOptions = PreloadOptions;
 
 /**
  * A helper type that tries to make the type more readable.
+ *
+ * A top-level aggregate query (e.g. `z.query.issue.count()`) has an
+ * {@link AggregateResult} return type and resolves to the bare scalar
+ * rather than a list of rows.
  */
-export type HumanReadable<T> = undefined extends T ? Expand<T> : Expand<T>[];
+export type HumanReadable<T> =
+  IsAggregate<T> extends true
+    ? AggregateValue<T>
+    : undefined extends T
+      ? Expand<T>
+      : Expand<T>[];
 
 /**
  * The kind of results we want to wait for when using {@link run} on {@link Query}.

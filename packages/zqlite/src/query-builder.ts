@@ -10,6 +10,7 @@ import type {
   SchemaValue,
   ValueType,
 } from '../../zero-schema/src/table-schema.ts';
+import {valueTypeOf} from '../../zero-types/src/schema-value.ts';
 import type {Constraint} from '../../zql/src/ivm/constraint.ts';
 import type {
   FetchRequest,
@@ -108,6 +109,27 @@ export function buildSelectQueries(
       ...trailing,
     ]),
   ];
+}
+
+/**
+ * `SELECT COUNT(*)` over the rows a fetch with `constraint` and `filters`
+ * returns. Without an `ORDER BY`, SQLite counts entries of whichever index
+ * covers the `WHERE` rather than reading and sorting the rows.
+ */
+export function buildCountQuery(
+  tableName: string,
+  columns: Record<string, SchemaValue>,
+  constraint: Constraint | undefined,
+  filters: NoSubqueryCondition | undefined,
+): SQLQuery {
+  const where = constraintsToSQL(constraint, columns);
+  if (filters) {
+    where.push(filtersToSQL(filters));
+  }
+  const select = sql`SELECT COUNT(*) FROM ${sql.ident(tableName)}`;
+  return where.length > 0
+    ? sql`${select} WHERE ${sql.join(where, sql` AND `)}`
+    : select;
 }
 
 /**
@@ -379,25 +401,12 @@ function valuePositionToSQL(value: ValuePosition): SQLQuery {
     case 'column':
       return sql.ident(value.name);
     case 'literal':
-      return sql`${toSQLiteType(value.value, getJsType(value.value))}`;
+      return sql`${toSQLiteType(value.value, valueTypeOf(value.value))}`;
     case 'static':
       throw new Error(
         'Static parameters must be replaced before conversion to SQL',
       );
   }
-}
-
-function getJsType(value: unknown): ValueType {
-  if (value === null) {
-    return 'null';
-  }
-  return typeof value === 'string'
-    ? 'string'
-    : typeof value === 'number'
-      ? 'number'
-      : typeof value === 'boolean'
-        ? 'boolean'
-        : 'json';
 }
 
 export function toSQLiteType(v: unknown, type: ValueType): unknown {

@@ -25,7 +25,7 @@ type CaughtRemoveChange = {
   node: CaughtNode;
 };
 
-type CaughtChildChange = {
+export type CaughtChildChange = {
   type: 'child';
   row: Row;
   child: {
@@ -34,7 +34,7 @@ type CaughtChildChange = {
   };
 };
 
-type CaughtEditChange = {
+export type CaughtEditChange = {
   type: 'edit';
   oldRow: Row;
   row: Row;

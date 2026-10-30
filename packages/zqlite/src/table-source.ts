@@ -20,6 +20,7 @@ import {
   type NoSubqueryCondition as StrictNoSubqueryCondition,
 } from '../../zql/src/builder/filter.ts';
 import {ChangeType} from '../../zql/src/ivm/change-type.ts';
+import type {Constraint} from '../../zql/src/ivm/constraint.ts';
 import {
   makeComparator,
   type Comparator,
@@ -54,7 +55,7 @@ import {
   NOT_OVERRIDDEN,
   PendingDelta,
 } from './pending-delta.ts';
-import {toSQLiteType} from './query-builder.ts';
+import {buildCountQuery, toSQLiteType} from './query-builder.ts';
 
 type Statements = {
   readonly cache: StatementCache;
@@ -349,6 +350,7 @@ export class TableSource implements Source {
     const input: SourceInput = {
       getSchema: () => schema,
       fetch: req => this.#fetch(req, connection, fetchSQL),
+      count: constraint => this.#count(constraint, transformedFilters.filters),
       setOutput: output => {
         connection.output = output;
       },
@@ -391,6 +393,34 @@ export class TableSource implements Source {
         toSQLiteType(value, this.#columns[key].type),
       ]),
     ) as Row;
+  }
+
+  /**
+   * The number of rows a fetch with `constraint` would return, counted by
+   * SQLite. `undefined` while a push is in flight: the overlay and pending
+   * writes are applied row by row, so the caller fetches instead.
+   */
+  #count(
+    constraint: Constraint | undefined,
+    filters: StrictNoSubqueryCondition | undefined,
+  ): number | undefined {
+    if (
+      this.#overlay !== undefined ||
+      (this.#delta !== undefined && !this.#delta.isEmpty)
+    ) {
+      return undefined;
+    }
+    const {text, values} = format(
+      buildCountQuery(this.#table, this.#columns, constraint, filters),
+    );
+    return this.#stmts.cache.use(text, ({statement}) => {
+      const count = statement
+        .safeIntegers(false)
+        .pluck(true)
+        .get<number>(...values);
+      recordIndexUsage(statement, this.#table);
+      return count;
+    });
   }
 
   *#fetch(
@@ -849,7 +879,7 @@ export class TableSource implements Source {
     const synced: Writable<SQLiteRow> = {};
     for (const [col, value] of Object.entries(rowKey)) {
       if (Object.hasOwn(this.#columns, col)) {
-        synced[col] = value;
+        assignProperty(synced, col, value);
       }
     }
     return Object.entries(fromSQLiteTypes(this.#columns, synced, this.#table));
@@ -1077,7 +1107,11 @@ export function fromSQLiteTypes(
     if (valueType === undefined) {
       throw invalidColumnError(valueTypes, key, tableName);
     }
-    newRow[key] = fromSQLiteType(valueType.type, row[key], key, tableName);
+    assignProperty(
+      newRow,
+      key,
+      fromSQLiteType(valueType.type, row[key], key, tableName),
+    );
   }
   return newRow;
 }
