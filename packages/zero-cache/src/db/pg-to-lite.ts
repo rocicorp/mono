@@ -7,6 +7,7 @@ import {
   type LiteTypeString,
 } from '../types/lite.ts';
 import {liteTableName} from '../types/names.ts';
+import {lit} from '../types/sql.ts';
 import * as PostgresTypeClass from './postgres-type-class-enum.ts';
 import {
   type ColumnSpec,
@@ -75,7 +76,13 @@ const BOOLEAN_LITERAL_REGEX = /^(true|false)$/;
 // 'string' values, e.g. `'2147483648'::bigint`, `'foo'::text`.
 // Only matches simple type names (word characters) - array types like
 // `::text[]` won't match and will trigger backfill.
-const QUOTED_STRING_WITH_CAST_REGEX = /^('.*')::(\w+)$/;
+//
+// The quoted part must be exactly one string literal: a quote inside it can
+// only appear as the `''` escape, so the expression cannot contain anything
+// but the literal and its cast. The default is interpolated into DDL (SQLite
+// has no parameters in `ALTER TABLE ... ADD ... DEFAULT`), so the literal is
+// re-quoted from its decoded value rather than copied from the expression.
+const QUOTED_STRING_WITH_CAST_REGEX = /^'((?:[^']|'')*)'::\w+$/;
 
 // Empty array constructor syntax: ARRAY[]::text[], ARRAY[]::integer[], etc.
 // Maps to '[]' (JSON empty array) in SQLite.
@@ -125,7 +132,7 @@ export function mapPostgresToLiteDefault(
   // Quoted strings with type casts: extract just the quoted part
   const match = QUOTED_STRING_WITH_CAST_REGEX.exec(defaultExpression);
   if (match) {
-    return match[1];
+    return lit(match[1].replaceAll("''", "'"));
   }
 
   // Empty arrays: ARRAY[]::type[] or '{}'::type[] → '[]'
