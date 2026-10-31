@@ -1009,6 +1009,24 @@ export const zeroOptions = {
       ],
     },
 
+    secret: {
+      type: v.string().optional(),
+      desc: [
+        `A shared secret that authenticates {bold view-syncers} to the {bold change-streamer}.`,
+        `View-syncers present it when connecting to the {bold replication-manager}, which`,
+        `refuses replication connections that do not present it. Set it to the same value`,
+        `on the replication-manager and on every view-syncer.`,
+        ``,
+        `In a single-node configuration zero-cache generates a secret for its own workers,`,
+        `so no value is needed. In a multi-node configuration it should always be set: while`,
+        `it is unset, the replication-manager accepts replication connections from anything`,
+        `that can reach its {bold change-streamer-port}, and logs a warning on startup.`,
+        ``,
+        `For a rolling upgrade, set the secret on the view-syncers before setting it on the`,
+        `replication-manager, as a replication-manager without a secret accepts both.`,
+      ],
+    },
+
     /** @deprecated */
     mode: {
       type: v.literalUnion('dedicated', 'discover').optional(() => 'dedicated'),
@@ -2011,7 +2029,11 @@ function getAccess(
   return undefined;
 }
 
-function passwordMatches(
+/**
+ * Compares `password` with `expected` in constant time. Returns `false` when
+ * no `expected` password is configured.
+ */
+export function passwordMatches(
   password: string | undefined,
   expected: string | undefined,
 ): boolean {
@@ -2022,15 +2044,10 @@ function passwordMatches(
   // Use constant-time comparison to prevent timing attacks
   const passwordBuffer = Buffer.from(password ?? '');
   const expectedBuffer = Buffer.from(expected);
-
-  // Handle length mismatch in constant time
-  if (passwordBuffer.length !== expectedBuffer.length) {
-    // Perform dummy comparison to maintain constant timing
-    timingSafeEqual(expectedBuffer, expectedBuffer);
-    return false;
-  }
-
-  return timingSafeEqual(passwordBuffer, expectedBuffer);
+  return (
+    passwordBuffer.length === expectedBuffer.length &&
+    timingSafeEqual(passwordBuffer, expectedBuffer)
+  );
 }
 
 let hasWarned = false;

@@ -6,6 +6,7 @@ import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
+import {passwordMatches} from '../../config/zero-config.ts';
 import type {IncomingMessageSubset} from '../../types/http.ts';
 import {pgClient, type PostgresDB} from '../../types/pg.ts';
 import {type Worker} from '../../types/processes.ts';
@@ -61,8 +62,18 @@ const SUBSCRIBE_PATH = `/replication/v${PROTOCOL_VERSION}/subscribe`;
 // plus upgrade) before abandoning the attempt.
 const CONNECT_TIMEOUT_MS = 10_000;
 
+// The `Authorization` header scheme with which the client presents the
+// shared secret and the server reads it.
+const BEARER_PREFIX = 'Bearer ';
+
 type Options = HttpOptions & {
   startupDelayMs: number;
+  /**
+   * The shared secret that `/replication` connections must present in a
+   * `Authorization: Bearer` header. When unset, connections are accepted
+   * without one.
+   */
+  secret?: string | undefined;
   config?:
     | Pick<NormalizedZeroConfig, 'adminPassword' | 'operatorPassword'>
     | undefined;
@@ -143,7 +154,26 @@ export class ChangeStreamerHttpServer extends HttpService {
     }
   };
 
+  /**
+   * Checks the connection's credentials against the configured secret,
+   * closing the connection and returning `false` if they do not match.
+   */
+  #authorize(ws: WebSocket, req: RequestHeaders): boolean {
+    const {secret} = this.#opts;
+    if (secret === undefined) {
+      return true;
+    }
+    if (passwordMatches(getBearerToken(req), secret)) {
+      return true;
+    }
+    closeWithError(this._lc, ws, 'unauthorized', PROTOCOL_ERROR);
+    return false;
+  }
+
   readonly #reserveSnapshot = async (ws: WebSocket, req: RequestHeaders) => {
+    if (!this.#authorize(ws, req)) {
+      return;
+    }
     this.#ensureChangeStreamerStarted('incoming snapshot reservation');
     try {
       const url = new URL(
@@ -166,6 +196,9 @@ export class ChangeStreamerHttpServer extends HttpService {
   };
 
   readonly #changes = async (ws: WebSocket, req: RequestHeaders) => {
+    if (!this.#authorize(ws, req)) {
+      return;
+    }
     try {
       const ctx = getSubscriberContext(req);
       if (ctx.mode === 'serving') {
@@ -191,6 +224,9 @@ export class ChangeStreamerHttpServer extends HttpService {
    * which it restored the backup.
    */
   readonly #subscribe = async (ws: WebSocket, req: RequestHeaders) => {
+    if (!this.#authorize(ws, req)) {
+      return;
+    }
     let reservation: Source<SnapshotMessage> | undefined;
     const outbound = Subscription.create<string | PreSerializedBatch>();
 
@@ -387,15 +423,18 @@ export class ChangeStreamerHttpClient
   /** Only used for discovery, i.e. when there is no `changeStreamerURI`. */
   readonly #changeDB: PostgresDB | undefined;
   readonly #changeStreamerURI: string | undefined;
+  readonly #secret: string | undefined;
 
   constructor(
     lc: LogContext,
     shardID: ShardID,
     changeDB: string,
     changeStreamerURI: string | undefined,
+    secret: string | undefined,
   ) {
     this.#lc = lc;
     this.#shardID = shardID;
+    this.#secret = secret;
     // Create a pg client with a single short-lived connection for the purpose
     // of change-streamer discovery (i.e. ChangeDB as DNS). This is not
     // needed if the change-streamer URI is specified.
@@ -493,6 +532,9 @@ export class ChangeStreamerHttpClient
     // routed to a live endpoint.
     const ws = new WebSocket(uri + `?${params.toString()}`, {
       handshakeTimeout: CONNECT_TIMEOUT_MS,
+      ...(this.#secret !== undefined
+        ? {headers: {authorization: BEARER_PREFIX + this.#secret}}
+        : {}),
     });
 
     const outbound = Subscription.create<SubscribeUpstream>();
@@ -507,6 +549,13 @@ export class ChangeStreamerHttpClient
 }
 
 type RequestHeaders = Pick<IncomingMessage, 'url' | 'headers'>;
+
+function getBearerToken(req: RequestHeaders): string | undefined {
+  const auth = req.headers.authorization;
+  return auth?.startsWith(BEARER_PREFIX)
+    ? auth.substring(BEARER_PREFIX.length)
+    : undefined;
+}
 
 function getSubscriberContext(req: RequestHeaders): SubscriberContext {
   const url = new URL(req.url ?? '', req.headers.origin ?? 'http://localhost');

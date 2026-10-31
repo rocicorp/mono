@@ -108,14 +108,23 @@ export default async function runWorker(
       uri: changeStreamerURI = runningLocalChangeStreamer
         ? `http://localhost:${port}/`
         : undefined,
+      secret,
     },
     replicationLag: {initialReadinessThresholdMs, maxReadinessDelayMs},
   } = config;
+  if (!runningLocalChangeStreamer && secret === undefined) {
+    lc.warn?.(
+      `No --change-streamer-secret is configured: connecting to the ` +
+        `change-streamer without one. Set ZERO_CHANGE_STREAMER_SECRET to ` +
+        `the same value on the replication-manager and on every view-syncer.`,
+    );
+  }
   const changeStreamer = new ChangeStreamerHttpClient(
     lc,
     shard,
     change.db,
     changeStreamerURI,
+    secret,
   );
 
   // Remote view-syncers restore from the replication-manager, which supplies
