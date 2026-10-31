@@ -34,6 +34,20 @@ describe('patch', () => {
 
     const cases: Case[] = [
       {
+        name: 'bulk put Unicode keys in UTF-8 order',
+        existing: new Map(),
+        patch: [
+          {op: 'clear'},
+          {op: 'put', key: '\u{10000}', value: 'supplementary'},
+          {op: 'put', key: '\ue000', value: 'private-use'},
+          {op: 'put', key: '\u{10000}', value: 'replacement'},
+        ],
+        expMap: new Map([
+          ['\ue000', 'private-use'],
+          ['\u{10000}', 'replacement'],
+        ]),
+      },
+      {
         name: 'put',
         patch: [{op: 'put', key: 'foo', value: 'bar'}],
         expErr: undefined,

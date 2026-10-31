@@ -1,4 +1,5 @@
 import {Lock} from '@rocicorp/lock';
+import {compareUTF8} from 'compare-utf8';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
@@ -154,7 +155,7 @@ export class BTreeWrite extends BTreeRead {
         ([k, v], i) => {
           if (i > 0) {
             assert(
-              entries[i - 1][0] < k,
+              compareUTF8(entries[i - 1][0], k) < 0,
               `putMany entries must be sorted and unique`,
             );
           }
