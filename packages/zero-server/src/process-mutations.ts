@@ -47,6 +47,11 @@ import {separatorRe} from './push-processor.ts';
 export interface TransactionProviderHooks {
   updateClientMutationID: () => Promise<{lastMutationID: number | bigint}>;
   writeMutationResult: (result: MutationResponse) => Promise<void>;
+  /**
+   * `args.clientGroupID` is always the client group of the push being
+   * processed; a cleanup that names any other client group fails the push
+   * before this is called.
+   */
   deleteMutationResults: (args: CleanupResultsArg) => Promise<void>;
 }
 
@@ -350,6 +355,14 @@ export async function handleMutateRequest<
       lc,
     );
 
+    // A cleanup that names another client group fails the push before any
+    // mutation in it runs, so the push changes nothing at all.
+    for (const m of pushBody.mutations) {
+      if (m.type === 'custom' && m.name === CLEANUP_RESULTS_MUTATION_NAME) {
+        assertCleanupClientGroup(m, pushBody.clientGroupID);
+      }
+    }
+
     // Each mutation goes through three phases:
     //   1. Pre-transaction: user logic that runs before `transact` is called. If
     //      this throws we still advance LMID and persist the failure result.
@@ -367,12 +380,16 @@ export async function handleMutateRequest<
           await processCleanupResultsMutation(
             normalized.dbProvider,
             m,
+            pushBody.clientGroupID,
             parsedQueryParams,
             lc,
           );
           // No response added - this is fire-and-forget
           processedCount++;
         } catch (error) {
+          if (error instanceof CleanupClientGroupMismatch) {
+            throw error;
+          }
           lc.warn?.(
             `Failed to process cleanup mutation for client ${m.clientID}`,
             error,
@@ -634,7 +651,11 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
         return ret;
       } catch (error) {
         if (error instanceof OutOfOrderMutation) {
-          this.#lc.error?.(error);
+          this.#lc.error?.(
+            // log-leak-ignore -- mutation and client ids, not row data
+            `Expected mutation ID ${error.lastMutationID}`,
+            error,
+          );
           throw error;
         }
 
@@ -815,14 +836,47 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
 }
 
 export class OutOfOrderMutation extends Error {
+  /**
+   * The mutation ID the client should have sent. Kept out of the message,
+   * which is returned to the client; the server logs it separately.
+   */
+  readonly lastMutationID: number | bigint;
+
   constructor(
     clientID: string,
     receivedMutationID: number,
     lastMutationID: number | bigint,
   ) {
     super(
-      `Client ${clientID} sent mutation ID ${receivedMutationID} but expected ${lastMutationID}`,
+      `Client ${clientID} sent mutation ID ${receivedMutationID} out of order`,
     );
+    this.lastMutationID = lastMutationID;
+  }
+}
+
+/**
+ * A cleanup mutation named a client group other than the one the push is
+ * for. A push may only clean up results of its own client group, so this
+ * fails the push instead of being ignored like other cleanup errors.
+ */
+class CleanupClientGroupMismatch extends Error {
+  constructor() {
+    super('Cleanup mutation does not target the client group of this push');
+  }
+}
+
+/**
+ * Throws {@link CleanupClientGroupMismatch} when a cleanup mutation names a
+ * client group other than `clientGroupID`, the client group of the push.
+ * Arguments that do not parse are left for the processing step to report.
+ */
+function assertCleanupClientGroup(
+  mutation: CustomMutation,
+  clientGroupID: string,
+): void {
+  const parseResult = v.test(mutation.args[0], cleanupResultsArgSchema);
+  if (parseResult.ok && parseResult.value.clientGroupID !== clientGroupID) {
+    throw new CleanupClientGroupMismatch();
   }
 }
 
@@ -882,12 +936,18 @@ function getObjectAtPath(
  * Processes internal cleanup mutation that deletes acknowledged mutation results
  * from the upstream database. This runs without LMID tracking since it's an
  * internal operation.
+ *
+ * `clientGroupID` is the client group of the push. The cleanup must name the
+ * same client group; otherwise it throws {@link CleanupClientGroupMismatch}
+ * without touching the database. The push is checked for this before any
+ * mutation runs; the check here only guards this function's own callers.
  */
 async function processCleanupResultsMutation<
   D extends Database<ExtractTransactionType<D>>,
 >(
   dbProvider: D,
   mutation: CustomMutation,
+  clientGroupID: string,
   queryParams: Params,
   lc: LogContext,
 ): Promise<void> {
@@ -898,6 +958,10 @@ async function processCleanupResultsMutation<
     return;
   }
   const args: CleanupResultsArg = parseResult.value;
+
+  if (args.clientGroupID !== clientGroupID) {
+    throw new CleanupClientGroupMismatch();
+  }
 
   // Determine clientID for transaction input based on cleanup type
   // Note: legacy format without type field is treated as single
@@ -913,7 +977,7 @@ async function processCleanupResultsMutation<
     },
     {
       upstreamSchema: queryParams.schema,
-      clientGroupID: args.clientGroupID,
+      clientGroupID,
       clientID,
       mutationID: 0,
     },
