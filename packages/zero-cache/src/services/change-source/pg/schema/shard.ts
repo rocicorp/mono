@@ -240,6 +240,11 @@ export function dropShard(appID: string, shardID: string | number): string {
 const internalShardConfigSchema = v.object({
   publications: v.array(v.string()),
   ddlDetection: v.boolean(),
+  // The secret that the shard's upstream functions include in ddl events,
+  // and the WAL position before which events are accepted without one.
+  // See `createEventFunctionStatements()`.
+  ddlSecret: v.string().nullable().optional(),
+  ddlSecretLsn: v.string().nullable().optional(),
 });
 
 export type InternalShardConfig = v.Infer<typeof internalShardConfigSchema>;
@@ -544,9 +549,14 @@ export async function getInternalShardConfig(
   sql: PostgresDB,
   shard: ShardID,
 ): Promise<InternalShardConfig> {
+  const schema = sql(upstreamSchema(shard));
   const result = await sql`
-    SELECT "publications", "ddlDetection"
-      FROM ${sql(upstreamSchema(shard))}."shardConfig";
+    SELECT "shardConfig"."publications",
+           "shardConfig"."ddlDetection",
+           "publishedSchema"."secret" AS "ddlSecret",
+           "publishedSchema"."secretLsn" AS "ddlSecretLsn"
+      FROM ${schema}."shardConfig"
+      LEFT JOIN ${schema}."publishedSchema" ON true;
   `;
   assert(
     result.length === 1,

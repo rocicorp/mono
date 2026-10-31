@@ -1,3 +1,4 @@
+import {timingSafeEqual} from 'node:crypto';
 import {
   PG_ADMIN_SHUTDOWN,
   PG_INSUFFICIENT_PRIVILEGE,
@@ -1235,6 +1236,39 @@ class ChangeMaker {
     }
   }
 
+  /**
+   * Any session that can call `pg_logical_emit_message()` can emit a message
+   * with the shard's ddl prefix. Only events that carry the shard's secret,
+   * which the upstream functions read from a table in the shard's schema
+   * (see `createEventFunctionStatements()`), are applied. Events emitted
+   * before the secret was installed (by functions that predate it) are
+   * accepted without one.
+   */
+  #checkDdlEventOrigin(lsn: bigint, json: unknown) {
+    const {ddlSecret, ddlSecretLsn} = this.#shardConfig;
+    const secret =
+      typeof json === 'object' && json !== null && 'secret' in json
+        ? json.secret
+        : undefined;
+    if (typeof secret === 'string') {
+      if (ddlSecret && equalSecrets(secret, ddlSecret)) {
+        return;
+      }
+    } else if (
+      (secret === undefined || secret === null) &&
+      ddlSecretLsn &&
+      lsn <= toBigInt(ddlSecretLsn)
+    ) {
+      return;
+    }
+    throw new Error(
+      `ddl event at ${fromBigInt(lsn)} does not carry the secret of the ` +
+        `${upstreamSchema(this.#shard)} schema's event functions ` +
+        `(secret ${typeof secret === 'string' ? 'mismatch' : 'absent'}, ` +
+        `installed at ${ddlSecretLsn ?? 'unknown'})`,
+    );
+  }
+
   // The lastReplicationEvent is stored to understand the context
   // of the next one.
   #lastReplicationEvent: ReplicationEvent | undefined;
@@ -1244,7 +1278,9 @@ class ChangeMaker {
     lsn: bigint,
     msg: MessageMessage,
   ): ChangeStreamData[] {
-    const event = parseLogicalMessageContent(lc, msg, replicationEventSchema);
+    const json = parseLogicalMessageJSON(lc, msg);
+    this.#checkDdlEventOrigin(lsn, json);
+    const event = parseReplicationEvent(lc, msg, json);
     lc = lc
       .withContext('lsn', fromBigInt(lsn))
       .withContext('tag', event.event.tag)
@@ -1903,8 +1939,7 @@ function summarizeSchemaForLog(schema: PublishedSchema) {
 }
 
 function summarizeReplicationEventForLog(event: ReplicationEvent): JSONObject {
-  const {schema, ...rest} = event;
-  const {previousSchema, ...eventWithoutSchemas} = rest;
+  const {schema, previousSchema, secret: _, ...eventWithoutSchemas} = event;
   return {
     ...eventWithoutSchemas,
     ...(schema !== undefined && {schema: summarizeSchemaForLog(schema)}),
@@ -1977,4 +2012,46 @@ function parseLogicalMessageContent<T>(
     });
     throw e;
   }
+}
+
+function parseLogicalMessageJSON(lc: LogContext, msg: MessageMessage): unknown {
+  const {content} = msg;
+  const str =
+    content instanceof Buffer
+      ? content.toString('utf-8')
+      : new TextDecoder().decode(content);
+  try {
+    return JSON.parse(str);
+  } catch (e) {
+    lc.error?.(`unable to parse logical message content: ${String(e)}`, {
+      message: {...msg, content: str},
+    });
+    throw e;
+  }
+}
+
+function parseReplicationEvent(
+  lc: LogContext,
+  msg: MessageMessage,
+  json: unknown,
+): ReplicationEvent {
+  try {
+    return v.parse(json, replicationEventSchema, 'passthrough');
+  } catch (e) {
+    // The event's secret must not end up in the logs.
+    const content =
+      typeof json === 'object' && json !== null && 'secret' in json
+        ? {...json, secret: '<redacted>'}
+        : json;
+    lc.error?.(`unable to parse ddl event: ${String(e)}`, {
+      message: {...msg, content: stringify(content)},
+    });
+    throw e;
+  }
+}
+
+function equalSecrets(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  return bufA.length === bufB.length && timingSafeEqual(bufA, bufB);
 }

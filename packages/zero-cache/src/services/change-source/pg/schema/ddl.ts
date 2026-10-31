@@ -1,3 +1,4 @@
+import {randomBytes} from 'node:crypto';
 import {literal as lit} from 'pg-format';
 import {assert} from '../../../../../../shared/src/asserts.ts';
 import * as v from '../../../../../../shared/src/valita.ts';
@@ -45,6 +46,10 @@ const ddlEventSchema = triggerEvent.extend({
   // functions (in which case backfill decisions fall back to the command
   // tag heuristic), and `null` when there are no such columns.
   newColumns: v.record(v.array(v.number())).nullable().optional(),
+  // The shard's DDL event secret (see `createEventFunctionStatements`).
+  // Absent in messages from upstream functions that predate it, and null
+  // if the functions ran before the secret was installed.
+  secret: v.string().nullable().optional(),
 });
 
 /**
@@ -171,11 +176,17 @@ const DDL_SERIALIZATION_LOCK = 0x3c6b8468f1bac0b0n;
 export function createEventFunctionStatements(
   shard: ShardConfig,
   includePartialIndexes = true,
+  secret = newDdlEventSecret(),
 ) {
   const {appID, shardNum, publications} = shard;
   const schema = id(upstreamSchema(shard)); // e.g. "{APP_ID}_{SHARD_ID}"
   return /*sql*/ `
 CREATE SCHEMA IF NOT EXISTS ${schema};
+
+-- Serialize with DDL statements (see emit_ddl_start) so that the WAL
+-- position recorded in "secretLsn" below is past every event emitted by the
+-- previous version of update_schemas().
+SELECT pg_advisory_xact_lock(${DDL_SERIALIZATION_LOCK});
 
 CREATE OR REPLACE FUNCTION ${schema}.get_trigger_context()
 RETURNS record AS $$
@@ -209,11 +220,23 @@ AS $$
 $$ LANGUAGE sql;
 
 
--- Stores the most recent published schema
+-- Stores the most recent published schema, and the secret that the
+-- functions below include in every ddl event. The zero-cache only applies
+-- events that carry the secret, so that a ddl event must come from these
+-- functions (which run as the role executing the DDL, with access to this
+-- table) rather than from any session that can call pg_logical_emit_message().
+--
+-- "secretLsn" is the WAL position at which the secret was installed. Events
+-- emitted before it, by a version of update_schemas() that predates the
+-- secret, are accepted without one.
 CREATE TABLE IF NOT EXISTS ${schema}."publishedSchema" (
   current JSON,
+  "secret" TEXT,
+  "secretLsn" TEXT,
   exists BOOL PRIMARY KEY DEFAULT true CHECK (exists)
 );
+ALTER TABLE ${schema}."publishedSchema" ADD COLUMN IF NOT EXISTS "secret" TEXT;
+ALTER TABLE ${schema}."publishedSchema" ADD COLUMN IF NOT EXISTS "secretLsn" TEXT;
 
 INSERT INTO ${schema}."publishedSchema" (current) VALUES (${schema}.schema_specs())
   ON CONFLICT (exists) DO 
@@ -225,9 +248,11 @@ RETURNS void AS $$
 DECLARE
   prev_schema_specs JSON;
   schema_specs JSON;
+  event_secret TEXT;
   message TEXT;
 BEGIN
-  SELECT current FROM ${schema}."publishedSchema" INTO prev_schema_specs;
+  SELECT current, "secret" FROM ${schema}."publishedSchema"
+    INTO prev_schema_specs, event_secret;
   SELECT ${schema}.schema_specs() INTO schema_specs;
   
   IF prev_schema_specs::text != schema_specs::text THEN
@@ -251,7 +276,8 @@ BEGIN
     'previousSchema', prev_schema_specs,
     'schema', schema_specs,
     'event', json_build_object('tag', tag),
-    'context', ${schema}.get_trigger_context()
+    'context', ${schema}.get_trigger_context(),
+    'secret', event_secret
   ) INTO message;
 
   PERFORM pg_logical_emit_message(true, '${appID}/${shardNum}/ddl', message);
@@ -370,7 +396,19 @@ BEGIN
 
 END
 $$ LANGUAGE plpgsql;
+
+
+-- Installs the secret once. Re-running these statements (e.g. to upgrade the
+-- functions) must keep the secret that events already in the WAL carry.
+UPDATE ${schema}."publishedSchema"
+  SET "secret" = ${lit(secret)},
+      "secretLsn" = pg_current_wal_insert_lsn()::text
+  WHERE "secret" IS NULL;
 `;
+}
+
+function newDdlEventSecret() {
+  return randomBytes(32).toString('hex');
 }
 
 // Exported for testing.
