@@ -12,6 +12,10 @@ export function handleHeapzRequest(
   req: FastifyRequest,
   res: FastifyReply,
 ) {
+  if (!config.enableHeapz) {
+    void res.code(404).send('Not Found');
+    return;
+  }
   const credentials = auth(req);
   if (!isAdminPasswordValid(lc, config, credentials?.pass)) {
     void res

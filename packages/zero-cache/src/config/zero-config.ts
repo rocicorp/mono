@@ -1400,6 +1400,17 @@ export const zeroOptions = {
     ],
   },
 
+  enableHeapz: {
+    type: v.boolean().optional(() => true),
+    desc: [
+      `Serves heap snapshots of the zero-cache process at {bold /heapz} to the`,
+      `{bold admin-password}. A heap snapshot contains everything the process`,
+      `holds in memory, including the auth tokens, cookies and API keys of`,
+      `connected clients. Set this to {bold false} to turn the endpoint off`,
+      `while keeping the other diagnostic endpoints and the inspector.`,
+    ],
+  },
+
   websocketCompression: {
     type: v.boolean().optional(() => false),
     desc: [

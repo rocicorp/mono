@@ -57,10 +57,10 @@ export async function handleInspect(
   }
 
   // Authentication is per connection. In development mode the password is
-  // not required.
+  // not required unless one is configured.
   if (
     body.op !== 'authenticate' &&
-    !isDevelopmentMode() &&
+    !(isDevelopmentMode() && !config.adminPassword) &&
     !client.isInspectorAuthenticated()
   ) {
     lc.info?.(
