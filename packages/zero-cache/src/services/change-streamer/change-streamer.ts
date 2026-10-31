@@ -249,9 +249,16 @@ const subscriptionErrorSchema = v.object({
   type: v.number(), // ErrorType
   message: v.string().optional(),
   /**
-   * The replica version of the replication-manager, sent with
-   * {@link ErrorType.WrongReplicaVersion} so that a subscriber with a newer
-   * replica can avoid restoring an older one.
+   * Sent with {@link ErrorType.WrongReplicaVersion}: `true` when the
+   * replication-manager's replica is older than the subscriber's, so that a
+   * subscriber with a newer replica can avoid restoring an older one.
+   */
+  olderReplica: v.boolean().optional(),
+  /**
+   * @deprecated The replica version of the replication-manager, sent by
+   * older replication-managers in place of `olderReplica`. New
+   * replication-managers do not disclose their replica version to a rejected
+   * subscriber.
    */
   replicaVersion: v.string().optional(),
 });

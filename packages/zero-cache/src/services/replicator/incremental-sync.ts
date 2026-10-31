@@ -287,12 +287,14 @@ export class IncrementalSyncer {
               const {
                 type,
                 message: msg,
+                olderReplica,
                 replicaVersion: rmVersion,
               } = message[1];
               if (
                 type === WrongReplicaVersion &&
-                rmVersion !== undefined &&
-                rmVersion < replicaVersion &&
+                // Older replication-managers disclose their version instead.
+                (olderReplica ??
+                  (rmVersion !== undefined && rmVersion < replicaVersion)) &&
                 this.#olderReplicaVersionRejections++ <
                   MAX_OLDER_REPLICA_VERSION_REJECTIONS
               ) {
@@ -302,7 +304,7 @@ export class IncrementalSyncer {
                 // reach a different replication-manager.
                 lc.warn?.(
                   `replication-manager is at an older replica version ` +
-                    `(${rmVersion}) than ${replicaVersion}. reconnecting`,
+                    `than ${replicaVersion}. reconnecting`,
                 );
                 break;
               }
