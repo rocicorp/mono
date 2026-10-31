@@ -1,6 +1,9 @@
+import {LogContext} from '@rocicorp/logger';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import {randomUint64} from '../../../shared/src/random-uint64.ts';
 import {TestMemStore} from '../kv/test-mem-store.ts';
+import {withRead, withWrite} from '../with-transactions.ts';
 import {
   IDBDatabasesStore,
   PROFILE_ID_KEY,
@@ -117,6 +120,64 @@ test('clear', async () => {
   });
   expect(await store.getDatabases()).toEqual({
     testName2: testDB2,
+  });
+});
+
+describe('a malformed registry', () => {
+  const valid: IndexedDBDatabase = {
+    name: 'valid',
+    replicacheName: 'app',
+    replicacheFormatVersion: 7,
+    schemaVersion: '1',
+  };
+  const other: IndexedDBDatabase = {...valid, name: 'other'};
+
+  async function setUp(dbs: unknown) {
+    const kv = new TestMemStore();
+    await withWrite(kv, w => w.put('dbs', dbs as never));
+    const sink = new TestLogSink();
+    const store = new IDBDatabasesStore(
+      _ => kv,
+      new LogContext('debug', {}, sink),
+    );
+    return {kv, sink, store};
+  }
+
+  test.each([
+    ['a missing field', {name: 'bad'}],
+    ['a field of the wrong type', {...valid, name: 'bad', schemaVersion: 1}],
+    ['an entry that is not an object', 'bad'],
+    ['a key that is not its name', {...valid, name: 'not-bad'}],
+  ])('reads past an entry with %s', async (_, bad) => {
+    const {sink, store} = await setUp({valid, bad});
+    expect(await store.getDatabases()).toEqual({valid});
+    expect(sink.messages).toEqual([
+      [
+        'warn',
+        {},
+        ['Ignoring malformed entry "bad" in the databases registry.'],
+      ],
+    ]);
+  });
+
+  test('reads a record that is not an object as empty', async () => {
+    const {sink, store} = await setUp(['not', 'a', 'record']);
+    expect(await store.getDatabases()).toEqual({});
+    expect(sink.messages).toEqual([
+      ['warn', {}, ['Ignoring the databases registry: it is not an object.']],
+    ]);
+  });
+
+  test('putDatabase succeeds and writes the record back without it', async () => {
+    const {kv, store} = await setUp({valid, bad: {name: 'bad'}});
+    expect(await store.putDatabase(other)).toEqual({valid, other});
+    expect(await withRead(kv, r => r.get('dbs'))).toEqual({valid, other});
+  });
+
+  test('deleteDatabases succeeds and writes the record back without it', async () => {
+    const {kv, store} = await setUp({valid, other, bad: {name: 'bad'}});
+    await store.deleteDatabases(['other']);
+    expect(await withRead(kv, r => r.get('dbs'))).toEqual({valid});
   });
 });
 
