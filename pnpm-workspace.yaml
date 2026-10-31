@@ -28,6 +28,15 @@ auditConfig:
     # deepmerge >=4.2.0 <=4.3.1, via @expo/config (Expo devDependencies). No
     # 4.3.2 on npm yet.
     - GHSA-gcqx-w48m-w2h4
+    # minimatch <11.0.1 (3.x, 5.x, 9.x and 10.x via glob, Expo, Docusaurus and
+    # other dev tooling). Only fixed in minimatch 11, which is not
+    # API-compatible with those majors, so it cannot be overridden. The
+    # amplification needs attacker-controlled patterns.
+    - GHSA-g3hv-75wg-m249
+    # glob >=9.0.0 <=14.0.1 (10.x and 13.x via the same dev tooling). Only
+    # fixed in glob 14, a new major. The bypass only affects callers that rely
+    # on an AbortSignal to bound a walk.
+    - GHSA-3g3m-2fjr-6pw4
 
 minimumReleaseAgeExclude:
   - '@rocicorp/zero-virtual@0.7.0'
@@ -69,8 +78,10 @@ overrides:
   esbuild: '0.28.2'
   fast-uri@>=3.0.0 <3.1.9: ^3.1.9
   fast-uri@>=4.0.0 <4.2.3: ^4.2.3
+  follow-redirects@>=1.16.0 <1.16.2: ^1.16.2
   hono@<4.12.25: ^4.12.25
   image-size@>=2.0.0 <2.0.3: ^2.0.3
+  joi@>=17.1.1 <17.13.9: ^17.13.9
   js-yaml@>=4.0.0 <4.3.2: ^4.3.2
   lodash@>=4.0.0 <=4.17.23: ^4.17.24
   minimatch@>=10.0.0 <10.2.1: ^10.2.1
