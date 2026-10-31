@@ -38,6 +38,7 @@ import {
   TARGET_UTILIZATION,
 } from '../services/view-syncer/drain-coordinator.ts';
 import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
+import {clientGroupLogID} from '../types/client-group-log-id.ts';
 import type {ClientGroupStatusMessage, Worker} from '../types/processes.ts';
 import type {Subscription} from '../types/subscription.ts';
 import {installWebSocketReceiver} from '../types/websocket-handoff.ts';
@@ -741,7 +742,7 @@ export class Syncer implements SingletonService {
 
     this.#lc.debug?.(
       'creating connection',
-      params.clientGroupID,
+      clientGroupLogID(params.clientGroupID),
       params.clientID,
     );
     recordConnectionAttempted();
@@ -780,7 +781,7 @@ export class Syncer implements SingletonService {
     try {
       initialAuth = await resolveAuth(
         this.#lc
-          .withContext('clientGroupID', clientGroupID)
+          .withContext('clientGroupID', clientGroupLogID(clientGroupID))
           .withContext('clientID', clientID),
         // no previous auth, since this is a new connection, and resolveAuth is
         // connection scoped, not client group scoped
@@ -794,7 +795,7 @@ export class Syncer implements SingletonService {
         this.#lc.warn?.(
           'Rejecting sync connection during initial auth resolution',
           {
-            clientGroupID,
+            clientGroupID: clientGroupLogID(clientGroupID),
             clientID,
             incomingUserID,
             hasProvidedAuth,
@@ -817,7 +818,7 @@ export class Syncer implements SingletonService {
     // context manager and its refs on the mutagen and pusher services.
     if (ws.readyState !== WebSocket.OPEN) {
       this.#lc.debug?.('websocket closed while resolving auth', {
-        clientGroupID,
+        clientGroupID: clientGroupLogID(clientGroupID),
         clientID,
         readyState: ws.readyState,
       });
@@ -867,7 +868,7 @@ export class Syncer implements SingletonService {
         // connect request was delivered twice (e.g. duplicated upstream).
         this.#lc.warn?.(
           `duplicate connection for client ${clientID} with the same wsID ${params.wsID}, closing existing connection`,
-          {clientGroupID},
+          {clientGroupID: clientGroupLogID(clientGroupID)},
         );
       }
       this.#lc.debug?.(
@@ -937,7 +938,7 @@ export class Syncer implements SingletonService {
     if (params.initConnectionMsg) {
       this.#lc.debug?.(
         'handling init connection message from sec header',
-        params.clientGroupID,
+        clientGroupLogID(params.clientGroupID),
         params.clientID,
       );
       await connection.handleInitConnection(
@@ -1005,7 +1006,9 @@ export class Syncer implements SingletonService {
 
       // Pick an arbitrary view syncer to force drain.
       for (const vs of this.#viewSyncers.getServices()) {
-        this.#lc.debug?.(`draining view-syncer ${vs.id} (forced)`);
+        this.#lc.debug?.(
+          `draining view-syncer ${clientGroupLogID(vs.id)} (forced)`,
+        );
         // When this drain or an elective drain completes, the forceDrainTimeout will
         // resolve after the next drain interval.
         void vs.stop();

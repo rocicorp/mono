@@ -32,6 +32,7 @@ import {
   getOrCreateCounter,
   getOrCreateLatencyHistogram,
 } from '../../observability/metrics.ts';
+import {clientGroupLogID} from '../../types/client-group-log-id.ts';
 import type {ViewSyncerDownstream} from '../../types/downstream.ts';
 import {
   getLogLevel,
@@ -529,7 +530,7 @@ export class ClientHandler {
       if (clientGroupID !== this.#clientGroupID) {
         this.#lc.error?.(
           `Received clients row for wrong clientGroupID. Ignoring.`,
-          clientGroupID,
+          clientGroupLogID(clientGroupID),
         );
       } else {
         lmids[clientID] = lastMutationID;

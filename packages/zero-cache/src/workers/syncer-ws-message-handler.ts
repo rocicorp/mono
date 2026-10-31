@@ -15,6 +15,7 @@ import {
   type ConnectionSelector,
 } from '../services/view-syncer/connection-context-manager.ts';
 import {type ViewSyncer} from '../services/view-syncer/view-syncer.ts';
+import {clientGroupLogID} from '../types/client-group-log-id.ts';
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 import type {ConnectParams} from './connect-params.ts';
 import type {HandlerResult, MessageHandler} from './connection.ts';
@@ -61,7 +62,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
     this.#lc = lc
       .withContext('connection')
       .withContext('clientID', clientID)
-      .withContext('clientGroupID', clientGroupID)
+      .withContext('clientGroupID', clientGroupLogID(clientGroupID))
       .withContext('wsID', wsID);
     this.#clientGroupID = clientGroupID;
     this.#pusher = pusher;
@@ -97,9 +98,10 @@ export class SyncerWsMessageHandler implements MessageHandler {
                     type: 'fatal',
                     error: {
                       kind: ErrorKind.InvalidPush,
+                      // Neither ID is included: the message is also logged
+                      // as the reason the connection is closed.
                       message:
-                        `clientGroupID in mutation "${clientGroupID}" does not match ` +
-                        `clientGroupID of connection "${this.#clientGroupID}`,
+                        'clientGroupID in mutation does not match clientGroupID of connection',
                       origin: ErrorOrigin.ZeroCache,
                     },
                   } satisfies HandlerResult,

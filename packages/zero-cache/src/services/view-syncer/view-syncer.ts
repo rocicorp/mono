@@ -56,6 +56,7 @@ import {
   getOrCreateValueHistogram,
 } from '../../observability/metrics.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
+import {clientGroupLogID} from '../../types/client-group-log-id.ts';
 import type {ViewSyncerDownstream} from '../../types/downstream.ts';
 import {
   getLogLevel,
@@ -742,7 +743,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
       // If all clients have disconnected, cancel all pending work.
       if (await this.#checkForShutdownConditionsInLock()) {
-        this.#lc.info?.(`closing clientGroupID=${this.id}`);
+        this.#lc.info?.(`closing clientGroupID=${clientGroupLogID(this.id)}`);
         // Reject #initialized so that run() unblocks if it is still
         // waiting on readyState(). This is a no-op if already resolved.
         this.#initialized.reject(shutdownBeforeInitializationError());
@@ -870,13 +871,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // transforming custom queries (dependency on authData) and building
       // pipelines (dependency on cvr.clientSchema).
       if ((await this.readyState()) === 'draining') {
-        this.#lc.debug?.(`draining view-syncer ${this.id} before running`);
+        this.#lc.debug?.(
+          `draining view-syncer ${clientGroupLogID(this.id)} before running`,
+        );
         void this.stop();
       }
       for await (const replicaState of this.#stateChanges) {
         const {state} = replicaState;
         if (this.#drainCoordinator.shouldDrain()) {
-          this.#lc.debug?.(`draining view-syncer ${this.id} (elective)`);
+          this.#lc.debug?.(
+            `draining view-syncer ${clientGroupLogID(this.id)} (elective)`,
+          );
           break;
         }
         assert(state === 'version-ready', 'state should be version-ready'); // This is the only state change used.
@@ -983,7 +988,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       await this.#cleanup();
     } catch (e) {
       this.#lc[getLogLevel(e)]?.(
-        `stopping view-syncer ${this.id}: ${String(e)}`,
+        `stopping view-syncer ${clientGroupLogID(this.id)}: ${String(e)}`,
         e,
       );
       await this.#cleanup(e);
@@ -993,7 +998,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       await this.#cvrStore
         .flushed(this.#lc)
         .catch(e => this.#lc[getLogLevel(e)]?.(e));
-      this.#lc.info?.(`view-syncer ${this.id} finished`);
+      this.#lc.info?.(`view-syncer ${clientGroupLogID(this.id)} finished`);
       this.#stopped.resolve();
     }
   }
@@ -2527,7 +2532,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     let coverageLC = lc
       .withContext('appID', this.#shard.appID)
       .withContext('shardNum', this.#shard.shardNum)
-      .withContext('clientGroupID', this.id)
+      .withContext('clientGroupID', clientGroupLogID(this.id))
       .withContext('queryCoverageMode', 'shadow')
       .withContext('hydrationPath', hydrationPath)
       .withContext('totalHydratedQueries', totalHydratedQueries)
@@ -3000,7 +3005,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     // at most once per query per breaker window.
     const shape = queryShape(query.ast);
     lc.warn('Query hydration aborted for exceeding the hydration timeout', {
-      clientGroupID: this.id,
+      clientGroupID: clientGroupLogID(this.id),
       queryHash: query.id,
       transformationHash: query.transformationHash,
       ...(query.name !== undefined && {queryName: query.name}),
@@ -3040,7 +3045,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
     lc.warn('Slow query materialization', {
       zeroEvent: 'query-slow-hydration',
-      clientGroupID: this.id,
+      clientGroupID: clientGroupLogID(this.id),
       queryHash: query.id,
       transformationHash: query.transformationHash,
       ...(query.name !== undefined && {queryName: query.name}),
@@ -3066,7 +3071,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ): void {
     this.#hydrationCircuitBreakerRejections.add(1);
     lc.warn?.('Query rejected by its open hydration circuit breaker', {
-      clientGroupID: this.id,
+      clientGroupID: clientGroupLogID(this.id),
       queryHash: query.id,
       transformationHash: query.transformationHash,
       ...(query.name !== undefined && {queryName: query.name}),
@@ -3159,7 +3164,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       });
     }
     lc.info?.('view-syncer hydration budget exhausted', {
-      clientGroupID: this.id,
+      clientGroupID: clientGroupLogID(this.id),
       hydrationBudgetMs: hydrationBudget.limitMs,
       hydrationElapsedMs: elapsedMs,
       activeHydratedQueries,
@@ -4108,7 +4113,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
     lc.info?.(
       'Client group hydrated queries again in its batches of changes instead of pushing the changes to them',
-      {clientGroupID: this.id, ...log},
+      {clientGroupID: clientGroupLogID(this.id), ...log},
     );
     this.#rebuildsLoggedAt = now;
     this.#rebuildLog = newRebuildLog();
@@ -4209,7 +4214,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#lc.info?.(
       'Client group is waiting between batches: its sync worker is over its share target',
       {
-        clientGroupID: this.id,
+        clientGroupID: clientGroupLogID(this.id),
         waits: log.waits,
         waitedMs: log.waitedMs,
         lastWaitMs: waitedMs,
@@ -4459,7 +4464,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       if (err) {
         client.fail(err);
       } else {
-        client.close(`closed clientGroupID=${this.id}`);
+        client.close(`closed clientGroupID=${clientGroupLogID(this.id)}`);
       }
     }
 
