@@ -14,6 +14,7 @@ import {
 import {isDevelopmentMode} from '../config/normalize.ts';
 import type {CustomQueryTransformer} from '../custom-queries/transform-query.ts';
 import type {ConnectionContext} from '../services/view-syncer/connection-context-manager.ts';
+import {InspectorAuthLimiter} from '../services/view-syncer/inspect-auth-limiter.ts';
 import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 
@@ -43,6 +44,12 @@ const NO_OWNER: AuthOwner = {};
  * instances of the InspectorDelegate.
  */
 const authenticatedClientGroupIDs = new Map<ClientGroupID, AuthOwner>();
+
+/**
+ * Limits attempts at the admin password. Also outside of the class, so that
+ * the counters cover every client group served by the worker.
+ */
+const authLimiter = new InspectorAuthLimiter();
 
 /**
  * `query-update-server` is reported for every change pushed into every
@@ -127,6 +134,10 @@ export class InspectorDelegate implements MetricsDelegate {
 
   addQuery(queryID: string, ast: AST): void {
     this.#queryIDToAST.set(queryID, ast);
+  }
+
+  get authLimiter(): InspectorAuthLimiter {
+    return authLimiter;
   }
 
   /**

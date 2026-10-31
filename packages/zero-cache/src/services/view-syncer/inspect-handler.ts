@@ -118,9 +118,14 @@ export async function handleInspect(
         break;
 
       case 'authenticate': {
-        const password = body.value;
-        const ok = isAdminPasswordValid(lc, config, password);
+        const {authLimiter} = inspectorDelegate;
+        // A blocked attempt is not checked against the password, so that the
+        // block cannot be ended by guessing right.
+        const ok =
+          !authLimiter.isBlocked(clientGroupID, client) &&
+          isAdminPasswordValid(lc, config, body.value);
         if (ok) {
+          authLimiter.recordSuccess(clientGroupID, client);
           inspectorDelegate.setAuthenticated(clientGroupID, authOwner);
         } else {
           inspectorDelegate.clearAuthenticated(clientGroupID);
@@ -132,6 +137,12 @@ export async function handleInspect(
           value: ok,
         });
 
+        if (!ok && authLimiter.recordFailure(clientGroupID, client)) {
+          lc.warn?.(
+            'Closing connection after repeated failed inspector authentication',
+          );
+          client.close('too many failed inspector authentication attempts');
+        }
         break;
       }
 
