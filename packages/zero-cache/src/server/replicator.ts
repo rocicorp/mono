@@ -50,6 +50,7 @@ import {
   type ForceCheckpointConfig,
 } from '../services/replicator/write-worker-client.ts';
 import {
+  childWorker,
   parentWorker,
   singleProcessMode,
   type DrainRequestedMessage,
@@ -67,6 +68,7 @@ import {
 } from '../workers/replicator.ts';
 import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
+import {SERVING_CHECKPOINTER_URL} from './worker-urls.ts';
 
 // Default LogContext, overridden in runWorker
 let lc = new LogContext('info', {}, consoleLogSink);
@@ -157,7 +159,7 @@ export default async function runWorker(
   // Create the write worker for async SQLite writes. Enable write-path
   // checkpoint backpressure only for the backup replicator on litestream v5,
   // which owns the replica litestream backs up.
-  const pragmas = getPragmaConfig(fileMode);
+  const pragmas = getPragmaConfig();
   const checkpoint: ForceCheckpointConfig | null =
     mode === 'backup' &&
     config.litestream.backupURL &&
@@ -176,14 +178,20 @@ export default async function runWorker(
   const workerClient = new ThreadWriteWorkerClient();
   await workerClient.init(dbPath, mode, pragmas, config.log, checkpoint);
 
-  // The backup-replicator manages the litestream backup process. It is
-  // started after the write worker has prepared the db file in order to
-  // avoid contending on the sqlite lock.
+  // The backup-replicator manages the litestream backup process, which
+  // checkpoints the backup replica. A serving replicator instead manages a
+  // checkpointer for its replica. Either is started after the write worker
+  // has prepared the db file in order to avoid contending on the sqlite lock.
   const processes = new SupportingProcesses(lc, parent);
   if (mode === 'backup') {
     processes.add(
       startReplicaBackupProcess(lc, config.litestream, dbPath),
       'litestream',
+    );
+  } else {
+    processes.add(
+      childWorker(SERVING_CHECKPOINTER_URL, env, dbPath),
+      'serving-checkpointer',
     );
   }
 

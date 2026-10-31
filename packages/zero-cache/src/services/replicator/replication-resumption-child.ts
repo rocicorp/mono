@@ -244,7 +244,7 @@ export default async function runWorker(
     parent,
     failpoint,
   );
-  await worker.init(dbPath, 'serving', getPragmaConfig('serving'), {
+  await worker.init(dbPath, 'serving', getPragmaConfig(), {
     level: 'error',
     format: 'text',
   });
