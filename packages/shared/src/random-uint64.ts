@@ -1,8 +1,8 @@
-export function randomUint64(): bigint {
-  // Generate two random 32-bit unsigned integers using Math.random()
-  const high = Math.floor(Math.random() * 0xffffffff); // High 32 bits
-  const low = Math.floor(Math.random() * 0xffffffff); // Low 32 bits
+import {getRandomValues} from './random-values.ts';
 
-  // Combine the high and low parts to form a 64-bit unsigned integer
+export function randomUint64(): bigint {
+  // Two random 32-bit words rather than a BigUint64Array, which Hermes did
+  // not have as of September 2024. The result is the same either way.
+  const [high, low] = getRandomValues(new Uint32Array(2));
   return (BigInt(high) << 32n) | BigInt(low);
 }

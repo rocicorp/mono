@@ -1,11 +1,11 @@
-import {getNonCryptoRandomValues} from '../../../shared/src/random-values.ts';
+import {getRandomValues} from '../../../shared/src/random-values.ts';
 import type {ClientID} from './ids.ts';
 
 let sessionID = '';
 function getSessionID() {
   if (sessionID === '') {
     const buf = new Uint8Array(4);
-    getNonCryptoRandomValues(buf);
+    getRandomValues(buf);
     sessionID = Array.from(buf, x => x.toString(16)).join('');
   }
   return sessionID;
