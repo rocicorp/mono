@@ -99,16 +99,29 @@ jobs:
     needs: plan
     if: needs.plan.outputs.mirror == 'true'
     environment: swift-release
+    permissions:
+      contents: read
+      id-token: write # For the github-sts token exchange.
     env:
-      MIRROR_TOKEN: ${{ secrets.ZERO_SWIFT_MIRROR_TOKEN }}
       MIRROR_REPO: wevm/zero-swift
       VERSION: ${{ needs.plan.outputs.version }}
     steps:
+      # Short-lived token for the mirror, authorized by
+      # swift/.github/sts/mirror.sts.yaml (published to the mirror's main).
+      - name: Fetch mirror token
+        id: sts
+        uses: wevm/actions/.github/actions/github-sts@b518cf981b50a4c745a8b7335fc693f34b108a75 # main
+        with:
+          scope: wevm/zero-swift
+          policy: mirror
+          ttl: 5m
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
           persist-credentials: false
       - name: Split and push
+        env:
+          MIRROR_TOKEN: ${{ steps.sts.outputs.token }}
         run: |
           set -euo pipefail
           git subtree split --prefix=swift -b mirror

@@ -1,0 +1,10 @@
+# Lets wevm/zero's Swift Release workflow (main, swift-release environment)
+# push the subtree split of swift/ and its release tags to this mirror.
+# Lives in wevm/zero under swift/ so each mirror push publishes it here.
+subject: repo:wevm@109633172/zero@1425053827:environment:swift-release
+claim_pattern:
+  ref: refs/heads/main
+  workflow_ref: 'wevm/zero/\.github/workflows/swift-release\.yml@refs/heads/main'
+permissions:
+  contents: write
+max_ttl: 5m
