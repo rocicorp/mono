@@ -16,6 +16,7 @@ import Fastify, {type FastifyReply, type FastifyRequest} from 'fastify';
 import {jwtVerify, SignJWT, type JWK} from 'jose';
 import {nanoid} from 'nanoid';
 import {assert} from '../../../packages/shared/src/asserts.ts';
+import {getBearerToken} from '../../../packages/shared/src/headers.ts';
 import {must} from '../../../packages/shared/src/must.ts';
 import {dbProvider, sql} from '../server/db.ts';
 import {registerMachineRoutes} from '../server/machine-routes.ts';
@@ -300,16 +301,15 @@ registerMachineRoutes(fastify, maybeVerifyAuth);
 async function maybeVerifyAuth(
   headers: IncomingHttpHeaders,
 ): Promise<JWTData | undefined> {
-  let {authorization} = headers;
-  if (!authorization) {
+  if (!headers.authorization) {
     return undefined;
   }
 
+  const authorization = getBearerToken(headers.authorization);
   assert(
-    authorization.toLowerCase().startsWith('bearer '),
+    authorization !== undefined,
     'Expected Authorization header to start with "Bearer "',
   );
-  authorization = authorization.substring('Bearer '.length);
 
   const jwk = process.env.VITE_PUBLIC_JWK;
   if (!jwk) {

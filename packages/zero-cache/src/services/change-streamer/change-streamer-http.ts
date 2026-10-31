@@ -3,6 +3,10 @@ import websocket from '@fastify/websocket';
 import type {LogContext} from '@rocicorp/logger';
 import WebSocket from 'ws';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
+import {
+  bearerAuthorization,
+  getBearerToken,
+} from '../../../../shared/src/headers.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
@@ -61,10 +65,6 @@ const SUBSCRIBE_PATH = `/replication/v${PROTOCOL_VERSION}/subscribe`;
 // Max time for a client to establish the /subscribe websocket (TCP connect
 // plus upgrade) before abandoning the attempt.
 const CONNECT_TIMEOUT_MS = 10_000;
-
-// The `Authorization` header scheme with which the client presents the
-// shared secret and the server reads it.
-const BEARER_PREFIX = 'Bearer ';
 
 type Options = HttpOptions & {
   startupDelayMs: number;
@@ -163,7 +163,7 @@ export class ChangeStreamerHttpServer extends HttpService {
     if (secret === undefined) {
       return true;
     }
-    if (passwordMatches(getBearerToken(req), secret)) {
+    if (passwordMatches(getBearerToken(req.headers.authorization), secret)) {
       return true;
     }
     closeWithError(this._lc, ws, 'unauthorized', PROTOCOL_ERROR);
@@ -533,7 +533,7 @@ export class ChangeStreamerHttpClient
     const ws = new WebSocket(uri + `?${params.toString()}`, {
       handshakeTimeout: CONNECT_TIMEOUT_MS,
       ...(this.#secret !== undefined
-        ? {headers: {authorization: BEARER_PREFIX + this.#secret}}
+        ? {headers: {authorization: bearerAuthorization(this.#secret)}}
         : {}),
     });
 
@@ -549,13 +549,6 @@ export class ChangeStreamerHttpClient
 }
 
 type RequestHeaders = Pick<IncomingMessage, 'url' | 'headers'>;
-
-function getBearerToken(req: RequestHeaders): string | undefined {
-  const auth = req.headers.authorization;
-  return auth?.startsWith(BEARER_PREFIX)
-    ? auth.substring(BEARER_PREFIX.length)
-    : undefined;
-}
 
 function getSubscriberContext(req: RequestHeaders): SubscriberContext {
   const url = new URL(req.url ?? '', req.headers.origin ?? 'http://localhost');

@@ -14,3 +14,28 @@ export function encodeHeaderValue(value: string): string {
 export function decodeHeaderValue(encoded: string): string {
   return decodeURIComponent(encoded);
 }
+
+const BEARER_PREFIX = 'Bearer ';
+
+// RFC 9110: the scheme is case-insensitive and is followed by one or more
+// spaces.
+const BEARER_PATTERN = /^bearer +(.*)$/i;
+
+/**
+ * Returns the token of an `Authorization: Bearer <token>` header value, or
+ * `undefined` if there is no value or it uses another scheme.
+ */
+export function getBearerToken(
+  authorization: string | undefined,
+): string | undefined {
+  return authorization === undefined
+    ? undefined
+    : BEARER_PATTERN.exec(authorization)?.[1];
+}
+
+/**
+ * Formats `token` as the value of an `Authorization: Bearer <token>` header.
+ */
+export function bearerAuthorization(token: string): string {
+  return BEARER_PREFIX + token;
+}

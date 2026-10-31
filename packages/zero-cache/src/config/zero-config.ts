@@ -2,7 +2,7 @@
  * These types represent the _compiled_ config whereas `define-config` types represent the _source_ config.
  */
 
-import {timingSafeEqual} from 'node:crypto';
+import {createHash, timingSafeEqual} from 'node:crypto';
 import type {LogContext} from '@rocicorp/logger';
 import {logOptions} from '../../../otel/src/log-options.ts';
 import {
@@ -2052,13 +2052,14 @@ export function passwordMatches(
     return false;
   }
 
-  // Use constant-time comparison to prevent timing attacks
-  const passwordBuffer = Buffer.from(password ?? '');
-  const expectedBuffer = Buffer.from(expected);
-  return (
-    passwordBuffer.length === expectedBuffer.length &&
-    timingSafeEqual(passwordBuffer, expectedBuffer)
-  );
+  // Compare digests rather than the strings themselves: the digests always
+  // have the same length, so timingSafeEqual runs for every password and the
+  // comparison does not short-circuit on a length mismatch.
+  return timingSafeEqual(sha256(password ?? ''), sha256(expected));
+}
+
+function sha256(value: string): Buffer {
+  return createHash('sha256').update(value).digest();
 }
 
 let hasWarned = false;
