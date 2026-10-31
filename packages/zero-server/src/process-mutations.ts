@@ -660,7 +660,11 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
         }
 
         if (error instanceof MutationAlreadyProcessedError) {
-          this.#lc.warn?.(error);
+          this.#lc.warn?.(
+            // log-leak-ignore -- mutation and client ids, not row data
+            `Expected mutation ID ${error.lastMutationID}`,
+            error,
+          );
           return {
             id: {
               clientID: mutation.clientID,

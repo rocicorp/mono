@@ -279,7 +279,10 @@ export async function processMutation(
         break;
       } catch (e) {
         if (e instanceof MutationAlreadyProcessedError) {
-          lc.debug?.(e.message);
+          lc.debug?.(
+            // log-leak-ignore -- mutation and client ids, not row data
+            `${e.message}. Expected mutation ID ${e.lastMutationID}`,
+          );
           // Don't double-count already processed mutations, but they were counted above
           return undefined;
         }
