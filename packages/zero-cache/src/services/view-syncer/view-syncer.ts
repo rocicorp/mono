@@ -1511,6 +1511,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             if (!validatedConnCtx) {
               return;
             }
+            // From here on the client takes part in pokes and catch-up. The
+            // #handleConfigUpdate call below catches it up from its baseCookie.
+            newClient.markValidated();
             await this.#handleConfigUpdate(
               lc,
               clientID,
@@ -1870,13 +1873,28 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     );
   }
 
+  /**
+   * The clients that pokes and catch-up are sent to. A client whose
+   * connection has not been validated yet is left out: its `initConnection`
+   * validates it and then catches it up from its baseCookie, so lock-held
+   * work for other clients that runs in the meantime must not send it data.
+   */
   #getClients(atVersion?: CVRVersion): ClientHandler[] {
-    const clients = [...this.#clients.values()];
+    const clients = [...this.#clients.values()].filter(c => c.validated());
     return atVersion
       ? clients.filter(
           c => cmpVersions(c.version() ?? EMPTY_CVR_VERSION, atVersion) === 0,
         )
       : clients;
+  }
+
+  /**
+   * The client to send a targeted message (e.g. a query error) to, or
+   * `undefined` while its connection is still unvalidated; see #getClients().
+   */
+  #getValidatedClient(clientID: string): ClientHandler | undefined {
+    const client = this.#clients.get(clientID);
+    return client?.validated() ? client : undefined;
   }
 
   // Must be called from within #lock.
@@ -2432,9 +2450,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     // send the transform failed error to each affected client
     if ('queryIDs' in errorOrErrors) {
       for (const clientId of getAffectedClientIDs(errorOrErrors.queryIDs)) {
-        this.#clients
-          .get(clientId)
-          ?.sendQueryTransformFailedError(errorOrErrors);
+        this.#getValidatedClient(clientId)?.sendQueryTransformFailedError(
+          errorOrErrors,
+        );
       }
 
       return;
@@ -2451,7 +2469,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
 
     for (const [clientId, errors] of appErrorGroups) {
-      this.#clients.get(clientId)?.sendQueryTransformApplicationErrors(errors);
+      this.#getValidatedClient(clientId)?.sendQueryTransformApplicationErrors(
+        errors,
+      );
     }
   }
 
@@ -3103,7 +3123,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
     }
     for (const [clientID, errors] of errorsByClient) {
-      this.#clients.get(clientID)?.sendQueryTransformApplicationErrors(errors);
+      this.#getValidatedClient(clientID)?.sendQueryTransformApplicationErrors(
+        errors,
+      );
     }
   }
 

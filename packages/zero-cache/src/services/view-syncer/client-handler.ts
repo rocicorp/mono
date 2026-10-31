@@ -188,6 +188,9 @@ export class ClientHandler {
   readonly #lc: LogContext;
   readonly #downstream: Subscription<ViewSyncerDownstream>;
   #baseVersion: NullableCVRVersion;
+  // Set once the view-syncer has validated this connection. Until then the
+  // client is excluded from pokes and catch-up; see ViewSyncerService.#getClients().
+  #validated = false;
   // We will send a poke on connect even if the client is already caught up, so that it can learn its
   // got-queries state has been reconciled with the server. After that, we will only send a poke if
   // the client is behind.
@@ -234,6 +237,14 @@ export class ClientHandler {
 
   version(): NullableCVRVersion {
     return this.#baseVersion;
+  }
+
+  validated(): boolean {
+    return this.#validated;
+  }
+
+  markValidated(): void {
+    this.#validated = true;
   }
 
   /**
