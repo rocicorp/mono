@@ -1824,7 +1824,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       tracer,
       `vs.#runInLockForClient(${cmd})`,
       async span => {
-        span.setAttribute('clientGroupID', this.id);
+        span.setAttribute('clientGroupID', clientGroupLogID(this.id));
         span.setAttribute('clientID', clientID);
         let client: ClientHandler | undefined;
         let result: R | undefined;
@@ -2603,7 +2603,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ) {
     return startAsyncSpan(tracer, 'vs.#syncQueryPipelineSet', async span => {
       const start = performance.now();
-      span.setAttribute('clientGroupID', this.id);
+      span.setAttribute('clientGroupID', clientGroupLogID(this.id));
       assert(
         this.#pipelines.initialized(),
         'pipelines must be initialized (syncQueryPipelineSet)',
@@ -3720,7 +3720,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     cvr: CVRSnapshot,
   ): Promise<'success' | ResetPipelinesSignal> {
     return startAsyncSpan(tracer, 'vs.#advancePipelines', async span => {
-      span.setAttribute('clientGroupID', this.id);
+      span.setAttribute('clientGroupID', clientGroupLogID(this.id));
       assert(
         this.#pipelines.initialized(),
         'pipelines must be initialized (advancePipelines',
