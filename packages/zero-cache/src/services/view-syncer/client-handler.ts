@@ -63,6 +63,13 @@ type DeleteRowPatch = {
   type: 'row';
   op: 'del';
   id: RowID;
+  /**
+   * Set when the deletion replays a row the CVR already records as deleted,
+   * to catch up a client that fell behind. Unlike a deletion computed while
+   * advancing, it can only undo a put the client received in an earlier poke,
+   * so a client with no base version has nothing it can apply to.
+   */
+  catchup?: boolean | undefined;
 };
 
 export type RowPatch = PutRowPatch | DeleteRowPatch;
@@ -345,6 +352,16 @@ export class ClientHandler {
     ) => {
       const {patch, toVersion} = patchToVersion;
       if (cmpVersions(toVersion, this.#baseVersion) <= 0) {
+        return;
+      }
+      if (
+        patch.type === 'row' &&
+        patch.op === 'del' &&
+        patch.catchup &&
+        this.#baseVersion === null
+      ) {
+        // The client has no rows; deleting one it never had only tells it
+        // the row's key.
         return;
       }
       const target = await ensureBody();

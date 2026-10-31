@@ -129,6 +129,8 @@ export type ConnectionContextManager = {
       }>
     | undefined;
 
+  restorePinnedUser(pinnedUser: UserState): void;
+
   failConnection(
     selector: ConnectionSelector,
     revision: number,
@@ -469,6 +471,35 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
       connection: validatedConnection,
       group: this.getGroupState(),
     };
+  }
+
+  /**
+   * Pins the group to the user persisted with its CVR, as bound by a validated
+   * connection to an earlier instance of the group's view-syncer. Later
+   * validations by this instance must match it, as they would had the group
+   * been pinned here.
+   *
+   * Throws a `Rehome` error if the group is already pinned to another user:
+   * the stored pin wins, so the connections validated here can no longer be
+   * trusted and the view-syncer should stop, leaving its clients to reconnect
+   * to a fresh instance that validates them against the stored pin.
+   */
+  restorePinnedUser(pinnedUser: UserState): void {
+    if (this.#group.pinnedUser === undefined) {
+      this.#setGroup({...this.#group, pinnedUser: {id: pinnedUser.id}});
+      return;
+    }
+    if (this.#group.pinnedUser.id !== pinnedUser.id) {
+      throw new ProtocolErrorWithLevel(
+        {
+          kind: ErrorKind.Rehome,
+          message:
+            'Client group is pinned to a different userID than the one persisted with its CVR. Reconnect required.',
+          origin: ErrorOrigin.ZeroCache,
+        },
+        'warn',
+      );
+    }
   }
 
   /** Removes one connection due to failed auth and updates all derived background/deadline state. */

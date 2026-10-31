@@ -30,6 +30,7 @@ import {rowIDString} from '../../types/row-key.ts';
 import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 import type {Patch, PatchToVersion} from './client-handler.ts';
 import {type CVRFlushStats, type CVRStore} from './cvr-store.ts';
+import type {PinnedUser} from './schema/cvr.ts';
 import {
   cmpVersions,
   maxVersion,
@@ -64,6 +65,7 @@ export type CVR = {
   queries: Record<string, QueryRecord>;
   clientSchema: ClientSchema | null;
   profileID: string | null;
+  pinnedUser: PinnedUser | null;
 };
 
 /** Exported immutable CVR type. */
@@ -78,6 +80,7 @@ export type CVRSnapshot = {
   readonly queries: Readonly<Record<string, QueryRecord>>;
   readonly clientSchema: ClientSchema | null;
   readonly profileID: string | null;
+  readonly pinnedUser: PinnedUser | null;
 };
 
 const CLIENT_LMID_QUERY_ID = 'lmids';
@@ -223,6 +226,24 @@ export class CVRUpdater {
       this._setVersion(oneAfter(this._cvr.version));
     }
     return this._cvr.version;
+  }
+
+  /**
+   * Records the user the client group is pinned to. The pin is set once, by
+   * the group's first validated connection, and never changes afterwards.
+   */
+  setPinnedUser(pinnedUser: PinnedUser) {
+    const current = this._cvr.pinnedUser;
+    if (current === null) {
+      this._cvr.pinnedUser = pinnedUser;
+      this._cvrStore.putInstance(this._cvr);
+    } else {
+      assert(
+        current.id === pinnedUser.id,
+        () =>
+          `Client group is pinned to a different user (${current.id} vs ${pinnedUser.id})`,
+      );
+    }
   }
 
   /**

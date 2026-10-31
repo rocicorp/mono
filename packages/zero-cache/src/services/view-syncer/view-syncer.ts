@@ -91,8 +91,12 @@ import type {
   ConnectionSelector,
   ConnectionValidation,
 } from './connection-context-manager.ts';
-import {ClientNotFoundError, CVRStore} from './cvr-store.ts';
-import type {CVRUpdater} from './cvr.ts';
+import {
+  ClientNotFoundError,
+  CVRStore,
+  PinnedUserMismatchError,
+} from './cvr-store.ts';
+import {CVRUpdater} from './cvr.ts';
 import {
   classifyQueriesForHydration,
   CVRConfigDrivenUpdater,
@@ -769,6 +773,22 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       try {
+        if (reloaded && this.#cvr.pinnedUser !== null) {
+          // Validation of every connection to this instance must agree with
+          // the user the group was pinned to before it was (re)loaded.
+          try {
+            this.connContextManager.restorePinnedUser(this.#cvr.pinnedUser);
+          } catch (e) {
+            // Another view-syncer pinned the group to a different user than
+            // the one validated here. The connection state of this instance
+            // cannot be trusted: stop it so that every client reconnects to
+            // a fresh instance, which validates them against the stored pin.
+            this.#stateChanges.fail(
+              e instanceof Error ? e : new Error(String(e)),
+            );
+            throw e;
+          }
+        }
         if (reloaded && this.#resetPipelinesIfBehindCVR(lc, this.#cvr)) {
           // Not every locked operation rehydrates (e.g. auth maintenance), and
           // if the replica has already caught up to the CVR there may be no
@@ -783,6 +803,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       } catch (e) {
         // Clear cached state if an error is encountered.
         this.#cvr = undefined;
+        if (e instanceof PinnedUserMismatchError) {
+          // Another view-syncer pinned the group to a different user than the
+          // one validated here. Stop so that every client, not only the one
+          // whose operation failed, reconnects to a fresh instance that
+          // validates it against the stored pin.
+          this.#stateChanges.fail(e);
+        }
         throw e;
       } finally {
         // Lock-scoped work is where validated connections gain or lose
@@ -1659,6 +1686,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ): Promise<CVRSnapshot> {
     return startAsyncSpan(tracer, 'vs.#flushUpdater', () =>
       this.#runPriorityOp(lc, 'flushing cvr', async () => {
+        // Persist the user the group was pinned to by connection validation
+        // so that it survives view-syncer eviction and process restarts.
+        const {pinnedUser} = this.connContextManager.getGroupState();
+        if (pinnedUser !== undefined) {
+          updater.setPinnedUser(pinnedUser);
+        }
         const now = Date.now();
         const ttlClock = this.#getTTLClock(now);
         const {cvr, flushed} = await updater.flush(
@@ -3585,7 +3618,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           const id: RowID = {schema, table, rowKey};
           let patch: RowPatch;
           if (!row.refCounts) {
-            patch = {type: 'row', op: 'del', id};
+            patch = {type: 'row', op: 'del', id, catchup: true};
           } else {
             const row = must(
               this.#pipelines.getRow(table, rowKey),
@@ -4356,11 +4389,20 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         // flight. That connection validates on its own.
         return false;
       }
-      this.connContextManager.validateConnection(
+      const validated = this.connContextManager.validateConnection(
         connCtx,
         connCtx.revision,
         validation,
       );
+      if (validated && this.#cvr?.pinnedUser === null) {
+        // Persist the pin now rather than with the next flush, which the
+        // rest of this operation may still abandon (e.g. a rejected client
+        // message); until then a restart would leave the group unpinned.
+        this.#cvr = await this.#flushUpdater(
+          this.#lc,
+          new CVRUpdater(this.#cvrStore, this.#cvr, this.#cvr.replicaVersion),
+        );
+      }
       return true;
     } catch (e) {
       if (isProtocolError(e) && isAuthErrorBody(e.errorBody)) {
