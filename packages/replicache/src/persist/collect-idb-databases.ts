@@ -22,7 +22,10 @@ import {
 } from '../kv/mem-fallback-store.ts';
 import type {CreateStore, DropStore, StoreProvider} from '../kv/store.ts';
 import {createLogContext} from '../log-options.ts';
-import type {StorageFailureError} from '../storage-failure.ts';
+import {
+  getStorageFailure,
+  type StorageFailureError,
+} from '../storage-failure.ts';
 import {withRead, withWrite} from '../with-transactions.ts';
 import {
   clientGroupHasPendingMutations,
@@ -69,6 +72,7 @@ export function initCollectIDBDatabases(
         enableMutationRecovery,
         onClientsDeleted,
         newDagStore,
+        lc,
       );
     },
     () => {
@@ -95,14 +99,15 @@ export async function collectIDBDatabases(
   enableMutationRecovery: boolean,
   onClientsDeleted: OnClientsDeleted,
   newDagStore: NewDagStore = defaultNewDagStore,
+  lc?: LogContext | undefined,
 ): Promise<void> {
   const databases = await idbDatabasesStore.getDatabases();
 
   const dbs = Object.values(databases);
   const collectResults = await Promise.all(
-    dbs.map(
-      async db =>
-        [
+    dbs.map(async db => {
+      try {
+        return [
           db.name,
           await gatherDatabaseInfoForCollect(
             db,
@@ -112,14 +117,35 @@ export async function collectIDBDatabases(
             kvStoreProvider.create,
             newDagStore,
           ),
-        ] as const,
-    ),
+        ] as const;
+      } catch (e) {
+        if (getStorageFailure(e)) {
+          // The storage itself failed, not this database's contents. Let it
+          // reach the caller, which stops the process and reports it.
+          throw e;
+        }
+        // This database cannot be read, for example because its clients head
+        // points at a chunk that is not there. Its own instance, if there
+        // still is one, finds out when it opens it; here, leave it alone and
+        // keep collecting the others, instead of letting one unreadable
+        // database break every collection run forever.
+        lc?.warn?.(
+          `Skipping database ${db.name} in collection: it could not be read.`,
+          e,
+        );
+        return [db.name, 'unreadable'] as const;
+      }
+    }),
   );
 
   const dbNamesToRemove: string[] = [];
   const dbNamesToKeep: string[] = [];
   const deletedClientsToRemove: WritableDeletedClients = [];
-  for (const [dbName, [canCollect, deletedClients]] of collectResults) {
+  for (const [dbName, result] of collectResults) {
+    if (result === 'unreadable') {
+      continue;
+    }
+    const [canCollect, deletedClients] = result;
     if (canCollect) {
       dbNamesToRemove.push(dbName);
       deletedClientsToRemove.push(...deletedClients);
