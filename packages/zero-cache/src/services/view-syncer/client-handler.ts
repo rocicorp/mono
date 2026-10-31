@@ -192,6 +192,7 @@ export class ClientHandler {
   // got-queries state has been reconciled with the server. After that, we will only send a poke if
   // the client is behind.
   #everPoked = false;
+  #inspectorAuthenticated = false;
 
   readonly #pokeTime = getOrCreateLatencyHistogram(
     'sync',
@@ -233,6 +234,19 @@ export class ClientHandler {
 
   version(): NullableCVRVersion {
     return this.#baseVersion;
+  }
+
+  /**
+   * Whether this connection has presented the admin password to the
+   * inspector. Authentication is per connection: it is not shared with other
+   * connections of the client group and does not survive a reconnect.
+   */
+  isInspectorAuthenticated(): boolean {
+    return this.#inspectorAuthenticated;
+  }
+
+  setInspectorAuthenticated(authenticated: boolean): void {
+    this.#inspectorAuthenticated = authenticated;
   }
 
   async #push(msg: Downstream, serialized?: string | undefined): Promise<void> {

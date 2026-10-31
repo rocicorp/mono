@@ -11,14 +11,13 @@ import type {AnalyzeQueryOptions} from '../../../../zero-protocol/src/inspect-up
 import {type TTL, normalizeTTL} from '../../../../zql/src/query/ttl.ts';
 import {
   type ExtendedInspectorDelegate,
-  type GetWebSocket,
   type Metrics,
   mergeMetrics,
   rpc,
 } from './lazy-inspector.ts';
 
 export class Query {
-  readonly #socket: GetWebSocket;
+  readonly #delegate: ExtendedInspectorDelegate;
 
   readonly name: string | null;
   readonly args: ReadonlyArray<ReadonlyJSONValue> | null;
@@ -43,12 +42,8 @@ export class Query {
   readonly updateServerP50: number | null;
   readonly updateServerP95: number | null;
 
-  constructor(
-    row: InspectQueryRow,
-    delegate: ExtendedInspectorDelegate,
-    socket: GetWebSocket,
-  ) {
-    this.#socket = socket;
+  constructor(row: InspectQueryRow, delegate: ExtendedInspectorDelegate) {
+    this.#delegate = delegate;
 
     const {ast, queryID, inactivatedAt} = row;
     // Use own properties to make this more useful in dev tools. For example, in
@@ -103,6 +98,8 @@ export class Query {
     this.updateServerP95 = percentile('query-update-server', 0.95);
   }
 
+  // Async so that a missing AST rejects instead of throwing synchronously.
+  // oxlint-disable-next-line require-await
   async analyze(options?: AnalyzeQueryOptions): Promise<AnalyzeQueryResult> {
     const details =
       this.name && this.args
@@ -113,7 +110,7 @@ export class Query {
         : {value: must(this.#serverAST, 'AST is required for unnamed queries')};
 
     return rpc(
-      await this.#socket(),
+      this.#delegate,
       {
         op: 'analyze-query',
         ...details,

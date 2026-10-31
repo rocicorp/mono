@@ -488,6 +488,26 @@ export async function expectNoPokes(client: Queue<Downstream>) {
   expect(await client.dequeue(timedOut, 10)).toBe(timedOut);
 }
 
+/**
+ * Authenticates the connection with the inspector's admin password. Call it
+ * when no pokes are pending, since the response is read from the client's
+ * queue.
+ */
+export async function authenticateInspector(
+  vs: ViewSyncerService,
+  ctx: SyncContext,
+  client: Queue<Downstream>,
+) {
+  await vs.inspect(ctx, [
+    'inspect',
+    {op: 'authenticate', id: 'authenticate', value: TEST_ADMIN_PASSWORD},
+  ]);
+  expect(await client.dequeue()).toEqual([
+    'inspect',
+    {id: 'authenticate', op: 'authenticated', value: true},
+  ]);
+}
+
 // Higher-level helper functions for TTL tests
 export function addQuery(
   vs: ViewSyncerService,

@@ -15,7 +15,10 @@ import {
 } from '../../../../zero-protocol/src/inspect-up.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {loadPermissions} from '../../auth/load-permissions.ts';
-import type {NormalizedZeroConfig} from '../../config/normalize.ts';
+import {
+  isDevelopmentMode,
+  type NormalizedZeroConfig,
+} from '../../config/normalize.ts';
 import {
   getServerVersion,
   isAdminPasswordValid,
@@ -35,9 +38,6 @@ export async function handleInspect(
   client: ClientHandler,
   inspectorDelegate: InspectorDelegate,
   clientGroupID: string,
-  // The service handling the request, on whose behalf authentication is
-  // recorded (see InspectorDelegate.clearAuthenticated).
-  authOwner: object,
   cvrStore: CVRStore,
   config: NormalizedZeroConfig,
   ctx: ConnectionContext,
@@ -56,11 +56,12 @@ export async function handleInspect(
     return;
   }
 
-  // Check if the client is already authenticated. We only authenticate the clientGroup
-  // once per "worker".
+  // Authentication is per connection. In development mode the password is
+  // not required.
   if (
     body.op !== 'authenticate' &&
-    !inspectorDelegate.isAuthenticated(clientGroupID)
+    !isDevelopmentMode() &&
+    !client.isInspectorAuthenticated()
   ) {
     lc.info?.(
       'Client not authenticated to access the inspector protocol. Sending authentication challenge',
@@ -126,10 +127,8 @@ export async function handleInspect(
           isAdminPasswordValid(lc, config, body.value);
         if (ok) {
           authLimiter.recordSuccess(clientGroupID, client);
-          inspectorDelegate.setAuthenticated(clientGroupID, authOwner);
-        } else {
-          inspectorDelegate.clearAuthenticated(clientGroupID);
         }
+        client.setInspectorAuthenticated(ok);
 
         client.sendInspectResponse(lc, {
           op: 'authenticated',

@@ -139,6 +139,10 @@ export class Inspector {
    * environments. Call this first from Node contexts to establish the
    * session.
    *
+   * The server authenticates each connection separately. An accepted
+   * password is remembered by this inspector and presented again when the
+   * connection is re-established.
+   *
    * Returns `true` if the password is accepted (or the server runs in a
    * development mode that bypasses the check), `false` otherwise.
    */

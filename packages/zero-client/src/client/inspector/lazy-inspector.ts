@@ -47,8 +47,6 @@ import {createHTMLPasswordPrompt} from './html-dialog-prompt.ts';
 import {type Lazy} from './inspector.ts';
 import {Query} from './query.ts';
 
-export type GetWebSocket = () => Promise<WebSocket>;
-
 export type Metrics = {
   readonly [K in keyof (ClientMetricMap & ServerMetricMap)]: ReadonlyTDigest;
 };
@@ -58,31 +56,48 @@ type DistributiveOmit<T, K extends string> = T extends object
   : never;
 
 export async function rpc<T extends InspectDownBody>(
-  socket: WebSocket,
+  delegate: ExtendedInspectorDelegate,
   arg: DistributiveOmit<InspectUpBody, 'id'>,
   downSchema: valita.Type<T>,
 ): Promise<T['value']> {
+  const socket = await delegate.getSocket();
   try {
     return await rpcNoAuthTry(socket, arg, downSchema);
   } catch (e) {
-    if (e instanceof UnauthenticatedError) {
-      const password = await createHTMLPasswordPrompt('Enter password:');
-      if (password) {
-        // Do authenticate rpc
-        const authRes = await rpcNoAuthTry(
-          socket,
-          {op: 'authenticate', value: password},
-          inspectAuthenticatedDownSchema,
-        );
-        if (authRes) {
-          // If authentication is successful, retry the original RPC
-          return rpcNoAuthTry(socket, arg, downSchema);
-        }
-      }
-      throw new Error('Authentication failed');
+    if (!(e instanceof UnauthenticatedError)) {
+      throw e;
     }
-    throw e;
   }
+
+  // The server authenticates each connection separately. Before asking for
+  // the password again, retry the one accepted on an earlier connection.
+  const remembered = delegate.adminPassword;
+  if (
+    remembered !== undefined &&
+    (await authenticateSocket(socket, remembered))
+  ) {
+    return rpcNoAuthTry(socket, arg, downSchema);
+  }
+  delegate.adminPassword = undefined;
+
+  const password = await createHTMLPasswordPrompt('Enter password:');
+  if (password && (await authenticateSocket(socket, password))) {
+    delegate.adminPassword = password;
+    // If authentication is successful, retry the original RPC
+    return rpcNoAuthTry(socket, arg, downSchema);
+  }
+  throw new Error('Authentication failed');
+}
+
+function authenticateSocket(
+  socket: WebSocket,
+  password: string,
+): Promise<boolean> {
+  return rpcNoAuthTry(
+    socket,
+    {op: 'authenticate', value: password},
+    inspectAuthenticatedDownSchema,
+  );
 }
 
 function rpcNoAuthTry<T extends InspectDownBody>(
@@ -200,7 +215,7 @@ export async function inspectorMetrics(
 ): Promise<Metrics> {
   const clientMetrics = delegate.metrics;
   const serverMetricsJSON = await rpc(
-    await delegate.getSocket(),
+    delegate,
     {op: 'metrics'},
     inspectMetricsDownSchema,
   );
@@ -347,14 +362,10 @@ export function clientRows(
   });
 }
 
-export async function serverVersion(
+export function serverVersion(
   delegate: ExtendedInspectorDelegate,
 ): Promise<string> {
-  return rpc(
-    await delegate.getSocket(),
-    {op: 'version'},
-    inspectVersionDownSchema,
-  );
+  return rpc(delegate, {op: 'version'}, inspectVersionDownSchema);
 }
 
 export function clientQueries(
@@ -369,16 +380,16 @@ async function queries(
   arg: {op: 'queries'; clientID?: string},
 ): Promise<Query[]> {
   const rows: InspectQueryRow[] = await rpc(
-    await delegate.getSocket(),
+    delegate,
     arg,
     inspectQueriesDownSchema,
   );
-  const queries = rows.map(row => new Query(row, delegate, delegate.getSocket));
+  const queries = rows.map(row => new Query(row, delegate));
   queries.sort((a, b) => (b.hydrateServer ?? 0) - (a.hydrateServer ?? 0));
   return queries;
 }
 
-export async function analyzeQuery(
+export function analyzeQuery(
   delegate: ExtendedInspectorDelegate,
   query: AnyQuery,
   options?: AnalyzeQueryOptions,
@@ -390,7 +401,7 @@ export async function analyzeQuery(
     : {ast: delegate.mapClientASTToServer(qi.ast)};
 
   return rpc(
-    await delegate.getSocket(),
+    delegate,
     {
       op: 'analyze-query',
       ...queryParameters,
@@ -400,26 +411,26 @@ export async function analyzeQuery(
   );
 }
 
-export async function analyzeServerAST(
+export function analyzeServerAST(
   delegate: ExtendedInspectorDelegate,
   ast: AST,
   options?: AnalyzeQueryOptions,
 ): Promise<AnalyzeQueryResult> {
   return rpc(
-    await delegate.getSocket(),
+    delegate,
     {op: 'analyze-query', ast, options},
     inspectAnalyzeQueryDownSchema,
   );
 }
 
-export async function analyzeNamedQuery(
+export function analyzeNamedQuery(
   delegate: ExtendedInspectorDelegate,
   name: string,
   args: ReadonlyArray<ReadonlyJSONValue>,
   options?: AnalyzeQueryOptions,
 ): Promise<AnalyzeQueryResult> {
   return rpc(
-    await delegate.getSocket(),
+    delegate,
     {op: 'analyze-query', name, args, options},
     inspectAnalyzeQueryDownSchema,
   );
@@ -430,16 +441,19 @@ export async function analyzeNamedQuery(
  * is accepted (or the server is in a development mode that bypasses the
  * check). Use this from Node contexts where the default interactive HTML
  * prompt used by other inspector RPCs is not available.
+ *
+ * The server authenticates each connection separately. An accepted password
+ * is remembered and presented again when the connection is re-established.
  */
 export async function authenticate(
   delegate: ExtendedInspectorDelegate,
   password: string,
 ): Promise<boolean> {
-  return rpc(
-    await delegate.getSocket(),
-    {op: 'authenticate', value: password},
-    inspectAuthenticatedDownSchema,
-  );
+  const ok = await authenticateSocket(await delegate.getSocket(), password);
+  if (ok) {
+    delegate.adminPassword = password;
+  }
+  return ok;
 }
 
 class UnauthenticatedError extends Error {}
@@ -459,6 +473,12 @@ export interface ExtendedInspectorDelegate extends InspectorDelegate {
   readonly getSocket: () => Promise<WebSocket>;
   readonly queryDelegate: QueryDelegate;
   lazy: Promise<Lazy>;
+  /**
+   * The admin password the server last accepted, if any. Authentication is
+   * per connection, so it is presented again after a reconnect before the
+   * user is prompted.
+   */
+  adminPassword?: string | undefined;
 }
 
 export type Rep = ReplicacheImpl<MutatorDefs>;
