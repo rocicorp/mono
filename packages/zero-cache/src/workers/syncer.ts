@@ -748,28 +748,29 @@ export class Syncer implements SingletonService {
     const {clientID, clientGroupID, auth, userID} = params;
     const hasProvidedAuth = auth !== undefined && auth !== '';
     const incomingUserID = userID ?? null;
+    const tokenOptions = tokenConfigOptions(this.#config.auth ?? {});
+    const hasPushOrMutate =
+      this.#config?.push?.url !== undefined ||
+      this.#config?.mutate?.url !== undefined;
+    const hasQueries =
+      this.#config?.query?.url !== undefined ||
+      this.#config?.getQueries?.url !== undefined;
+    const hasCustomEndpoints = hasPushOrMutate && hasQueries;
 
-    if (hasProvidedAuth) {
-      const tokenOptions = tokenConfigOptions(this.#config.auth ?? {});
-
-      const hasPushOrMutate =
-        this.#config?.push?.url !== undefined ||
-        this.#config?.mutate?.url !== undefined;
-      const hasQueries =
-        this.#config?.query?.url !== undefined ||
-        this.#config?.getQueries?.url !== undefined;
-
-      // must either have one of the token options set or have custom mutations & queries enabled
-      const hasExactlyOneTokenOption = tokenOptions.length === 1;
-      const hasCustomEndpoints = hasPushOrMutate && hasQueries;
-      if (!hasExactlyOneTokenOption && !hasCustomEndpoints) {
-        recordConnectionFailure('configuration');
-        throw new Error(
-          'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
-            JSON.stringify(tokenOptions) +
-            '. You may also set both ZERO_MUTATE_URL and ZERO_QUERY_URL to enable custom mutations and queries without passing token verification options.',
-        );
-      }
+    // More than one token option is a misconfiguration under which no
+    // validator is built, so it is refused whether or not a token was sent.
+    // A token otherwise requires exactly one token option, or custom
+    // mutations & queries to be enabled instead.
+    if (
+      tokenOptions.length > 1 ||
+      (hasProvidedAuth && tokenOptions.length === 0 && !hasCustomEndpoints)
+    ) {
+      recordConnectionFailure('configuration');
+      throw new Error(
+        'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
+          JSON.stringify(tokenOptions) +
+          '. You may also set both ZERO_MUTATE_URL and ZERO_QUERY_URL to enable custom mutations and queries without passing token verification options.',
+      );
     }
 
     let initialAuth: Auth | undefined;
