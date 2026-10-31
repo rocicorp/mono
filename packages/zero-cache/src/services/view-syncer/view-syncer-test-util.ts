@@ -18,6 +18,7 @@ import type {
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import type {PokePartBody} from '../../../../zero-protocol/src/poke.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
+import type {QueryResponse} from '../../../../zero-protocol/src/query-server.ts';
 import {relationships} from '../../../../zero-schema/src/builder/relationship-builder.ts';
 import {
   clientSchemaFrom,
@@ -628,6 +629,13 @@ type SetupOptions = Readonly<{
    * custom-query transform responses.
    */
   queryFetchMode?: 'none' | 'empty-validation' | undefined;
+  /**
+   * The userID the `/query` stub reports as validated, as an API server does
+   * (`null` for a logged-out caller). Without it the stub answers in the
+   * legacy shape, which carries no userID, so a connection that claims a
+   * userID is refused.
+   */
+  queryFetchUserID?: string | null | undefined;
 }>;
 
 type QueryFetchCall = {
@@ -682,14 +690,16 @@ export async function setup(
     pacer,
     rebuildMargin,
     queryFetchMode = 'none',
+    queryFetchUserID,
   } = options;
   const effectiveQueryConfig: ZeroConfig['query'] =
     queryFetchMode === 'none' ? {...queryConfig, url: []} : queryConfig;
-  const queryFetch = createQueryFetchMock();
+  const queryFetch = createQueryFetchMock(queryFetchUserID);
   const restoreFetch = installQueryFetchStub(
     queryFetchMode,
     effectiveQueryConfig.url?.[0],
     queryFetch,
+    queryFetchUserID,
   );
   const storageDB = new Database(lc, ':memory:');
   storageDB.prepare(CREATE_STORAGE_TABLE).run();
@@ -1151,6 +1161,7 @@ function installQueryFetchStub(
   mode: SetupOptions['queryFetchMode'],
   queryURL: string | undefined,
   queryFetch: InternalQueryFetchMock,
+  userID: SetupOptions['queryFetchUserID'],
 ) {
   if (mode !== 'empty-validation' || !queryURL) {
     return () => {};
@@ -1173,9 +1184,7 @@ function installQueryFetchStub(
           request,
         });
         queryFetch.calls.push(queryFetch.validationCalls.at(-1)!);
-        return Promise.resolve(
-          Response.json(['transformed', []] satisfies TransformResponseMessage),
-        );
+        return Promise.resolve(queryResponse(userID, []));
       }
 
       const call: QueryFetchCall = {
@@ -1205,7 +1214,9 @@ function installQueryFetchStub(
   };
 }
 
-function createQueryFetchMock(): InternalQueryFetchMock {
+function createQueryFetchMock(
+  userID: SetupOptions['queryFetchUserID'],
+): InternalQueryFetchMock {
   const calls: QueryFetchCall[] = [];
   const validationCalls: QueryFetchCall[] = [];
   const transformCalls: QueryFetchCall[] = [];
@@ -1260,9 +1271,23 @@ function createQueryFetchMock(): InternalQueryFetchMock {
   function makeTransformedBehavior(
     body: TransformResponseBody,
   ): QueryFetchBehavior {
-    return () =>
-      Response.json(['transformed', body] satisfies TransformResponseMessage);
+    return () => queryResponse(userID, body);
   }
+}
+
+function queryResponse(
+  userID: SetupOptions['queryFetchUserID'],
+  body: TransformResponseBody,
+): Response {
+  return Response.json(
+    userID === undefined
+      ? (['transformed', body] satisfies TransformResponseMessage)
+      : ({
+          kind: 'QueryResponse',
+          userID,
+          queries: body,
+        } satisfies QueryResponse),
+  );
 }
 
 function parseTransformRequest(init?: RequestInit): TransformRequestMessage {

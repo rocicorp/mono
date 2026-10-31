@@ -23,12 +23,21 @@ type ConnectionState = 'provisional' | 'validated';
 type UserState = {readonly id: string | null};
 
 /**
- * Delineates the two paths for validating a connection: either server can validate
- * the user's identity and return a definitive userID to trust, or we fall back to
- * trusting the one provided by the client in the incoming query params.
+ * How a connection's `userID` was established:
+ *
+ * - `server-validated`: the API server returned the authoritative userID
+ *   (`null` for a logged-out caller). The connection's claimed userID must
+ *   match it.
+ * - `server-unverified`: the API server answered without a userID, so it did
+ *   not vouch for the caller. Only a logged-out connection, or a userID that
+ *   a legacy JWT has already verified, is accepted.
+ * - `client-fallback`: no API server is involved, so the userID provided by
+ *   the client in the connection params is trusted as-is (a legacy JWT, when
+ *   configured, has verified it).
  */
 export type ConnectionValidation =
   | {kind: 'client-fallback'}
+  | {kind: 'server-unverified'}
   | {kind: 'server-validated'; validatedUserID: string | null};
 
 /**
@@ -429,6 +438,23 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
           'warn',
         );
       }
+    } else if (
+      validation.kind === 'server-unverified' &&
+      connection.user.id !== null &&
+      connection.auth?.type !== 'jwt'
+    ) {
+      // The API server did not name the user, so nothing backs the claimed
+      // userID. Trusting it would let a connection pin the client group to a
+      // userID it does not own.
+      throw new ProtocolErrorWithLevel(
+        {
+          kind: ErrorKind.Unauthorized,
+          message:
+            'Connection userID was not validated by the API server. The API server must return a userID for authenticated connections.',
+          origin: ErrorOrigin.ZeroCache,
+        },
+        'warn',
+      );
     }
 
     // The incoming user state is either the validated user state from the server

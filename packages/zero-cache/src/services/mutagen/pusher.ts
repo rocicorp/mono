@@ -593,7 +593,7 @@ class PushWorker {
           response.kind === 'MutateResponse' &&
           response?.userID !== undefined
           ? {kind: 'server-validated', validatedUserID: response.userID}
-          : {kind: 'client-fallback'},
+          : {kind: 'server-unverified'},
       );
       return response;
     } catch (e) {
