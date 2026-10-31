@@ -1575,15 +1575,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
         lc.debug?.('Auth changed, re-validating and re-transforming queries');
 
-        const connCtx =
-          this.connContextManager.mustGetConnectionContext(selector);
-
-        // If pipelines are not yet ready, there is no transform request that
-        // can absorb validation, so validate immediately.
-        if (!this.#pipelinesHydrated) {
-          if (!(await this.#validateConnection(connCtx))) {
-            return;
-          }
+        // Validate the new credential before anything else. The re-transform
+        // below cannot stand in for this: it is skipped when there are no
+        // custom queries, and it only validates when the response was not
+        // served from the transform cache. As in initConnection, a credential
+        // that changes again while this validation is in flight is validated
+        // in its place and is the one re-transformed with.
+        const validatedConnCtx =
+          await this.#validateCurrentConnection(selector);
+        if (!validatedConnCtx) {
+          return;
         }
 
         // Re-transform all queries so auth-sensitive query expansion matches
@@ -1595,7 +1596,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           cvr,
           'all',
           undefined,
-          connCtx,
+          validatedConnCtx,
         );
       },
     );
@@ -1857,8 +1858,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             .withContext('wsID', wsID)
             .withContext('cmd', cmd);
           lc[getLogLevel(e)]?.(`closing connection with error`, e);
-          if (connCtx) {
-            this.connContextManager.failConnection(selector, connCtx.revision);
+          // The client is failed below, so its context must go even if an
+          // auth update advanced the revision while `fn` was running. If
+          // the socket was replaced by one reusing the selector meanwhile,
+          // the replacement's context is not ours to fail.
+          const current = connCtx && this.#currentRegistration(connCtx);
+          if (current) {
+            this.connContextManager.failConnection(selector, current.revision);
           }
           if (client) {
             // Ideally, propagate the exception to the client's downstream subscription ...
@@ -4340,6 +4346,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         validation = {kind: 'client-fallback'};
       }
 
+      if (!this.#currentRegistration(connCtx)) {
+        // Replaced by a socket reusing the selector while the request was in
+        // flight. That connection validates on its own.
+        return false;
+      }
       this.connContextManager.validateConnection(
         connCtx,
         connCtx.revision,
@@ -4357,11 +4368,27 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             message: e.message,
           },
         );
-        this.#failMaintenanceConnection(connCtx, e);
+        if (this.#currentRegistration(connCtx)) {
+          this.#failMaintenanceConnection(connCtx, e);
+        }
         return false;
       }
       throw e;
     }
+  }
+
+  /**
+   * The live context registered for `connCtx`'s selector, or `undefined` if
+   * that socket is gone or has been replaced by one reusing the selector
+   * (which starts over at revision 0, so revisions alone cannot tell).
+   */
+  #currentRegistration(
+    connCtx: ConnectionContext,
+  ): ConnectionContext | undefined {
+    const current = this.connContextManager.getConnectionContext(connCtx);
+    return current?.insertionOrder === connCtx.insertionOrder
+      ? current
+      : undefined;
   }
 
   /**
@@ -4377,8 +4404,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     let connCtx = this.connContextManager.getConnectionContext(selector);
     while (connCtx) {
       const valid = await this.#validateConnection(connCtx);
-      const current = this.connContextManager.getConnectionContext(selector);
-      if (current?.revision === connCtx.revision) {
+      const current = this.#currentRegistration(connCtx);
+      if (!current) {
+        // Gone, or replaced by a socket reusing the selector, whose own
+        // initConnection validates it.
+        return undefined;
+      }
+      if (current.revision === connCtx.revision) {
         return valid ? connCtx : undefined;
       }
       connCtx = current;
