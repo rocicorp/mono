@@ -23,6 +23,75 @@ export type ParseOptions = {
 const JSON_TYPE = String(JSON);
 const JSONB_TYPE = String(JSONB);
 
+// The only array type whose elements are not delimited by a comma.
+const BOX_ARRAY_TYPE = 1020;
+
+/**
+ * Parses the text format of a Postgres array, e.g. `{1,NULL,"a b",{2,3}}`.
+ *
+ * This is used instead of the array parsers of postgres.js, which pass an
+ * unquoted `NULL` to the element parser as if it were a value. Only a null
+ * element is unquoted: Postgres quotes a string that spells `NULL`.
+ *
+ * postgres.js 4.0.0 fixes this with an equivalent parser, so this can be
+ * removed when we upgrade to it. The 3.4.x releases don't have the fix.
+ *
+ * https://www.postgresql.org/docs/current/arrays.html#ARRAYS-IO
+ */
+export function parseArray(
+  text: string,
+  parseElement: TypeParser = x => x,
+  delimiter = ',',
+): unknown[] {
+  // An array with non-default bounds starts with them, e.g. `[2:3]={1,2}`.
+  let pos = text.indexOf('{');
+  assert(pos >= 0, 'array has no opening brace');
+
+  function parseQuoted(): string {
+    let value = '';
+    for (pos++; text[pos] !== '"'; pos++) {
+      assert(pos < text.length, 'unterminated quoted array element');
+      if (text[pos] === '\\') {
+        pos++;
+      }
+      value += text[pos];
+    }
+    pos++;
+    return value;
+  }
+
+  function parseElements(): unknown[] {
+    const elements: unknown[] = [];
+    pos++;
+    while (text[pos] !== '}') {
+      assert(pos < text.length, 'unterminated array');
+      if (text[pos] === '{') {
+        elements.push(parseElements());
+      } else if (text[pos] === '"') {
+        elements.push(parseElement(parseQuoted()));
+      } else {
+        const start = pos;
+        while (
+          pos < text.length &&
+          text[pos] !== delimiter &&
+          text[pos] !== '}'
+        ) {
+          pos++;
+        }
+        const element = text.slice(start, pos);
+        elements.push(element === 'NULL' ? null : parseElement(element));
+      }
+      if (text[pos] === delimiter) {
+        pos++;
+      }
+    }
+    pos++;
+    return elements;
+  }
+
+  return parseElements();
+}
+
 // postgres.js has default type parsers with user-defined overrides
 // configurable per-client (see `postgresTypeConfig` in types/pg.ts).
 //
@@ -48,21 +117,30 @@ export async function getTypeParsers(
       `array types not fetched ${Object.keys(db.options.parsers)}`,
     );
   }
+  // postgres.js records the array type of each element type that it fetched.
+  const {typeArrayMap} = (
+    db.options as unknown as {shared: {typeArrayMap: Record<string, number>}}
+  ).shared;
+  const elementTypes = new Map(
+    Object.entries(typeArrayMap).map(([element, array]) => [
+      String(array),
+      Number(element),
+    ]),
+  );
   const parsers = mapEntries(db.options.parsers, (type, parse) => {
     if ((type === JSON_TYPE || type === JSONB_TYPE) && returnJsonAsString) {
       return [type, (x: string) => x];
     }
     // The postgres.js library tags parsers for array types with an `array: true` field.
     // https://github.com/porsager/postgres/blob/089214e85c23c90cf142d47fb30bd03f42874984/src/connection.js#L760
-    const isArrayType = (parse as unknown as {array?: boolean}).array;
-
-    // And then skips the first character when parsing the string,
-    // e.g. an array parser will parse '{1,2,3}' from '1,2,3}'.
-    // https://github.com/porsager/postgres/blob/089214e85c23c90cf142d47fb30bd03f42874984/src/connection.js#L496
-    return [
-      type,
-      isArrayType ? (val: string) => parse(val.substring(1)) : parse,
-    ];
+    if (!(parse as unknown as {array?: boolean}).array) {
+      return [type, parse];
+    }
+    const element = elementTypes.get(type);
+    assert(element !== undefined, `no element type for array type ${type}`);
+    const parseElement = db.options.parsers[element];
+    const delimiter = Number(type) === BOX_ARRAY_TYPE ? ';' : ',';
+    return [type, (val: string) => parseArray(val, parseElement, delimiter)];
   });
   return {
     // A type OID for which a parser is not explicitly defined
