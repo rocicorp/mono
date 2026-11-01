@@ -258,6 +258,18 @@ export type TypeOptions = {
    * still be stringified by the pg client.
    */
   sendStringAsJson?: boolean;
+
+  /**
+   * Reads `json` and `jsonb` values with `JSON.parse()`, so that every number is
+   * a JavaScript number, including an integer beyond the safe range, which
+   * would otherwise be a `bigint`, and which this rounds instead. Use it only
+   * for data that holds no such integers, like the CVR, where every number came
+   * from a client or from a row sent to one.
+   *
+   * This matters for `jsonb`, which does not keep the form a number was written
+   * in: `1e+19` comes back as digits, which look the same as an int8.
+   */
+  plainJSON?: boolean | undefined;
 };
 
 /**
@@ -265,7 +277,10 @@ export type TypeOptions = {
  *
  * @param jsonAsString Keep JSON / JSONB values as strings instead of parsing.
  */
-export const postgresTypeConfig = ({sendStringAsJson}: TypeOptions = {}) => ({
+export const postgresTypeConfig = ({
+  sendStringAsJson,
+  plainJSON,
+}: TypeOptions = {}) => ({
   // Type the type IDs as `number` so that Typescript doesn't complain about
   // referencing external types during type inference.
   types: {
@@ -276,7 +291,7 @@ export const postgresTypeConfig = ({sendStringAsJson}: TypeOptions = {}) => ({
       serialize: sendStringAsJson
         ? (x: unknown) => (typeof x === 'string' ? x : BigIntJSON.stringify(x))
         : BigIntJSON.stringify,
-      parse: BigIntJSON.parse,
+      parse: plainJSON ? globalThis.JSON.parse : BigIntJSON.parse,
     },
     // Timestamps are converted to PreciseDate objects.
     timestamp: {

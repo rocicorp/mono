@@ -110,9 +110,17 @@ export default async function runWorker(
   );
   lc.debug?.(`running view-syncer on ${replicaFile}`);
 
-  const cvrDB = await connectPgClient(lc, cvr.db, `sync-worker-${pid}-cvr`, {
-    max: must(cvr.maxConnsPerWorker, 'cvr.maxConnsPerWorker must be set'),
-  });
+  const cvrDB = await connectPgClient(
+    lc,
+    cvr.db,
+    `sync-worker-${pid}-cvr`,
+    {
+      max: must(cvr.maxConnsPerWorker, 'cvr.maxConnsPerWorker must be set'),
+    },
+    // Every number in the CVR is a JavaScript number, but JSONB returns a large
+    // one as digits, which would otherwise be parsed as a bigint.
+    {plainJSON: true},
+  );
 
   const upstreamDB =
     enableCrudMutations && upstream.type === 'pg'
