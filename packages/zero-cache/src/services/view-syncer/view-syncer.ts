@@ -56,6 +56,7 @@ import {
   getOrCreateValueHistogram,
 } from '../../observability/metrics.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
+import {clientGroupLogID} from '../../types/client-group-log-id.ts';
 import type {ViewSyncerDownstream} from '../../types/downstream.ts';
 import {
   getLogLevel,
@@ -90,8 +91,12 @@ import type {
   ConnectionSelector,
   ConnectionValidation,
 } from './connection-context-manager.ts';
-import {ClientNotFoundError, CVRStore} from './cvr-store.ts';
-import type {CVRUpdater} from './cvr.ts';
+import {
+  ClientNotFoundError,
+  CVRStore,
+  PinnedUserMismatchError,
+} from './cvr-store.ts';
+import {CVRUpdater} from './cvr.ts';
 import {
   classifyQueriesForHydration,
   CVRConfigDrivenUpdater,
@@ -737,7 +742,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
       // If all clients have disconnected, cancel all pending work.
       if (await this.#checkForShutdownConditionsInLock()) {
-        this.#lc.info?.(`closing clientGroupID=${this.id}`);
+        this.#lc.info?.(`closing clientGroupID=${clientGroupLogID(this.id)}`);
         // Reject #initialized so that run() unblocks if it is still
         // waiting on readyState(). This is a no-op if already resolved.
         this.#initialized.reject(shutdownBeforeInitializationError());
@@ -763,6 +768,22 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       try {
+        if (reloaded && this.#cvr.pinnedUser !== null) {
+          // Validation of every connection to this instance must agree with
+          // the user the group was pinned to before it was (re)loaded.
+          try {
+            this.connContextManager.restorePinnedUser(this.#cvr.pinnedUser);
+          } catch (e) {
+            // Another view-syncer pinned the group to a different user than
+            // the one validated here. The connection state of this instance
+            // cannot be trusted: stop it so that every client reconnects to
+            // a fresh instance, which validates them against the stored pin.
+            this.#stateChanges.fail(
+              e instanceof Error ? e : new Error(String(e)),
+            );
+            throw e;
+          }
+        }
         if (reloaded && this.#resetPipelinesIfBehindCVR(lc, this.#cvr)) {
           // Not every locked operation rehydrates (e.g. auth maintenance), and
           // if the replica has already caught up to the CVR there may be no
@@ -777,6 +798,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       } catch (e) {
         // Clear cached state if an error is encountered.
         this.#cvr = undefined;
+        if (e instanceof PinnedUserMismatchError) {
+          // Another view-syncer pinned the group to a different user than the
+          // one validated here. Stop so that every client, not only the one
+          // whose operation failed, reconnects to a fresh instance that
+          // validates it against the stored pin.
+          this.#stateChanges.fail(e);
+        }
         throw e;
       } finally {
         // Lock-scoped work is where validated connections gain or lose
@@ -865,13 +893,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // transforming custom queries (dependency on authData) and building
       // pipelines (dependency on cvr.clientSchema).
       if ((await this.readyState()) === 'draining') {
-        this.#lc.debug?.(`draining view-syncer ${this.id} before running`);
+        this.#lc.debug?.(
+          `draining view-syncer ${clientGroupLogID(this.id)} before running`,
+        );
         void this.stop();
       }
       for await (const replicaState of this.#stateChanges) {
         const {state} = replicaState;
         if (this.#drainCoordinator.shouldDrain()) {
-          this.#lc.debug?.(`draining view-syncer ${this.id} (elective)`);
+          this.#lc.debug?.(
+            `draining view-syncer ${clientGroupLogID(this.id)} (elective)`,
+          );
           break;
         }
         assert(state === 'version-ready', 'state should be version-ready'); // This is the only state change used.
@@ -978,7 +1010,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       await this.#cleanup();
     } catch (e) {
       this.#lc[getLogLevel(e)]?.(
-        `stopping view-syncer ${this.id}: ${String(e)}`,
+        `stopping view-syncer ${clientGroupLogID(this.id)}: ${String(e)}`,
         e,
       );
       await this.#cleanup(e);
@@ -988,7 +1020,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       await this.#cvrStore
         .flushed(this.#lc)
         .catch(e => this.#lc[getLogLevel(e)]?.(e));
-      this.#lc.info?.(`view-syncer ${this.id} finished`);
+      this.#lc.info?.(`view-syncer ${clientGroupLogID(this.id)} finished`);
       this.#stopped.resolve();
     }
   }
@@ -1294,16 +1326,21 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   #deleteClientDueToDisconnect(clientID: string, client: ClientHandler) {
-    this.connContextManager.closeConnection({
-      clientID,
-      wsID: client.wsID,
-    });
+    const c = this.#clients.get(clientID);
+
+    // A replacement connection with the same wsID shares this connection's
+    // context key, so closing it would unregister the replacement's context.
+    if (c === client || c?.wsID !== client.wsID) {
+      this.connContextManager.closeConnection({
+        clientID,
+        wsID: client.wsID,
+      });
+    }
 
     // Note: It is okay to delete / cleanup clients without acquiring the lock.
     // In fact, it is important to do so in order to guarantee that idle cleanup
     // is performed in a timely manner, regardless of the amount of work
     // queued on the lock.
-    const c = this.#clients.get(clientID);
     if (c === client) {
       this.#clients.delete(clientID);
 
@@ -1460,10 +1497,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         connCtx.baseCookie,
         downstream,
       );
-      this.#clients
-        .get(connCtx.clientID)
-        ?.close(`replaced by wsID: ${connCtx.wsID}`);
+      const replaced = this.#clients.get(connCtx.clientID);
       this.#clients.set(connCtx.clientID, newClient);
+      replaced?.close(`replaced by wsID: ${connCtx.wsID}`);
 
       // Note: initConnection() must be synchronous so that `downstream` is
       // immediately returned to the caller (connection.ts). This ensures
@@ -1491,9 +1527,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             // queries, but that may hit the transform cache so do not rely on
             // it for validation. This also ensures shared maintenance always has
             // a validated connection to fall back to.
-            if (!(await this.#validateConnection(connCtx))) {
+            const validatedConnCtx =
+              await this.#validateCurrentConnection(connCtx);
+            if (!validatedConnCtx) {
               return;
             }
+            // From here on the client takes part in pokes and catch-up. The
+            // #handleConfigUpdate call below catches it up from its baseCookie.
+            newClient.markValidated();
             await this.#handleConfigUpdate(
               lc,
               clientID,
@@ -1504,8 +1545,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               // `cg${clientGroupID}`, as is done in the schema migration.
               // As clients update to the zero version with the profileID logic,
               // the value will be correspondingly in the CVR db.
-              connCtx.profileID ?? `cg${this.id}`,
-              connCtx,
+              validatedConnCtx.profileID ?? `cg${this.id}`,
+              validatedConnCtx,
             );
             // this.#authData  and cvr (in particular cvr.clientSchema) have been
             // initialized, signal the run loop to run.
@@ -1555,15 +1596,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
         lc.debug?.('Auth changed, re-validating and re-transforming queries');
 
-        const connCtx =
-          this.connContextManager.mustGetConnectionContext(selector);
-
-        // If pipelines are not yet ready, there is no transform request that
-        // can absorb validation, so validate immediately.
-        if (!this.#pipelinesHydrated) {
-          if (!(await this.#validateConnection(connCtx))) {
-            return;
-          }
+        // Validate the new credential before anything else. The re-transform
+        // below cannot stand in for this: it is skipped when there are no
+        // custom queries, and it only validates when the response was not
+        // served from the transform cache. As in initConnection, a credential
+        // that changes again while this validation is in flight is validated
+        // in its place and is the one re-transformed with.
+        const validatedConnCtx =
+          await this.#validateCurrentConnection(selector);
+        if (!validatedConnCtx) {
+          return;
         }
 
         // Re-transform all queries so auth-sensitive query expansion matches
@@ -1575,7 +1617,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           cvr,
           'all',
           undefined,
-          connCtx,
+          validatedConnCtx,
         );
       },
     );
@@ -1633,6 +1675,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ): Promise<CVRSnapshot> {
     return startAsyncSpan(tracer, 'vs.#flushUpdater', () =>
       this.#runPriorityOp(lc, 'flushing cvr', async () => {
+        // Persist the user the group was pinned to by connection validation
+        // so that it survives view-syncer eviction and process restarts.
+        const {pinnedUser} = this.connContextManager.getGroupState();
+        if (pinnedUser !== undefined) {
+          updater.setPinnedUser(pinnedUser);
+        }
         const now = Date.now();
         const ttlClock = this.#getTTLClock(now);
         const {cvr, flushed} = await updater.flush(
@@ -1790,7 +1838,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       tracer,
       `vs.#runInLockForClient(${cmd})`,
       async span => {
-        span.setAttribute('clientGroupID', this.id);
+        span.setAttribute('clientGroupID', clientGroupLogID(this.id));
         span.setAttribute('clientID', clientID);
         let client: ClientHandler | undefined;
         let result: R | undefined;
@@ -1804,20 +1852,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             lc.debug?.('acquired lock for cvr');
 
             client = this.#clients.get(clientID);
-            if (client?.wsID !== wsID) {
-              lc.debug?.('mismatched wsID', client?.wsID, wsID);
+            if (client?.wsID !== wsID || (newClient && client !== newClient)) {
+              lc.debug?.('mismatched or superseded client', client?.wsID, wsID);
               // Only respond to messages of the currently connected client.
-              // Connections may have been drained or dropped due to an error.
+              // Connections may have been drained or dropped due to an error,
+              // or replaced by another connection with the same wsID.
               return;
             }
 
             connCtx = this.connContextManager.getConnectionContext(selector);
 
             if (newClient) {
-              assert(
-                newClient === client,
-                'newClient must match existing client',
-              );
               checkClientAndCVRVersions(client.version(), cvr.version);
             } else if (!this.#clients.has(clientID)) {
               lc.warn?.(`Processing ${cmd} before initConnection was received`);
@@ -1832,8 +1877,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             .withContext('wsID', wsID)
             .withContext('cmd', cmd);
           lc[getLogLevel(e)]?.(`closing connection with error`, e);
-          if (connCtx) {
-            this.connContextManager.failConnection(selector, connCtx.revision);
+          // The client is failed below, so its context must go even if an
+          // auth update advanced the revision while `fn` was running. If
+          // the socket was replaced by one reusing the selector meanwhile,
+          // the replacement's context is not ours to fail.
+          const current = connCtx && this.#currentRegistration(connCtx);
+          if (current) {
+            this.connContextManager.failConnection(selector, current.revision);
           }
           if (client) {
             // Ideally, propagate the exception to the client's downstream subscription ...
@@ -1848,13 +1898,28 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     );
   }
 
+  /**
+   * The clients that pokes and catch-up are sent to. A client whose
+   * connection has not been validated yet is left out: its `initConnection`
+   * validates it and then catches it up from its baseCookie, so lock-held
+   * work for other clients that runs in the meantime must not send it data.
+   */
   #getClients(atVersion?: CVRVersion): ClientHandler[] {
-    const clients = [...this.#clients.values()];
+    const clients = [...this.#clients.values()].filter(c => c.validated());
     return atVersion
       ? clients.filter(
           c => cmpVersions(c.version() ?? EMPTY_CVR_VERSION, atVersion) === 0,
         )
       : clients;
+  }
+
+  /**
+   * The client to send a targeted message (e.g. a query error) to, or
+   * `undefined` while its connection is still unvalidated; see #getClients().
+   */
+  #getValidatedClient(clientID: string): ClientHandler | undefined {
+    const client = this.#clients.get(clientID);
+    return client?.validated() ? client : undefined;
   }
 
   // Must be called from within #lock.
@@ -2410,9 +2475,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     // send the transform failed error to each affected client
     if ('queryIDs' in errorOrErrors) {
       for (const clientId of getAffectedClientIDs(errorOrErrors.queryIDs)) {
-        this.#clients
-          .get(clientId)
-          ?.sendQueryTransformFailedError(errorOrErrors);
+        this.#getValidatedClient(clientId)?.sendQueryTransformFailedError(
+          errorOrErrors,
+        );
       }
 
       return;
@@ -2429,7 +2494,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
 
     for (const [clientId, errors] of appErrorGroups) {
-      this.#clients.get(clientId)?.sendQueryTransformApplicationErrors(errors);
+      this.#getValidatedClient(clientId)?.sendQueryTransformApplicationErrors(
+        errors,
+      );
     }
   }
 
@@ -2479,7 +2546,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     let coverageLC = lc
       .withContext('appID', this.#shard.appID)
       .withContext('shardNum', this.#shard.shardNum)
-      .withContext('clientGroupID', this.id)
+      .withContext('clientGroupID', clientGroupLogID(this.id))
       .withContext('queryCoverageMode', 'shadow')
       .withContext('hydrationPath', hydrationPath)
       .withContext('totalHydratedQueries', totalHydratedQueries)
@@ -2550,7 +2617,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ) {
     return startAsyncSpan(tracer, 'vs.#syncQueryPipelineSet', async span => {
       const start = performance.now();
-      span.setAttribute('clientGroupID', this.id);
+      span.setAttribute('clientGroupID', clientGroupLogID(this.id));
       assert(
         this.#pipelines.initialized(),
         'pipelines must be initialized (syncQueryPipelineSet)',
@@ -2952,7 +3019,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     // at most once per query per breaker window.
     const shape = queryShape(query.ast);
     lc.warn('Query hydration aborted for exceeding the hydration timeout', {
-      clientGroupID: this.id,
+      clientGroupID: clientGroupLogID(this.id),
       queryHash: query.id,
       transformationHash: query.transformationHash,
       ...(query.name !== undefined && {queryName: query.name}),
@@ -2992,7 +3059,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
     lc.warn('Slow query materialization', {
       zeroEvent: 'query-slow-hydration',
-      clientGroupID: this.id,
+      clientGroupID: clientGroupLogID(this.id),
       queryHash: query.id,
       transformationHash: query.transformationHash,
       ...(query.name !== undefined && {queryName: query.name}),
@@ -3018,7 +3085,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ): void {
     this.#hydrationCircuitBreakerRejections.add(1);
     lc.warn?.('Query rejected by its open hydration circuit breaker', {
-      clientGroupID: this.id,
+      clientGroupID: clientGroupLogID(this.id),
       queryHash: query.id,
       transformationHash: query.transformationHash,
       ...(query.name !== undefined && {queryName: query.name}),
@@ -3081,7 +3148,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
     }
     for (const [clientID, errors] of errorsByClient) {
-      this.#clients.get(clientID)?.sendQueryTransformApplicationErrors(errors);
+      this.#getValidatedClient(clientID)?.sendQueryTransformApplicationErrors(
+        errors,
+      );
     }
   }
 
@@ -3109,7 +3178,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       });
     }
     lc.info?.('view-syncer hydration budget exhausted', {
-      clientGroupID: this.id,
+      clientGroupID: clientGroupLogID(this.id),
       hydrationBudgetMs: hydrationBudget.limitMs,
       hydrationElapsedMs: elapsedMs,
       activeHydratedQueries,
@@ -3530,7 +3599,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           const id: RowID = {schema, table, rowKey};
           let patch: RowPatch;
           if (!row.refCounts) {
-            patch = {type: 'row', op: 'del', id};
+            patch = {type: 'row', op: 'del', id, catchup: true};
           } else {
             const row = must(
               this.#pipelines.getRow(table, rowKey),
@@ -3665,7 +3734,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     cvr: CVRSnapshot,
   ): Promise<'success' | ResetPipelinesSignal> {
     return startAsyncSpan(tracer, 'vs.#advancePipelines', async span => {
-      span.setAttribute('clientGroupID', this.id);
+      span.setAttribute('clientGroupID', clientGroupLogID(this.id));
       assert(
         this.#pipelines.initialized(),
         'pipelines must be initialized (advancePipelines',
@@ -4058,7 +4127,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
     lc.info?.(
       'Client group hydrated queries again in its batches of changes instead of pushing the changes to them',
-      {clientGroupID: this.id, ...log},
+      {clientGroupID: clientGroupLogID(this.id), ...log},
     );
     this.#rebuildsLoggedAt = now;
     this.#rebuildLog = newRebuildLog();
@@ -4159,7 +4228,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#lc.info?.(
       'Client group is waiting between batches: its sync worker is over its share target',
       {
-        clientGroupID: this.id,
+        clientGroupID: clientGroupLogID(this.id),
         waits: log.waits,
         waitedMs: log.waitedMs,
         lastWaitMs: waitedMs,
@@ -4196,7 +4265,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       client,
       this.#inspectorDelegate,
       this.id,
-      this,
       this.#cvrStore,
       this.#config,
       connCtx,
@@ -4297,11 +4365,25 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         validation = {kind: 'client-fallback'};
       }
 
-      this.connContextManager.validateConnection(
+      if (!this.#currentRegistration(connCtx)) {
+        // Replaced by a socket reusing the selector while the request was in
+        // flight. That connection validates on its own.
+        return false;
+      }
+      const validated = this.connContextManager.validateConnection(
         connCtx,
         connCtx.revision,
         validation,
       );
+      if (validated && this.#cvr?.pinnedUser === null) {
+        // Persist the pin now rather than with the next flush, which the
+        // rest of this operation may still abandon (e.g. a rejected client
+        // message); until then a restart would leave the group unpinned.
+        this.#cvr = await this.#flushUpdater(
+          this.#lc,
+          new CVRUpdater(this.#cvrStore, this.#cvr, this.#cvr.replicaVersion),
+        );
+      }
       return true;
     } catch (e) {
       if (isProtocolError(e) && isAuthErrorBody(e.errorBody)) {
@@ -4314,11 +4396,54 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             message: e.message,
           },
         );
-        this.#failMaintenanceConnection(connCtx, e);
+        if (this.#currentRegistration(connCtx)) {
+          this.#failMaintenanceConnection(connCtx, e);
+        }
         return false;
       }
       throw e;
     }
+  }
+
+  /**
+   * The live context registered for `connCtx`'s selector, or `undefined` if
+   * that socket is gone or has been replaced by one reusing the selector
+   * (which starts over at revision 0, so revisions alone cannot tell).
+   */
+  #currentRegistration(
+    connCtx: ConnectionContext,
+  ): ConnectionContext | undefined {
+    const current = this.connContextManager.getConnectionContext(connCtx);
+    return current?.insertionOrder === connCtx.insertionOrder
+      ? current
+      : undefined;
+  }
+
+  /**
+   * Validates the connection's credential as it stands once validation ends.
+   * An `updateAuth` handled while a validation is in flight moves the
+   * connection to a newer revision, which makes a failure of the older one
+   * stale, as is its success; the newer credential is then validated in its
+   * place, so the `initConnection` waiting on it is not dropped.
+   */
+  async #validateCurrentConnection(
+    selector: ConnectionSelector,
+  ): Promise<ConnectionContext | undefined> {
+    let connCtx = this.connContextManager.getConnectionContext(selector);
+    while (connCtx) {
+      const valid = await this.#validateConnection(connCtx);
+      const current = this.#currentRegistration(connCtx);
+      if (!current) {
+        // Gone, or replaced by a socket reusing the selector, whose own
+        // initConnection validates it.
+        return undefined;
+      }
+      if (current.revision === connCtx.revision) {
+        return valid ? connCtx : undefined;
+      }
+      connCtx = current;
+    }
+    return undefined;
   }
 
   #failMaintenanceConnection(connCtx: ConnectionContext, error: ProtocolError) {
@@ -4362,7 +4487,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       if (err) {
         client.fail(err);
       } else {
-        client.close(`closed clientGroupID=${this.id}`);
+        client.close(`closed clientGroupID=${clientGroupLogID(this.id)}`);
       }
     }
 
@@ -4370,16 +4495,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     // cleaning up the pipelines and closing db connections.
     await this.#lock.withLock(() => {});
     this.#pipelines.destroy();
-
-    // Inspector authentication is tracked per client group in a map that
-    // outlives this service. Release the entry this service established so
-    // that the map does not grow with every client group ever served by the
-    // worker. This runs after the lock barrier above so that an
-    // `authenticate` request that was already in flight on the lock cannot
-    // re-add the entry afterwards. Passing `this` leaves an entry alone if a
-    // replacement service for the same client group has authenticated in the
-    // meantime.
-    this.#inspectorDelegate.clearAuthenticated(this.id, this);
   }
 
   /**

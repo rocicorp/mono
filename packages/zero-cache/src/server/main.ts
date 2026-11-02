@@ -1,3 +1,4 @@
+import {randomBytes} from 'node:crypto';
 import path from 'node:path';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
@@ -92,6 +93,21 @@ export default async function runWorker(
           '--cvr-max-conns-per-worker',
           String(Math.floor(config.cvr.maxConns / numSyncers)),
         ];
+
+  // In a single-node configuration the change-streamer only serves the
+  // workers of this process tree, so a secret is generated for them when none
+  // is configured. A dedicated replication-manager (no sync workers) serves
+  // remote view-syncers, which must be configured with the same secret.
+  if (
+    runsChangeStreamer(config) &&
+    numSyncers > 0 &&
+    config.changeStreamer.secret === undefined
+  ) {
+    env = {
+      ...env,
+      ZERO_CHANGE_STREAMER_SECRET: randomBytes(32).toString('base64url'),
+    };
+  }
 
   const allSubWorkers: Worker[] = [];
   function loadWorker(

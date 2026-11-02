@@ -11,9 +11,9 @@ import {
   type MetricMap,
   type MetricsDelegate,
 } from '../../../zql/src/query/metrics-delegate.ts';
-import {isDevelopmentMode} from '../config/normalize.ts';
 import type {CustomQueryTransformer} from '../custom-queries/transform-query.ts';
 import type {ConnectionContext} from '../services/view-syncer/connection-context-manager.ts';
+import {InspectorAuthLimiter} from '../services/view-syncer/inspect-auth-limiter.ts';
 import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 
@@ -27,22 +27,11 @@ export type ServerMetrics = {
   'query-update-server': TDigest;
 };
 
-type ClientGroupID = string;
-
 /**
- * The service that established a client group's authentication, i.e. the
- * ViewSyncer serving it. See {@link InspectorDelegate.clearAuthenticated}.
+ * Limits attempts at the admin password. Kept outside of the class so that the
+ * counters cover every client group served by the worker.
  */
-type AuthOwner = object;
-
-const NO_OWNER: AuthOwner = {};
-
-/**
- * Authenticated client group IDs, each mapped to the owner that authenticated
- * it. We keep this outside of the class to share this state across all
- * instances of the InspectorDelegate.
- */
-const authenticatedClientGroupIDs = new Map<ClientGroupID, AuthOwner>();
+const authLimiter = new InspectorAuthLimiter();
 
 /**
  * `query-update-server` is reported for every change pushed into every
@@ -129,41 +118,8 @@ export class InspectorDelegate implements MetricsDelegate {
     this.#queryIDToAST.set(queryID, ast);
   }
 
-  /**
-   * Check if the client is authenticated. We only require authentication once
-   * per "worker".
-   */
-  isAuthenticated(clientGroupID: ClientGroupID): boolean {
-    return (
-      isDevelopmentMode() || authenticatedClientGroupIDs.has(clientGroupID)
-    );
-  }
-
-  /**
-   * Marks the client group as authenticated on behalf of `owner`, the service
-   * (ViewSyncer) that handled the authentication.
-   */
-  setAuthenticated(
-    clientGroupID: ClientGroupID,
-    owner: AuthOwner = NO_OWNER,
-  ): void {
-    authenticatedClientGroupIDs.set(clientGroupID, owner);
-  }
-
-  /**
-   * Clears the client group's authentication. When `owner` is given, the
-   * authentication is only cleared if it was established by that owner: a
-   * replacement ViewSyncer can start for the same client group while the
-   * previous one is still shutting down, and the previous one's cleanup must
-   * not revoke what the replacement has since authenticated.
-   */
-  clearAuthenticated(clientGroupID: ClientGroupID, owner?: AuthOwner) {
-    if (
-      owner === undefined ||
-      authenticatedClientGroupIDs.get(clientGroupID) === owner
-    ) {
-      authenticatedClientGroupIDs.delete(clientGroupID);
-    }
+  get authLimiter(): InspectorAuthLimiter {
+    return authLimiter;
   }
 
   /**

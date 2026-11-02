@@ -36,6 +36,7 @@ import type {
 import type {ConnectionContextManager} from '../services/view-syncer/connection-context-manager.ts';
 import {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
 import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
+import {clientGroupLogID} from '../types/client-group-log-id.ts';
 import type {ClientGroupStatusMessage, Worker} from '../types/processes.ts';
 import type {Subscription} from '../types/subscription.ts';
 import {installWebSocketReceiver} from '../types/websocket-handoff.ts';
@@ -715,35 +716,36 @@ export class Syncer implements SingletonService {
 
     this.#lc.debug?.(
       'creating connection',
-      params.clientGroupID,
+      clientGroupLogID(params.clientGroupID),
       params.clientID,
     );
     recordConnectionAttempted();
     const {clientID, clientGroupID, auth, userID} = params;
     const hasProvidedAuth = auth !== undefined && auth !== '';
     const incomingUserID = userID ?? null;
+    const tokenOptions = tokenConfigOptions(this.#config.auth ?? {});
+    const hasPushOrMutate =
+      this.#config?.push?.url !== undefined ||
+      this.#config?.mutate?.url !== undefined;
+    const hasQueries =
+      this.#config?.query?.url !== undefined ||
+      this.#config?.getQueries?.url !== undefined;
+    const hasCustomEndpoints = hasPushOrMutate && hasQueries;
 
-    if (hasProvidedAuth) {
-      const tokenOptions = tokenConfigOptions(this.#config.auth ?? {});
-
-      const hasPushOrMutate =
-        this.#config?.push?.url !== undefined ||
-        this.#config?.mutate?.url !== undefined;
-      const hasQueries =
-        this.#config?.query?.url !== undefined ||
-        this.#config?.getQueries?.url !== undefined;
-
-      // must either have one of the token options set or have custom mutations & queries enabled
-      const hasExactlyOneTokenOption = tokenOptions.length === 1;
-      const hasCustomEndpoints = hasPushOrMutate && hasQueries;
-      if (!hasExactlyOneTokenOption && !hasCustomEndpoints) {
-        recordConnectionFailure('configuration');
-        throw new Error(
-          'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
-            JSON.stringify(tokenOptions) +
-            '. You may also set both ZERO_MUTATE_URL and ZERO_QUERY_URL to enable custom mutations and queries without passing token verification options.',
-        );
-      }
+    // More than one token option is a misconfiguration under which no
+    // validator is built, so it is refused whether or not a token was sent.
+    // A token otherwise requires exactly one token option, or custom
+    // mutations & queries to be enabled instead.
+    if (
+      tokenOptions.length > 1 ||
+      (hasProvidedAuth && tokenOptions.length === 0 && !hasCustomEndpoints)
+    ) {
+      recordConnectionFailure('configuration');
+      throw new Error(
+        'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
+          JSON.stringify(tokenOptions) +
+          '. You may also set both ZERO_MUTATE_URL and ZERO_QUERY_URL to enable custom mutations and queries without passing token verification options.',
+      );
     }
 
     let initialAuth: Auth | undefined;
@@ -753,7 +755,7 @@ export class Syncer implements SingletonService {
     try {
       initialAuth = await resolveAuth(
         this.#lc
-          .withContext('clientGroupID', clientGroupID)
+          .withContext('clientGroupID', clientGroupLogID(clientGroupID))
           .withContext('clientID', clientID),
         // no previous auth, since this is a new connection, and resolveAuth is
         // connection scoped, not client group scoped
@@ -767,7 +769,7 @@ export class Syncer implements SingletonService {
         this.#lc.warn?.(
           'Rejecting sync connection during initial auth resolution',
           {
-            clientGroupID,
+            clientGroupID: clientGroupLogID(clientGroupID),
             clientID,
             incomingUserID,
             hasProvidedAuth,
@@ -790,7 +792,7 @@ export class Syncer implements SingletonService {
     // context manager and its refs on the mutagen and pusher services.
     if (ws.readyState !== WebSocket.OPEN) {
       this.#lc.debug?.('websocket closed while resolving auth', {
-        clientGroupID,
+        clientGroupID: clientGroupLogID(clientGroupID),
         clientID,
         readyState: ws.readyState,
       });
@@ -827,6 +829,14 @@ export class Syncer implements SingletonService {
     // Check for and close existing connections AFTER auth is validated
     const existing = this.#connections.get(clientID);
     if (existing) {
+      if (existing.wsID === params.wsID) {
+        // Clients generate a new wsID per socket, so this means the same
+        // connect request was delivered twice (e.g. duplicated upstream).
+        this.#lc.warn?.(
+          `duplicate connection for client ${clientID} with the same wsID ${params.wsID}, closing existing connection`,
+          {clientGroupID: clientGroupLogID(clientGroupID)},
+        );
+      }
       this.#lc.debug?.(
         `client ${clientID} already connected, closing existing connection`,
       );
@@ -894,7 +904,7 @@ export class Syncer implements SingletonService {
     if (params.initConnectionMsg) {
       this.#lc.debug?.(
         'handling init connection message from sec header',
-        params.clientGroupID,
+        clientGroupLogID(params.clientGroupID),
         params.clientID,
       );
       await connection.handleInitConnection(
@@ -957,7 +967,9 @@ export class Syncer implements SingletonService {
 
       // Pick an arbitrary view syncer to force drain.
       for (const vs of this.#viewSyncers.getServices()) {
-        this.#lc.debug?.(`draining view-syncer ${vs.id} (forced)`);
+        this.#lc.debug?.(
+          `draining view-syncer ${clientGroupLogID(vs.id)} (forced)`,
+        );
         // When this drain or an elective drain completes, the forceDrainTimeout will
         // resolve after the next drain interval.
         void vs.stop();

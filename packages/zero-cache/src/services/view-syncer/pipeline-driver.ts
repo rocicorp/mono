@@ -70,6 +70,7 @@ import {
   getOrCreateLatencyHistogram,
 } from '../../observability/metrics.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
+import {clientGroupLogID} from '../../types/client-group-log-id.ts';
 import {type RowKey} from '../../types/row-key.ts';
 import {type ShardID} from '../../types/shards.ts';
 import {
@@ -610,7 +611,7 @@ export class PipelineDriver {
     deferredWrites?: DeferredWritesBudget,
     queryStats?: QueryStats | undefined,
   ) {
-    this.#lc = lc.withContext('clientGroupID', clientGroupID);
+    this.#lc = lc.withContext('clientGroupID', clientGroupLogID(clientGroupID));
     this.#snapshotter = snapshotter;
     this.#storage = storage;
     this.#shardID = shardID;

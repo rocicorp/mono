@@ -1,5 +1,4 @@
 import type {LogContext} from '@rocicorp/logger';
-import auth from 'basic-auth';
 import type {FastifyReply, FastifyRequest} from 'fastify';
 import {Database} from '../../../zqlite/src/db.ts';
 import {
@@ -7,13 +6,14 @@ import {
   type SampleValueKind,
 } from '../../../zqlite/src/sqlite-stat4-sample.ts';
 import type {NormalizedZeroConfig as ZeroConfig} from '../config/normalize.ts';
-import {getOperatorAccess, getServerVersion} from '../config/zero-config.ts';
+import {getServerVersion} from '../config/zero-config.ts';
 import {
   computeZqlSpecsFromLiteSpecs,
   listIndexes,
   listTables,
 } from '../db/lite-tables.ts';
 import {StatementRunner} from '../db/statements.ts';
+import {authorizeAdminRequest} from './admin-auth.ts';
 import {getReplicationState} from './replicator/schema/replication-state.ts';
 
 /**
@@ -476,12 +476,16 @@ export async function handlePlannerzRequest(
   req: FastifyRequest,
   res: FastifyReply,
 ) {
-  const credentials = auth(req);
-  if (getOperatorAccess(lc, config, credentials?.pass) === undefined) {
-    void res
-      .code(401)
-      .header('WWW-Authenticate', 'Basic realm="Plannerz Protected Area"')
-      .send('Unauthorized');
+  if (
+    authorizeAdminRequest(
+      lc,
+      config,
+      req,
+      res,
+      'Plannerz Protected Area',
+      'operator',
+    ) === undefined
+  ) {
     return;
   }
 

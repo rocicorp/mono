@@ -1665,6 +1665,122 @@ describe('authenticate', () => {
     await z.close();
   });
 
+  describe('remembered password', () => {
+    // Runs an inspector `version` call that the server first answers with
+    // `authenticated: false`, then accepts the password and answers the
+    // retried call. Returns the password the client authenticated with.
+    async function versionNeedingAuth<
+      S extends Schema,
+      MD extends CustomMutatorDefs | undefined,
+      C,
+    >(z: TestZero<S, MD, C>, accept: boolean) {
+      const socket = await z.socket;
+      const idPromise = waitForID(z.socket, 'version');
+      const p = z.inspector.serverVersion();
+      const id = await idPromise;
+      socket.messages.length = 0;
+
+      const authIdPromise = waitForID(z.socket, 'authenticate');
+      await z.triggerMessage([
+        'inspect',
+        {op: 'authenticated', id, value: false},
+      ] satisfies InspectDownMessage);
+      const authId = await authIdPromise;
+      const sent = socket.messages.map(m => JSON.parse(m)[1]);
+      const retryIdPromise = waitForID(z.socket, 'version');
+      await z.triggerMessage([
+        'inspect',
+        {op: 'authenticated', id: authId, value: accept},
+      ] satisfies InspectDownMessage);
+      if (!accept) {
+        await expect(p).rejects.toThrowError('Authentication failed');
+        return sent;
+      }
+      await z.triggerMessage([
+        'inspect',
+        {op: 'version', id: await retryIdPromise, value: '1.2.34'},
+      ] satisfies InspectDownMessage);
+      expect(await p).toBe('1.2.34');
+      return sent;
+    }
+
+    test('an accepted password is reused without a prompt', async () => {
+      const z = zeroForTest({schema});
+      await z.triggerConnected();
+      await Promise.resolve();
+
+      vi.stubGlobal('prompt', () => 'secret');
+      expect(await versionNeedingAuth(z, true)).toMatchObject([
+        {op: 'authenticate', value: 'secret'},
+      ]);
+
+      // The server no longer considers the connection authenticated (e.g. it
+      // was re-established). The remembered password is sent, no prompt.
+      vi.stubGlobal('prompt', () => {
+        throw new Error('prompted');
+      });
+      expect(await versionNeedingAuth(z, true)).toMatchObject([
+        {op: 'authenticate', value: 'secret'},
+      ]);
+      await z.close();
+    });
+
+    test('prompts again when the remembered password is refused', async () => {
+      const z = zeroForTest({schema});
+      await z.triggerConnected();
+      await Promise.resolve();
+
+      vi.stubGlobal('prompt', () => 'old-secret');
+      await versionNeedingAuth(z, true);
+
+      // The remembered password is tried first and refused; the prompt's
+      // answer is tried next and refused too.
+      vi.stubGlobal('prompt', () => 'new-secret');
+      const socket = await z.socket;
+      const idPromise = waitForID(z.socket, 'version');
+      const p = z.inspector.serverVersion();
+      const id = await idPromise;
+      socket.messages.length = 0;
+
+      let authIdPromise = waitForID(z.socket, 'authenticate');
+      await z.triggerMessage([
+        'inspect',
+        {op: 'authenticated', id, value: false},
+      ] satisfies InspectDownMessage);
+      let authId = await authIdPromise;
+      expect(JSON.parse(socket.messages[0])[1]).toEqual({
+        op: 'authenticate',
+        id: authId,
+        value: 'old-secret',
+      });
+
+      socket.messages.length = 0;
+      authIdPromise = waitForID(z.socket, 'authenticate');
+      await z.triggerMessage([
+        'inspect',
+        {op: 'authenticated', id: authId, value: false},
+      ] satisfies InspectDownMessage);
+      authId = await authIdPromise;
+      expect(JSON.parse(socket.messages[0])[1]).toEqual({
+        op: 'authenticate',
+        id: authId,
+        value: 'new-secret',
+      });
+      await z.triggerMessage([
+        'inspect',
+        {op: 'authenticated', id: authId, value: false},
+      ] satisfies InspectDownMessage);
+      await expect(p).rejects.toThrowError('Authentication failed');
+
+      // Nothing is remembered after the refusal: the next call prompts.
+      vi.stubGlobal('prompt', () => 'newer-secret');
+      expect(await versionNeedingAuth(z, true)).toMatchObject([
+        {op: 'authenticate', value: 'newer-secret'},
+      ]);
+      await z.close();
+    });
+  });
+
   describe('Query metrics properties', () => {
     test('hydration and update metrics are extracted from server metrics', async () => {
       const z = zeroForTest({schema});

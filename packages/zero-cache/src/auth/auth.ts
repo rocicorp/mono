@@ -72,6 +72,16 @@ export async function resolveAuth(
     }
 
     if (!hasProvidedAuth) {
+      // With JWT verification configured, the token is the only thing that
+      // ties a connection to its userID. A logged-out connection omits both.
+      if (validateLegacyJWT !== undefined && userID !== null) {
+        throw new ProtocolError({
+          kind: ErrorKind.Unauthorized,
+          message:
+            'No token provided. A connection with a userID requires a token when JWT verification is configured.',
+          origin: ErrorOrigin.ZeroCache,
+        });
+      }
       lc.debug?.(`Cleared auth`);
       return undefined;
     }

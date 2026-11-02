@@ -1,10 +1,9 @@
 import fs from 'fs';
 import v8 from 'v8';
 import type {LogContext} from '@rocicorp/logger';
-import auth from 'basic-auth';
 import type {FastifyReply, FastifyRequest} from 'fastify';
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
-import {isAdminPasswordValid} from '../config/zero-config.ts';
+import {authorizeAdminRequest} from './admin-auth.ts';
 
 export function handleHeapzRequest(
   lc: LogContext,
@@ -12,12 +11,20 @@ export function handleHeapzRequest(
   req: FastifyRequest,
   res: FastifyReply,
 ) {
-  const credentials = auth(req);
-  if (!isAdminPasswordValid(lc, config, credentials?.pass)) {
-    void res
-      .code(401)
-      .header('WWW-Authenticate', 'Basic realm="Heapz Protected Area"')
-      .send('Unauthorized');
+  if (!config.enableHeapz) {
+    void res.code(404).send('Not Found');
+    return;
+  }
+  if (
+    authorizeAdminRequest(
+      lc,
+      config,
+      req,
+      res,
+      'Heapz Protected Area',
+      'admin',
+    ) === undefined
+  ) {
     return;
   }
 

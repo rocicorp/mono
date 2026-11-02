@@ -219,16 +219,16 @@ export class CustomQueryTransformer {
                       kind: 'server-validated',
                       validatedUserID: transformResponse.userID,
                     }
-                  : {kind: 'client-fallback'},
+                  : {kind: 'server-unverified'},
             }
           : transformResponse;
       }
 
       if (transformResponse[0] === 'transformed') {
-        // Legacy query response, so we use client fallback
+        // Legacy query response, which carries no userID.
         return {
           kind: 'QueryResponse',
-          validation: {kind: 'client-fallback'},
+          validation: {kind: 'server-unverified'},
           queries: transformResponse[1],
         };
       }

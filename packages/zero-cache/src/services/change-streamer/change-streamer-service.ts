@@ -1160,14 +1160,15 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           cleanupSubscriber = () => ticket.release();
         } else {
           lc.warn?.(
-            `rejecting subscriber at replica version ${replicaVersion}`,
+            `rejecting subscriber at replica version ${replicaVersion} ` +
+              `(current replica version is ${this.#replicaVersion})`,
           );
+          // The current replica version is deliberately not disclosed to
+          // the subscriber; only whether this replica is the older one.
           subscriber.close(
             ErrorType.WrongReplicaVersion,
-            `current replica version is ${
-              this.#replicaVersion
-            } (requested ${replicaVersion})`,
-            {replicaVersion: this.#replicaVersion},
+            `replica version mismatch (requested ${replicaVersion})`,
+            {olderReplica: this.#replicaVersion < replicaVersion},
           );
         }
       } else {

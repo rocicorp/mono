@@ -28,6 +28,13 @@ function createSchema(shard: ShardID) {
   return `CREATE SCHEMA IF NOT EXISTS ${schema(shard)};`;
 }
 
+/**
+ * The user a client group is pinned to: the user of its first validated
+ * connection, with `id: null` for a logged-out group. Every later validated
+ * connection to the group must be from the same user.
+ */
+export type PinnedUser = {readonly id: string | null};
+
 export type InstancesRow = {
   clientGroupID: string;
   version: string;
@@ -38,6 +45,8 @@ export type InstancesRow = {
   grantedAt: number | null;
   clientSchema: ClientSchema | null;
   profileID: string | null;
+  // Optional because old DBs and test fixtures predate this column.
+  pinnedUser?: PinnedUser | null | undefined;
 };
 
 function createInstancesTable(shard: ShardID) {
@@ -52,7 +61,8 @@ CREATE TABLE ${schema(shard)}.instances (
   "grantedAt"      TIMESTAMPTZ,                         -- The time at which the current owner was last granted ownership (most recent connection time).
   "clientSchema"   JSONB,                               -- ClientSchema of the client group
   "profileID"      TEXT,                                -- Stable profile id ("p..."), falling back to the clientGroupID ("cg{clientGroupID}") for old clients
-  "deleted"        BOOL DEFAULT FALSE                   -- Tombstone column for deleted CVRs; instances rows are kept longer for usage stats
+  "deleted"        BOOL DEFAULT FALSE,                  -- Tombstone column for deleted CVRs; instances rows are kept longer for usage stats
+  "pinnedUser"     JSONB                                -- {"id": userID | null} of the first validated connection; NULL until a connection has been validated
 );
 
 -- For garbage collection.

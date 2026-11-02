@@ -1,3 +1,4 @@
+import {timingSafeEqual} from 'node:crypto';
 import {
   PG_ADMIN_SHUTDOWN,
   PG_INSUFFICIENT_PRIVILEGE,
@@ -313,7 +314,10 @@ export class PostgresChangeSource implements ChangeSource {
         msg.tag === 'message' &&
         msg.prefix === this.#lagReporter?.messagePrefix
       ) {
-        changes.pushStatus(this.#lagReporter.processLagReportMessage(msg, lsn));
+        const status = this.#lagReporter.processLagReportMessage(msg, lsn);
+        if (status) {
+          changes.pushStatus(status);
+        }
         return false;
       }
       // Checks if we are passed the LSN of the expected lag report, in which
@@ -656,6 +660,16 @@ export class LagReporter {
       unit: '{report}',
     },
   );
+  readonly #lagReportsIgnored = getOrCreateCounter(
+    'replication',
+    'lag_reports_ignored',
+    {
+      description:
+        'Number of messages with the lag report prefix ignored because ' +
+        'their content could not be parsed as a lag report.',
+      unit: '{message}',
+    },
+  );
 
   readonly #pgVersion: number;
   #expectingLagReport: InitiatedLagReport | null = null;
@@ -859,16 +873,29 @@ export class LagReporter {
    *     XLogData header), rather than the `messageLsn` of the message itself,
    *     which is not guaranteed to be comparable to other stream LSNs (e.g. on
    *     Aurora). See {@link initiateLagReport}.
+   * @returns the status to send downstream, or `undefined` if the message is
+   *     not a lag report. Any session that can call
+   *     `pg_logical_emit_message()` can emit a message with the lag report
+   *     prefix; one that cannot be parsed carries no report and is ignored,
+   *     as a message of an unknown prefix would be, rather than failing the
+   *     stream (which would replay it from the same position).
    */
   processLagReportMessage(
     msg: MessageMessage,
     lsn: bigint,
-  ): DownstreamStatusMessage {
+  ): DownstreamStatusMessage | undefined {
     assert(
       msg.prefix === this.messagePrefix,
       `unexpected message prefix: ${msg.prefix}`,
     );
-    const report = parseLogicalMessageContent(this.#lc, msg, lagReportSchema);
+    let report: LagReport;
+    try {
+      report = parseLogicalMessageContent(this.#lc, msg, lagReportSchema);
+    } catch {
+      // logged by parseLogicalMessageContent()
+      this.#lagReportsIgnored.add(1);
+      return undefined;
+    }
     return this.#processLagReport(report, majorVersionToString(lsn));
   }
 
@@ -1155,16 +1182,122 @@ class ChangeMaker {
     }
   }
 
+  /**
+   * Any session that can call `pg_logical_emit_message()` can emit a message
+   * with the shard's ddl prefix. Only events that carry the shard's secret,
+   * which the upstream functions read from a table in the shard's schema
+   * (see `createEventFunctionStatements()`), are applied. Events emitted
+   * before the secret was installed (by functions that predate it) are
+   * accepted without one.
+   *
+   * @returns why the event cannot be verified, or `undefined` if it can.
+   */
+  #ddlEventOriginProblem(
+    lsn: bigint,
+    json: unknown,
+    ddlSecret: string,
+    ddlSecretLsn: string | null | undefined,
+  ): string | undefined {
+    const secret = field(json, 'secret');
+    if (typeof secret === 'string') {
+      if (equalSecrets(secret, ddlSecret)) {
+        return undefined;
+      }
+    } else if (
+      (secret === undefined || secret === null) &&
+      ddlSecretLsn &&
+      lsn <= toBigInt(ddlSecretLsn)
+    ) {
+      return undefined;
+    }
+    return (
+      `the event does not carry the secret of the ` +
+      `${upstreamSchema(this.#shard)} schema's event functions ` +
+      `(secret ${typeof secret === 'string' ? 'mismatch' : 'absent'}, ` +
+      `installed at ${ddlSecretLsn ?? 'unknown'})`
+    );
+  }
+
   // The lastReplicationEvent is stored to understand the context
   // of the next one.
   #lastReplicationEvent: ReplicationEvent | undefined;
+
+  readonly #ddlEventsIgnored = getOrCreateCounter(
+    'replication',
+    'ddl_events_ignored',
+    {
+      description:
+        'Number of ddl messages ignored because they were not emitted by ' +
+        "the shard's upstream functions (missing or wrong secret, or not " +
+        'valid JSON).',
+      unit: '{message}',
+    },
+  );
 
   #handleDdlMessage(
     lc: LogContext,
     lsn: bigint,
     msg: MessageMessage,
   ): ChangeStreamData[] {
-    const event = parseLogicalMessageContent(lc, msg, replicationEventSchema);
+    // The secret is installed with the shard schema (upstream v32), before
+    // any stream is started. Not having one is a bug, not an unverified
+    // event, and must halt replication (for every message, whatever its
+    // content) rather than silently drop every schema change.
+    const {ddlSecret, ddlSecretLsn} = this.#shardConfig;
+    assert(ddlSecret, 'shard config has no ddl event secret');
+
+    const content = decodeLogicalMessage(msg);
+    let json: unknown;
+    let problem: string | undefined;
+    try {
+      json = JSON.parse(content);
+    } catch (e) {
+      problem = `not valid JSON: ${String(e)}`;
+    }
+    problem ??= this.#ddlEventOriginProblem(lsn, json, ddlSecret, ddlSecretLsn);
+    if (problem !== undefined) {
+      // A message that was not emitted by the shard's own upstream functions
+      // does not describe a schema change: there is nothing to apply, and
+      // the replica is not behind. It is skipped rather than failing the
+      // stream, because halting replication or resetting the replica here
+      // would let any session that can emit a logical message do so.
+      //
+      // The failure modes that do halt replication (via `reset-required`)
+      // are those of a verified event: an event schema this version cannot
+      // parse (an incompatible upstream function version), or a schema
+      // change the replica cannot mirror. Continuing past either would
+      // replicate against the wrong schema.
+      //
+      // This is logged as a warning rather than an error: replication is
+      // unaffected and there is nothing for an operator to fix in zero-cache.
+      // A session on upstream emitting such messages is a matter for the
+      // database's owner; the `ddl_events_ignored` counter is there to
+      // alert on if wanted.
+      this.#ddlEventsIgnored.add(1);
+      lc.warn?.(
+        `ignoring ${msg.prefix} message at ${fromBigInt(lsn)} ` +
+          `(not emitted by the shard's upstream functions; replication ` +
+          `continues): ${problem}`,
+        describeUnverifiedMessage(json),
+      );
+      lc.debug?.(`ignored ${msg.prefix} message content`, {
+        content: content.substring(0, 4096),
+      });
+      return [];
+    }
+    const event = validateLogicalMessage(
+      lc,
+      msg,
+      json,
+      replicationEventSchema,
+      // The event's secret must not end up in the logs.
+      () =>
+        stringify(
+          field(json, 'secret') === undefined
+            ? json
+            : {...(json as object), secret: '<redacted>'},
+        ),
+    );
     lc = lc
       .withContext('lsn', fromBigInt(lsn))
       .withContext('tag', event.event.tag)
@@ -1823,8 +1956,7 @@ function summarizeSchemaForLog(schema: PublishedSchema) {
 }
 
 function summarizeReplicationEventForLog(event: ReplicationEvent): JSONObject {
-  const {schema, ...rest} = event;
-  const {previousSchema, ...eventWithoutSchemas} = rest;
+  const {schema, previousSchema, secret: _, ...eventWithoutSchemas} = event;
   return {
     ...eventWithoutSchemas,
     ...(schema !== undefined && {schema: summarizeSchemaForLog(schema)}),
@@ -1878,23 +2010,74 @@ class ShutdownSignal extends AbortError {
   }
 }
 
+function decodeLogicalMessage({content}: MessageMessage): string {
+  return content instanceof Buffer
+    ? content.toString('utf-8')
+    : new TextDecoder().decode(content);
+}
+
 function parseLogicalMessageContent<T>(
   lc: LogContext,
   msg: MessageMessage,
   schema: v.Type<T>,
-) {
-  const {content} = msg;
-  const str =
-    content instanceof Buffer
-      ? content.toString('utf-8')
-      : new TextDecoder().decode(content);
+): T {
+  const str = decodeLogicalMessage(msg);
+  let json: unknown;
   try {
-    const json = JSON.parse(str);
+    json = JSON.parse(str);
+  } catch (e) {
+    return failParse(lc, msg, e, str);
+  }
+  return validateLogicalMessage(lc, msg, json, schema, () => str);
+}
+
+function validateLogicalMessage<T>(
+  lc: LogContext,
+  msg: MessageMessage,
+  json: unknown,
+  schema: v.Type<T>,
+  contentForLog: () => string,
+): T {
+  try {
     return v.parse(json, schema, 'passthrough');
   } catch (e) {
-    lc.error?.(`unable to parse logical message content: ${String(e)}`, {
-      message: {...msg, content: str},
-    });
-    throw e;
+    return failParse(lc, msg, e, contentForLog());
   }
+}
+
+function failParse(
+  lc: LogContext,
+  msg: MessageMessage,
+  e: unknown,
+  content: string,
+): never {
+  lc.error?.(`unable to parse logical message content: ${String(e)}`, {
+    message: {...msg, content},
+  });
+  throw e;
+}
+
+/** A property of untrusted JSON, or `undefined` if there is no such property. */
+function field(json: unknown, name: string): unknown {
+  return typeof json === 'object' && json !== null && name in json
+    ? (json as Record<string, unknown>)[name]
+    : undefined;
+}
+
+// The identifying fields of an unverified ddl message, for the log. The
+// values are untrusted, so only (bounded) strings are passed through.
+function describeUnverifiedMessage(json: unknown): JSONObject {
+  const str = (value: unknown) =>
+    typeof value === 'string' ? value.substring(0, 200) : null;
+  return {
+    type: str(field(json, 'type')),
+    tag: str(field(field(json, 'event'), 'tag')),
+    query: str(field(field(json, 'context'), 'query')),
+  };
+}
+
+function equalSecrets(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  return bufA.length === bufB.length && timingSafeEqual(bufA, bufB);
 }

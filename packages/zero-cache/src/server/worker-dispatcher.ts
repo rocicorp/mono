@@ -7,6 +7,7 @@ import {
 } from '../observability/metrics.ts';
 import {RunningState} from '../services/running-state.ts';
 import type {Service} from '../services/service.ts';
+import {clientGroupLogID} from '../types/client-group-log-id.ts';
 import type {IncomingMessageSubset} from '../types/http.ts';
 import type {ClientGroupStatusMessage, Worker} from '../types/processes.ts';
 import {installWebSocketHandoff} from '../types/websocket-handoff.ts';
@@ -105,7 +106,9 @@ export class WorkerDispatcher implements Service {
       const {worker: syncer, generation} = assigner.assign(clientGroupID);
       workerDispatchesCounter.add(1, {worker: String(syncer)});
 
-      lc.debug?.(`connecting ${clientGroupID} to syncer ${syncer}`);
+      lc.debug?.(
+        `connecting ${clientGroupLogID(clientGroupID)} to syncer ${syncer}`,
+      );
       return {payload: {...params, generation}, sender: syncers[syncer]};
     };
 

@@ -23,12 +23,21 @@ export type ConnectionState = 'provisional' | 'validated';
 export type UserState = {readonly id: string | null};
 
 /**
- * Delineates the two paths for validating a connection: either server can validate
- * the user's identity and return a definitive userID to trust, or we fall back to
- * trusting the one provided by the client in the incoming query params.
+ * How a connection's `userID` was established:
+ *
+ * - `server-validated`: the API server returned the authoritative userID
+ *   (`null` for a logged-out caller). The connection's claimed userID must
+ *   match it.
+ * - `server-unverified`: the API server answered without a userID, so it did
+ *   not vouch for the caller. Only a logged-out connection, or a userID that
+ *   a legacy JWT has already verified, is accepted.
+ * - `client-fallback`: no API server is involved, so the userID provided by
+ *   the client in the connection params is trusted as-is (a legacy JWT, when
+ *   configured, has verified it).
  */
 export type ConnectionValidation =
   | {kind: 'client-fallback'}
+  | {kind: 'server-unverified'}
   | {kind: 'server-validated'; validatedUserID: string | null};
 
 /**
@@ -128,6 +137,8 @@ export type ConnectionContextManager = {
         group: GroupAuthState;
       }>
     | undefined;
+
+  restorePinnedUser(pinnedUser: UserState): void;
 
   failConnection(
     selector: ConnectionSelector,
@@ -427,6 +438,23 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
           'warn',
         );
       }
+    } else if (
+      validation.kind === 'server-unverified' &&
+      connection.user.id !== null &&
+      connection.auth?.type !== 'jwt'
+    ) {
+      // The API server did not name the user, so nothing backs the claimed
+      // userID. Trusting it would let a connection pin the client group to a
+      // userID it does not own.
+      throw new ProtocolErrorWithLevel(
+        {
+          kind: ErrorKind.Unauthorized,
+          message:
+            'Connection userID was not validated by the API server. The API server must return a userID for authenticated connections.',
+          origin: ErrorOrigin.ZeroCache,
+        },
+        'warn',
+      );
     }
 
     // The incoming user state is either the validated user state from the server
@@ -469,6 +497,35 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
       connection: validatedConnection,
       group: this.getGroupState(),
     };
+  }
+
+  /**
+   * Pins the group to the user persisted with its CVR, as bound by a validated
+   * connection to an earlier instance of the group's view-syncer. Later
+   * validations by this instance must match it, as they would had the group
+   * been pinned here.
+   *
+   * Throws a `Rehome` error if the group is already pinned to another user:
+   * the stored pin wins, so the connections validated here can no longer be
+   * trusted and the view-syncer should stop, leaving its clients to reconnect
+   * to a fresh instance that validates them against the stored pin.
+   */
+  restorePinnedUser(pinnedUser: UserState): void {
+    if (this.#group.pinnedUser === undefined) {
+      this.#setGroup({...this.#group, pinnedUser: {id: pinnedUser.id}});
+      return;
+    }
+    if (this.#group.pinnedUser.id !== pinnedUser.id) {
+      throw new ProtocolErrorWithLevel(
+        {
+          kind: ErrorKind.Rehome,
+          message:
+            'Client group is pinned to a different userID than the one persisted with its CVR. Reconnect required.',
+          origin: ErrorOrigin.ZeroCache,
+        },
+        'warn',
+      );
+    }
   }
 
   /** Removes one connection due to failed auth and updates all derived background/deadline state. */

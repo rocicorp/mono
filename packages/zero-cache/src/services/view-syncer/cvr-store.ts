@@ -39,6 +39,7 @@ import {
   type ClientsRow,
   type DesiresRow,
   type InstancesRow,
+  type PinnedUser,
   type QueriesRow,
   type RowsRow,
 } from './schema/cvr.ts';
@@ -64,6 +65,8 @@ import {
   ttlClockAsNumber,
   ttlClockFromNumber,
 } from './ttl-clock.ts';
+
+const pinnedUserSchema = v.object({id: v.string().nullable()});
 
 export type CVRFlushStats = {
   instances: number;
@@ -357,6 +360,7 @@ export class CVRStore {
       queries: {},
       clientSchema: null,
       profileID: null,
+      pinnedUser: null,
     };
 
     const [instance, clientsRows, queryRows, desiresRows] = await runTx(
@@ -367,6 +371,7 @@ export class CVRStore {
           tx<
             (Omit<InstancesRow, 'clientGroupID'> & {
               profileID: string | null;
+              pinnedUser: PinnedUser | null;
               deleted: boolean;
               rowsVersion: string | null;
             })[]
@@ -378,6 +383,7 @@ export class CVRStore {
                  "grantedAt",
                  "clientSchema",
                  "profileID",
+                 "pinnedUser",
                  "deleted",
                  rows."version" as "rowsVersion"
             FROM ${this.#cvr('instances')} AS cvr
@@ -430,6 +436,7 @@ export class CVRStore {
         replicaVersion: null,
         clientSchema: null,
         profileID: null,
+        pinnedUser: null,
       });
     } else {
       assert(
@@ -446,6 +453,7 @@ export class CVRStore {
         rowsVersion,
         clientSchema,
         profileID,
+        pinnedUser,
         deleted,
       } = instance[0];
 
@@ -487,6 +495,8 @@ export class CVRStore {
       cvr.ttlClock = ttlClock;
       cvr.replicaVersion = replicaVersion;
       cvr.profileID = profileID;
+      cvr.pinnedUser =
+        pinnedUser === null ? null : v.parse(pinnedUser, pinnedUserSchema);
 
       try {
         // Strip: a newer zero-cache that was rolled back may have stored
@@ -626,6 +636,7 @@ export class CVRStore {
     lastActive,
     clientSchema,
     profileID,
+    pinnedUser,
     ttlClock,
   }: Pick<
     CVRSnapshot,
@@ -634,6 +645,7 @@ export class CVRStore {
     | 'lastActive'
     | 'clientSchema'
     | 'profileID'
+    | 'pinnedUser'
     | 'ttlClock'
   >): void {
     // Overwrite any previously queued instance write — only the last call
@@ -649,6 +661,7 @@ export class CVRStore {
         grantedAt: lastConnectTime,
         clientSchema,
         profileID,
+        pinnedUser,
       };
       return tx`
         INSERT INTO ${this.#cvr('instances')} ${tx(change)} 
@@ -1077,11 +1090,18 @@ export class CVRStore {
       `;
   }
 
+  /**
+   * Also checks that the CVR has not been pinned to a user other than
+   * `pinnedUser` since it was loaded: the first pin does not change the CVR
+   * version, so the version check alone would let two view-syncers that both
+   * loaded an unpinned CVR pin it to different users in turn.
+   */
   async #checkVersionAndOwnership(
     lc: LogContext,
     tx: PostgresTransaction,
     expectedCurrentVersion: CVRVersion,
     lastConnectTime: number,
+    pinnedUser: PinnedUser | null,
   ): Promise<void> {
     const start = Date.now();
     lc.debug?.('checking cvr version and ownership');
@@ -1108,26 +1128,38 @@ export class CVRStore {
     }
 
     const result = await tx<
-      Pick<InstancesRow, 'version' | 'owner' | 'grantedAt'>[]
-    >`SELECT "version", "owner", "grantedAt" FROM ${this.#cvr('instances')}
+      Pick<InstancesRow, 'version' | 'owner' | 'grantedAt' | 'pinnedUser'>[]
+    >`SELECT "version", "owner", "grantedAt", "pinnedUser"
+        FROM ${this.#cvr('instances')}
         WHERE "clientGroupID" = ${this.#id}
         FOR UPDATE`;
-    const {version, owner, grantedAt} =
-      result.length > 0
-        ? result[0]
-        : {
-            version: EMPTY_CVR_VERSION.stateVersion,
-            owner: null,
-            grantedAt: null,
-          };
+    const {
+      version,
+      owner,
+      grantedAt,
+      pinnedUser: storedPinnedUser = null,
+    } = result.length > 0
+      ? result[0]
+      : {
+          version: EMPTY_CVR_VERSION.stateVersion,
+          owner: null,
+          grantedAt: null,
+        };
     lc.debug?.(
       'checked cvr version and ownership in ' + (Date.now() - start) + ' ms',
     );
     if (owner !== this.#taskID && (grantedAt ?? 0) > lastConnectTime) {
       throw new OwnershipError(owner, grantedAt, lastConnectTime);
     }
+    // Checked before the version so that a flusher that lost both races is
+    // told about the pin, which its caller acts on, not the stale version.
+    if (storedPinnedUser !== null && storedPinnedUser.id !== pinnedUser?.id) {
+      throw new PinnedUserMismatchError();
+    }
     if (version !== expected) {
-      throw new ConcurrentModificationException(expected, version);
+      throw new ConcurrentModificationException(
+        `Expected ${expected}, got ${version}`,
+      );
     }
   }
 
@@ -1190,6 +1222,7 @@ export class CVRStore {
               tx,
               expectedCurrentVersion,
               lastConnectTime,
+              cvr.pinnedUser,
             ),
           {mode: Mode.READ_COMMITTED},
         );
@@ -1218,6 +1251,7 @@ export class CVRStore {
           tx,
           expectedCurrentVersion,
           lastConnectTime,
+          cvr.pinnedUser,
         );
 
         const writeQueries = [];
@@ -1477,7 +1511,9 @@ export async function checkVersion(
   const {version} =
     result.length > 0 ? result[0] : {version: EMPTY_CVR_VERSION.stateVersion};
   if (version !== expected) {
-    throw new ConcurrentModificationException(expected, version);
+    throw new ConcurrentModificationException(
+      `Expected ${expected}, got ${version}`,
+    );
   }
 }
 
@@ -1497,15 +1533,26 @@ export class ClientNotFoundError extends ProtocolErrorWithLevel {
 export class ConcurrentModificationException extends ProtocolErrorWithLevel {
   readonly name = 'ConcurrentModificationException';
 
-  constructor(expectedVersion: string, actualVersion: string) {
+  constructor(detail: string) {
     super(
       {
         kind: ErrorKind.Rehome,
-        message: `CVR has been concurrently modified. Expected ${expectedVersion}, got ${actualVersion}`,
+        message: `CVR has been concurrently modified. ${detail}`,
         origin: ErrorOrigin.ZeroCache,
       },
       'warn',
     );
+  }
+}
+
+/**
+ * The CVR was pinned to a different user than the one the flushing
+ * view-syncer validated, so that view-syncer's connections can no longer be
+ * trusted: it should stop and let its clients reconnect.
+ */
+export class PinnedUserMismatchError extends ConcurrentModificationException {
+  constructor() {
+    super('Client group was pinned to a different user');
   }
 }
 

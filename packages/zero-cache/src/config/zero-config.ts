@@ -2,7 +2,7 @@
  * These types represent the _compiled_ config whereas `define-config` types represent the _source_ config.
  */
 
-import {timingSafeEqual} from 'node:crypto';
+import {createHash, timingSafeEqual} from 'node:crypto';
 import type {LogContext} from '@rocicorp/logger';
 import {logOptions} from '../../../otel/src/log-options.ts';
 import {
@@ -953,6 +953,24 @@ export const zeroOptions = {
       ],
     },
 
+    secret: {
+      type: v.string().optional(),
+      desc: [
+        `A shared secret that authenticates {bold view-syncers} to the {bold change-streamer}.`,
+        `View-syncers present it when connecting to the {bold replication-manager}, which`,
+        `refuses replication connections that do not present it. Set it to the same value`,
+        `on the replication-manager and on every view-syncer.`,
+        ``,
+        `In a single-node configuration zero-cache generates a secret for its own workers,`,
+        `so no value is needed. In a multi-node configuration it should always be set: while`,
+        `it is unset, the replication-manager accepts replication connections from anything`,
+        `that can reach its {bold change-streamer-port}, and logs a warning on startup.`,
+        ``,
+        `For a rolling upgrade, set the secret on the view-syncers before setting it on the`,
+        `replication-manager, as a replication-manager without a secret accepts both.`,
+      ],
+    },
+
     /** @deprecated */
     mode: {
       type: v.literalUnion('dedicated', 'discover').optional(() => 'dedicated'),
@@ -1322,6 +1340,17 @@ export const zeroOptions = {
       `must be configured with the same operator password.`,
       '',
       `If it is the same as the {bold admin-password}, it grants admin access.`,
+    ],
+  },
+
+  enableHeapz: {
+    type: v.boolean().optional(() => true),
+    desc: [
+      `Serves heap snapshots of the zero-cache process at {bold /heapz} to the`,
+      `{bold admin-password}. A heap snapshot contains everything the process`,
+      `holds in memory, including the auth tokens, cookies and API keys of`,
+      `connected clients. Set this to {bold false} to turn the endpoint off`,
+      `while keeping the other diagnostic endpoints and the inspector.`,
     ],
   },
 
@@ -1939,7 +1968,11 @@ function getAccess(
   return undefined;
 }
 
-function passwordMatches(
+/**
+ * Compares `password` with `expected` in constant time. Returns `false` when
+ * no `expected` password is configured.
+ */
+export function passwordMatches(
   password: string | undefined,
   expected: string | undefined,
 ): boolean {
@@ -1947,18 +1980,14 @@ function passwordMatches(
     return false;
   }
 
-  // Use constant-time comparison to prevent timing attacks
-  const passwordBuffer = Buffer.from(password ?? '');
-  const expectedBuffer = Buffer.from(expected);
+  // Compare digests rather than the strings themselves: the digests always
+  // have the same length, so timingSafeEqual runs for every password and the
+  // comparison does not short-circuit on a length mismatch.
+  return timingSafeEqual(sha256(password ?? ''), sha256(expected));
+}
 
-  // Handle length mismatch in constant time
-  if (passwordBuffer.length !== expectedBuffer.length) {
-    // Perform dummy comparison to maintain constant timing
-    timingSafeEqual(expectedBuffer, expectedBuffer);
-    return false;
-  }
-
-  return timingSafeEqual(passwordBuffer, expectedBuffer);
+function sha256(value: string): Buffer {
+  return createHash('sha256').update(value).digest();
 }
 
 let hasWarned = false;

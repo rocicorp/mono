@@ -79,6 +79,7 @@ export default async function runWorker(
       port,
       address,
       protocol,
+      secret,
       startupDelayMs,
       backPressureLimitHeapProportion,
       flowControlConsensusTimeoutProportion,
@@ -460,10 +461,20 @@ export default async function runWorker(
     ? () => Promise.resolve(profileWorker)
     : undefined;
 
+  if (secret === undefined) {
+    lc.warn?.(
+      `No --change-streamer-secret is configured: the change-streamer ` +
+        `accepts replication connections from anything that can reach port ` +
+        `${port}. Set ZERO_CHANGE_STREAMER_SECRET to the same value on the ` +
+        `replication-manager and on every view-syncer.`,
+    );
+  }
+
   const changeStreamerWebServer = new ChangeStreamerHttpServer(
     lc,
     {
       port,
+      secret,
       keepaliveTimeoutMs,
       // The startup delay is only relevant when taking over the PG change-log
       // (RMv1 and RMv1.5), and is disabled for RMv2.

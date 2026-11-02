@@ -29,6 +29,7 @@ import {
   getOrCreateCounter,
   getOrCreateLatencyHistogram,
 } from '../../observability/metrics.ts';
+import {clientGroupLogID} from '../../types/client-group-log-id.ts';
 import type {ViewSyncerDownstream} from '../../types/downstream.ts';
 import {
   getLogLevel,
@@ -59,6 +60,13 @@ export type DeleteRowPatch = {
   type: 'row';
   op: 'del';
   id: RowID;
+  /**
+   * Set when the deletion replays a row the CVR already records as deleted,
+   * to catch up a client that fell behind. Unlike a deletion computed while
+   * advancing, it can only undo a put the client received in an earlier poke,
+   * so a client with no base version has nothing it can apply to.
+   */
+  catchup?: boolean | undefined;
 };
 
 export type RowPatch = PutRowPatch | DeleteRowPatch;
@@ -166,10 +174,14 @@ export class ClientHandler {
   readonly #lc: LogContext;
   readonly #downstream: Subscription<ViewSyncerDownstream>;
   #baseVersion: NullableCVRVersion;
+  // Set once the view-syncer has validated this connection. Until then the
+  // client is excluded from pokes and catch-up; see ViewSyncerService.#getClients().
+  #validated = false;
   // We will send a poke on connect even if the client is already caught up, so that it can learn its
   // got-queries state has been reconciled with the server. After that, we will only send a poke if
   // the client is behind.
   #everPoked = false;
+  #inspectorAuthenticated = false;
 
   readonly #pokeTime = getOrCreateLatencyHistogram(
     'sync',
@@ -211,6 +223,27 @@ export class ClientHandler {
 
   version(): NullableCVRVersion {
     return this.#baseVersion;
+  }
+
+  validated(): boolean {
+    return this.#validated;
+  }
+
+  markValidated(): void {
+    this.#validated = true;
+  }
+
+  /**
+   * Whether this connection has presented the admin password to the
+   * inspector. Authentication is per connection: it is not shared with other
+   * connections of the client group and does not survive a reconnect.
+   */
+  isInspectorAuthenticated(): boolean {
+    return this.#inspectorAuthenticated;
+  }
+
+  setInspectorAuthenticated(authenticated: boolean): void {
+    this.#inspectorAuthenticated = authenticated;
   }
 
   async #push(msg: Downstream, serialized?: string | undefined): Promise<void> {
@@ -277,6 +310,16 @@ export class ClientHandler {
     const addPatch = async (patchToVersion: PatchToVersion) => {
       const {patch, toVersion} = patchToVersion;
       if (cmpVersions(toVersion, this.#baseVersion) <= 0) {
+        return;
+      }
+      if (
+        patch.type === 'row' &&
+        patch.op === 'del' &&
+        patch.catchup &&
+        this.#baseVersion === null
+      ) {
+        // The client has no rows; deleting one it never had only tells it
+        // the row's key.
         return;
       }
       const target = await ensureBody();
@@ -457,7 +500,7 @@ export class ClientHandler {
       if (clientGroupID !== this.#clientGroupID) {
         this.#lc.error?.(
           `Received clients row for wrong clientGroupID. Ignoring.`,
-          clientGroupID,
+          clientGroupLogID(clientGroupID),
         );
       } else {
         lmids[clientID] = lastMutationID;

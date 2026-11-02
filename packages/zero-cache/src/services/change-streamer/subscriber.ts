@@ -593,7 +593,7 @@ export class Subscriber {
   close(
     error?: ErrorType,
     message?: string,
-    details?: {replicaVersion?: string | undefined},
+    details?: {olderReplica?: boolean | undefined},
   ) {
     // Closing the subscriber must also release producers that are blocked on
     // backlog capacity; there is no future drain that could wake them.

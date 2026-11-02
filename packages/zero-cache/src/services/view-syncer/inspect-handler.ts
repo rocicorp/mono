@@ -15,7 +15,10 @@ import {
 } from '../../../../zero-protocol/src/inspect-up.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {loadPermissions} from '../../auth/load-permissions.ts';
-import type {NormalizedZeroConfig} from '../../config/normalize.ts';
+import {
+  isDevelopmentMode,
+  type NormalizedZeroConfig,
+} from '../../config/normalize.ts';
 import {
   getServerVersion,
   isAdminPasswordValid,
@@ -35,9 +38,6 @@ export async function handleInspect(
   client: ClientHandler,
   inspectorDelegate: InspectorDelegate,
   clientGroupID: string,
-  // The service handling the request, on whose behalf authentication is
-  // recorded (see InspectorDelegate.clearAuthenticated).
-  authOwner: object,
   cvrStore: CVRStore,
   config: NormalizedZeroConfig,
   ctx: ConnectionContext,
@@ -56,11 +56,12 @@ export async function handleInspect(
     return;
   }
 
-  // Check if the client is already authenticated. We only authenticate the clientGroup
-  // once per "worker".
+  // Authentication is per connection. In development mode the password is
+  // not required unless one is configured.
   if (
     body.op !== 'authenticate' &&
-    !inspectorDelegate.isAuthenticated(clientGroupID)
+    !(isDevelopmentMode() && !config.adminPassword) &&
+    !client.isInspectorAuthenticated()
   ) {
     lc.info?.(
       'Client not authenticated to access the inspector protocol. Sending authentication challenge',
@@ -118,13 +119,16 @@ export async function handleInspect(
         break;
 
       case 'authenticate': {
-        const password = body.value;
-        const ok = isAdminPasswordValid(lc, config, password);
+        const {authLimiter} = inspectorDelegate;
+        // A blocked attempt is not checked against the password, so that the
+        // block cannot be ended by guessing right.
+        const ok =
+          !authLimiter.isBlocked(clientGroupID, client) &&
+          isAdminPasswordValid(lc, config, body.value);
         if (ok) {
-          inspectorDelegate.setAuthenticated(clientGroupID, authOwner);
-        } else {
-          inspectorDelegate.clearAuthenticated(clientGroupID);
+          authLimiter.recordSuccess(clientGroupID, client);
         }
+        client.setInspectorAuthenticated(ok);
 
         client.sendInspectResponse(lc, {
           op: 'authenticated',
@@ -132,6 +136,12 @@ export async function handleInspect(
           value: ok,
         });
 
+        if (!ok && authLimiter.recordFailure(clientGroupID, client)) {
+          lc.warn?.(
+            'Closing connection after repeated failed inspector authentication',
+          );
+          client.close('too many failed inspector authentication attempts');
+        }
         break;
       }
 

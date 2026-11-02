@@ -28,6 +28,7 @@ import {
   type UpstreamWithUnparsedAnalyzeQuery,
 } from '../../../zero-protocol/src/up.ts';
 import {getOrCreateCounter} from '../observability/metrics.ts';
+import {clientGroupLogID} from '../types/client-group-log-id.ts';
 import type {ViewSyncerDownstream} from '../types/downstream.ts';
 import {
   ProtocolErrorWithLevel,
@@ -191,7 +192,7 @@ export class Connection {
     this.#lc = lc
       .withContext('connection')
       .withContext('clientID', clientID)
-      .withContext('clientGroupID', clientGroupID)
+      .withContext('clientGroupID', clientGroupLogID(clientGroupID))
       .withContext('wsID', wsID);
     this.#downstreamSender = new DownstreamSender(
       this.#lc,
@@ -241,6 +242,10 @@ export class Connection {
       return true;
     }
     return false;
+  }
+
+  get wsID(): string {
+    return this.#wsID;
   }
 
   close(reason: string, ...args: unknown[]) {
