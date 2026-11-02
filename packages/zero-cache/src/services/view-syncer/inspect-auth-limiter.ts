@@ -2,18 +2,16 @@
  * Limits how often the inspector's admin password can be tried.
  *
  * Failed attempts are counted per connection, per client group and per
- * worker. Each counter allows a few failures and then blocks further attempts
- * for a period that doubles with every failure, up to a cap. An attempt made
- * while any of its counters is blocked is not checked against the password at
- * all: it counts as another failure and extends the block, so a correct
- * password submitted during the block is refused too. A counter is cleared by
- * a successful authentication or by a quiet period without failures. A
- * connection that keeps failing is reported for closing.
- *
- * A blocked attempt is refused immediately rather than delayed, so that no
- * time is spent inside the view-syncer's lock, where a wait would stall the
- * client group's other traffic.
+ * worker, each with an {@link AuthAttemptCounter}: a few failures are allowed
+ * and then further attempts are blocked for a period that doubles with every
+ * failure. An attempt made while any of its counters is blocked is not checked
+ * against the password at all: it counts as another failure and extends the
+ * block. A counter is cleared by a successful authentication or by a quiet
+ * period without failures. A connection that keeps failing is reported for
+ * closing.
  */
+
+import {AuthAttemptCounter} from '../auth-attempt-counter.ts';
 
 /** Failures a single connection may make before it is blocked. */
 const CONNECTION_FREE_ATTEMPTS = 3;
@@ -31,25 +29,11 @@ const CLIENT_GROUP_FREE_ATTEMPTS = 5;
  * right one for a while.
  */
 const WORKER_FREE_ATTEMPTS = 100;
-const BASE_BLOCK_MS = 1_000;
-const MAX_BLOCK_MS = 60_000;
-/** A counter with no failures for this long starts over. */
-const RESET_AFTER_MS = 15 * 60_000;
 /**
  * Bound on the connection and client group counters kept in memory. When it
  * is reached, the counter that failed least recently is dropped.
  */
 const MAX_ENTRIES = 10_000;
-
-type Entry = {
-  failures: number;
-  lastFailure: number;
-  blockedUntil: number;
-};
-
-function newEntry(): Entry {
-  return {failures: 0, lastFailure: 0, blockedUntil: 0};
-}
 
 /** The ids that, with the client group, name one connection. */
 type Connection = {
@@ -58,12 +42,13 @@ type Connection = {
 };
 
 export class InspectorAuthLimiter {
-  readonly #entries = new Map<string, Entry>();
-  readonly #worker = newEntry();
+  readonly #entries = new Map<string, AuthAttemptCounter>();
+  readonly #worker: AuthAttemptCounter;
   readonly #now: () => number;
 
   constructor(now: () => number = Date.now) {
     this.#now = now;
+    this.#worker = new AuthAttemptCounter(WORKER_FREE_ATTEMPTS, now);
   }
 
   /**
@@ -71,12 +56,11 @@ export class InspectorAuthLimiter {
    * the password.
    */
   isBlocked(clientGroupID: string, connection: Connection): boolean {
-    const now = this.#now();
     return [
       this.#worker,
       this.#entries.get(connectionKey(clientGroupID, connection)),
       this.#entries.get(clientGroupKey(clientGroupID)),
-    ].some(entry => entry !== undefined && entry.blockedUntil > now);
+    ].some(counter => counter !== undefined && counter.blockedFor() > 0);
   }
 
   /**
@@ -84,18 +68,15 @@ export class InspectorAuthLimiter {
    * has failed so often that it should be closed.
    */
   recordFailure(clientGroupID: string, connection: Connection): boolean {
-    const now = this.#now();
-    const connectionFailures = this.#fail(
-      this.#entry(connectionKey(clientGroupID, connection)),
+    const connectionFailures = this.#counter(
+      connectionKey(clientGroupID, connection),
       CONNECTION_FREE_ATTEMPTS,
-      now,
-    );
-    this.#fail(
-      this.#entry(clientGroupKey(clientGroupID)),
+    ).recordFailure();
+    this.#counter(
+      clientGroupKey(clientGroupID),
       CLIENT_GROUP_FREE_ATTEMPTS,
-      now,
-    );
-    this.#fail(this.#worker, WORKER_FREE_ATTEMPTS, now);
+    ).recordFailure();
+    this.#worker.recordFailure();
     return connectionFailures >= CONNECTION_MAX_FAILURES;
   }
 
@@ -111,38 +92,21 @@ export class InspectorAuthLimiter {
    * order). When the map is full, the least recently failed counter is
    * dropped, in constant time.
    */
-  #entry(key: string): Entry {
-    let entry = this.#entries.get(key);
-    if (entry === undefined) {
+  #counter(key: string, freeAttempts: number): AuthAttemptCounter {
+    let counter = this.#entries.get(key);
+    if (counter === undefined) {
       if (this.#entries.size >= MAX_ENTRIES) {
         for (const oldest of this.#entries.keys()) {
           this.#entries.delete(oldest);
           break;
         }
       }
-      entry = newEntry();
+      counter = new AuthAttemptCounter(freeAttempts, this.#now);
     } else {
       this.#entries.delete(key);
     }
-    this.#entries.set(key, entry);
-    return entry;
-  }
-
-  #fail(entry: Entry, freeAttempts: number, now: number): number {
-    if (now - entry.lastFailure > RESET_AFTER_MS) {
-      entry.failures = 0;
-    }
-    entry.failures++;
-    entry.lastFailure = now;
-    if (entry.failures >= freeAttempts) {
-      entry.blockedUntil =
-        now +
-        Math.min(
-          BASE_BLOCK_MS * 2 ** (entry.failures - freeAttempts),
-          MAX_BLOCK_MS,
-        );
-    }
-    return entry.failures;
+    this.#entries.set(key, counter);
+    return counter;
   }
 }
 

@@ -1,15 +1,14 @@
 import fs from 'fs';
 import os from 'os';
 import type {LogContext} from '@rocicorp/logger';
-import auth from 'basic-auth';
 import type {FastifyReply, FastifyRequest} from 'fastify';
 import {BigIntJSON} from '../../../shared/src/bigint-json.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import type {NormalizedZeroConfig as ZeroConfig} from '../config/normalize.ts';
-import {getOperatorAccess} from '../config/zero-config.ts';
 import {StatementRunner} from '../db/statements.ts';
 import {pgClient} from '../types/pg.ts';
 import {getShardID, upstreamSchema} from '../types/shards.ts';
+import {authorizeAdminRequest} from './admin-auth.ts';
 import {fromStateVersionString} from './change-source/pg/lsn.ts';
 import {getReplicationState} from './replicator/schema/replication-state.ts';
 
@@ -326,12 +325,16 @@ export async function handleStatzRequest(
   req: FastifyRequest,
   res: FastifyReply,
 ) {
-  const credentials = auth(req);
-  if (getOperatorAccess(lc, config, credentials?.pass) === undefined) {
-    void res
-      .code(401)
-      .header('WWW-Authenticate', 'Basic realm="Statz Protected Area"')
-      .send('Unauthorized');
+  if (
+    authorizeAdminRequest(
+      lc,
+      config,
+      req,
+      res,
+      'Statz Protected Area',
+      'operator',
+    ) === undefined
+  ) {
     return;
   }
 

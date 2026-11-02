@@ -1,11 +1,9 @@
 import {randomUUID} from 'node:crypto';
 import type {Profiler} from 'node:inspector';
 import type {LogContext} from '@rocicorp/logger';
-import auth from 'basic-auth';
 import type {FastifyReply, FastifyRequest} from 'fastify';
 import {sleep} from '../../../shared/src/sleep.ts';
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
-import {getOperatorAccess} from '../config/zero-config.ts';
 import {
   singleProcessMode,
   subscribeToMessageType,
@@ -15,6 +13,7 @@ import {
 } from '../types/processes.ts';
 import {CpuProfiler} from '../types/profiler.ts';
 import {URLParams} from '../types/url-params.ts';
+import {authorizeAdminRequest} from './admin-auth.ts';
 
 /**
  * Serves CPU profiles. This is available to the operator password as well as
@@ -36,13 +35,15 @@ export async function handleProfzRequest(
   forcedWorker?: string | undefined,
   localProcessName: string = 'dispatcher',
 ): Promise<void> {
-  const credentials = auth(req);
-  const access = getOperatorAccess(lc, config, credentials?.pass);
+  const access = authorizeAdminRequest(
+    lc,
+    config,
+    req,
+    res,
+    'Profz Protected Area',
+    'operator',
+  );
   if (access === undefined) {
-    void res
-      .code(401)
-      .header('WWW-Authenticate', 'Basic realm="Profz Protected Area"')
-      .send('Unauthorized');
     return;
   }
 
@@ -212,12 +213,16 @@ export async function handleProfrmzRequest(
   res: FastifyReply,
   getWorker?: (() => Promise<Worker>) | undefined,
 ): Promise<void> {
-  const credentials = auth(req);
-  if (getOperatorAccess(lc, config, credentials?.pass) === undefined) {
-    void res
-      .code(401)
-      .header('WWW-Authenticate', 'Basic realm="Profrmz Protected Area"')
-      .send('Unauthorized');
+  if (
+    authorizeAdminRequest(
+      lc,
+      config,
+      req,
+      res,
+      'Profrmz Protected Area',
+      'operator',
+    ) === undefined
+  ) {
     return;
   }
 
