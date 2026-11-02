@@ -325,7 +325,10 @@ export class PostgresChangeSource implements ChangeSource {
         msg.tag === 'message' &&
         msg.prefix === this.#lagReporter?.messagePrefix
       ) {
-        changes.pushStatus(this.#lagReporter.processLagReportMessage(msg, lsn));
+        const status = this.#lagReporter.processLagReportMessage(msg, lsn);
+        if (status) {
+          changes.pushStatus(status);
+        }
         return false;
       }
       // Checks if we are passed the LSN of the expected lag report, in which
@@ -714,6 +717,16 @@ export class LagReporter {
       unit: '{report}',
     },
   );
+  readonly #lagReportsIgnored = getOrCreateCounter(
+    'replication',
+    'lag_reports_ignored',
+    {
+      description:
+        'Number of messages with the lag report prefix ignored because ' +
+        'their content could not be parsed as a lag report.',
+      unit: '{message}',
+    },
+  );
 
   readonly #pgVersion: number;
   #expectingLagReport: InitiatedLagReport | null = null;
@@ -940,16 +953,29 @@ export class LagReporter {
    *     XLogData header), rather than the `messageLsn` of the message itself,
    *     which is not guaranteed to be comparable to other stream LSNs (e.g. on
    *     Aurora). See {@link initiateLagReport}.
+   * @returns the status to send downstream, or `undefined` if the message is
+   *     not a lag report. Any session that can call
+   *     `pg_logical_emit_message()` can emit a message with the lag report
+   *     prefix; one that cannot be parsed carries no report and is ignored,
+   *     as a message of an unknown prefix would be, rather than failing the
+   *     stream (which would replay it from the same position).
    */
   processLagReportMessage(
     msg: MessageMessage,
     lsn: bigint,
-  ): DownstreamStatusMessage {
+  ): DownstreamStatusMessage | undefined {
     assert(
       msg.prefix === this.messagePrefix,
       `unexpected message prefix: ${msg.prefix}`,
     );
-    const report = parseLogicalMessageContent(this.#lc, msg, lagReportSchema);
+    let report: LagReport;
+    try {
+      report = parseLogicalMessageContent(this.#lc, msg, lagReportSchema);
+    } catch {
+      // logged by parseLogicalMessageContent()
+      this.#lagReportsIgnored.add(1);
+      return undefined;
+    }
     return this.#processLagReport(report, majorVersionToString(lsn));
   }
 
@@ -2099,14 +2125,26 @@ function validateLogicalMessage<T>(
   }
 }
 
+/**
+ * Logs and rethrows a parse failure. Any session that can call
+ * `pg_logical_emit_message()` can emit a message with a prefix that the
+ * zero-cache parses, so the content is untrusted: it is logged at `warn`
+ * (callers skip the message, so there is nothing for an operator to fix in
+ * zero-cache) without the content, which goes to `debug`, bounded.
+ */
 function failParse(
   lc: LogContext,
   msg: MessageMessage,
   e: unknown,
   content: string,
 ): never {
-  lc.error?.(`unable to parse logical message content: ${String(e)}`, {
-    message: {...msg, content},
+  const {content: _, ...header} = msg;
+  lc.warn?.(`unable to parse logical message content: ${String(e)}`, {
+    message: header,
+    contentLength: content.length,
+  });
+  lc.debug?.(`unparseable logical message content`, {
+    content: content.substring(0, 4096),
   });
   throw e;
 }
