@@ -1,24 +1,45 @@
 let warnedAboutFallback = false;
 
+type RandomArray = Uint8Array<ArrayBuffer> | Uint32Array<ArrayBuffer>;
+
+type ExpoGlobal = {
+  expo?:
+    | {
+        modules?:
+          | {
+              ExpoCrypto?:
+                | {getRandomValues?: ((array: RandomArray) => void) | undefined}
+                | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+};
+
 /**
  * Fills `array` with random values. Uses `crypto.getRandomValues` when the
- * runtime provides it and falls back to `Math.random` otherwise, logging a
- * warning the first time the fallback is used.
+ * runtime provides it, then the native `ExpoCrypto` module when running in an
+ * Expo app, and falls back to `Math.random` otherwise, logging a warning the
+ * first time the fallback is used.
  *
- * React Native's Hermes engine has no WebCrypto, so apps running there should
- * install a polyfill such as `react-native-get-random-values` or `expo-crypto`
- * before creating IDs.
+ * React Native's Hermes engine has no WebCrypto. Expo installs its native
+ * modules on `globalThis.expo.modules`, and `ExpoCrypto` is there in Expo Go
+ * and in any app that has `expo-crypto` installed, even if the app never
+ * imports it. Other React Native apps should import a polyfill such as
+ * `react-native-get-random-values` before creating IDs.
  *
- * The `crypto` global is looked up on every call rather than at module load:
- * some runtimes (e.g. Cloudflare Workers) only allow generating random values
+ * The globals are looked up on every call rather than at module load: some
+ * runtimes (e.g. Cloudflare Workers) only allow generating random values
  * while handling a request.
  */
-export function getRandomValues<
-  T extends Uint8Array<ArrayBuffer> | Uint32Array<ArrayBuffer>,
->(array: T): T {
+export function getRandomValues<T extends RandomArray>(array: T): T {
   const {crypto} = globalThis;
   if (typeof crypto?.getRandomValues === 'function') {
     return crypto.getRandomValues(array);
+  }
+
+  if (getRandomValuesFromExpo(array)) {
+    return array;
   }
 
   if (!warnedAboutFallback) {
@@ -26,7 +47,7 @@ export function getRandomValues<
     // oxlint-disable-next-line no-console
     console.warn(
       'crypto.getRandomValues is not available; falling back to Math.random for IDs. ' +
-        'On React Native, install react-native-get-random-values or expo-crypto.',
+        'On React Native, install expo-crypto or import react-native-get-random-values.',
     );
   }
   const max = 2 ** (array.BYTES_PER_ELEMENT * 8);
@@ -34,6 +55,20 @@ export function getRandomValues<
     array[i] = Math.floor(Math.random() * max);
   }
   return array;
+}
+
+function getRandomValuesFromExpo(array: RandomArray): boolean {
+  try {
+    const expoCrypto = (globalThis as ExpoGlobal).expo?.modules?.ExpoCrypto;
+    if (typeof expoCrypto?.getRandomValues === 'function') {
+      expoCrypto.getRandomValues(array);
+      return true;
+    }
+  } catch {
+    // Loading a native module can throw (Expo's own lookup guards against
+    // this too). Use the fallback.
+  }
+  return false;
 }
 
 export function randomCharacters(length: number) {
