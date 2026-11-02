@@ -2045,14 +2045,26 @@ function validateLogicalMessage<T>(
   }
 }
 
+/**
+ * Logs and rethrows a parse failure. Any session that can call
+ * `pg_logical_emit_message()` can emit a message with a prefix that the
+ * zero-cache parses, so the content is untrusted: it is logged at `warn`
+ * (callers skip the message, so there is nothing for an operator to fix in
+ * zero-cache) without the content, which goes to `debug`, bounded.
+ */
 function failParse(
   lc: LogContext,
   msg: MessageMessage,
   e: unknown,
   content: string,
 ): never {
-  lc.error?.(`unable to parse logical message content: ${String(e)}`, {
-    message: {...msg, content},
+  const {content: _, ...header} = msg;
+  lc.warn?.(`unable to parse logical message content: ${String(e)}`, {
+    message: header,
+    contentLength: content.length,
+  });
+  lc.debug?.(`unparseable logical message content`, {
+    content: content.substring(0, 4096),
   });
   throw e;
 }
