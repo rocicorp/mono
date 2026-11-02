@@ -179,24 +179,33 @@ export class RowRecordCache {
           const cache: CustomKeyMap<RowID, RowRecord> = new CustomKeyMap(
             rowIDString,
           );
-          for await (const rows of this.#db<RowsRow[]>`
-            SELECT
-              "clientGroupID",
-              "schema",
-              "table",
-              "rowKey",
-              "rowVersion",
-              "patchVersion",
-              "refCounts"
-            FROM ${this.#cvr(`rows`)}
-              WHERE "clientGroupID" = ${this.#cvrID} AND "refCounts" IS NOT NULL`
-            // TODO(arv): Arbitrary page size
-            .cursor(5000)) {
-            for (const row of rows) {
-              const rowRecord = rowsRowToRowRecord(row);
-              cache.set(rowRecord.id, rowRecord);
-            }
-          }
+          // Run in a transaction (which a cursor requires anyway) so that
+          // runTx can disable any statement_timeout set by the CVR DB or
+          // role. This load scales with the size of the client group's CVR.
+          await runTx(
+            this.#db,
+            async tx => {
+              for await (const rows of tx<RowsRow[]>`
+                SELECT
+                  "clientGroupID",
+                  "schema",
+                  "table",
+                  "rowKey",
+                  "rowVersion",
+                  "patchVersion",
+                  "refCounts"
+                FROM ${this.#cvr(`rows`)}
+                  WHERE "clientGroupID" = ${this.#cvrID} AND "refCounts" IS NOT NULL`
+                // TODO(arv): Arbitrary page size
+                .cursor(5000)) {
+                for (const row of rows) {
+                  const rowRecord = rowsRowToRowRecord(row);
+                  cache.set(rowRecord.id, rowRecord);
+                }
+              }
+            },
+            {mode: Mode.READONLY},
+          );
           span.setAttribute('rows', cache.size);
           return cache;
         },
