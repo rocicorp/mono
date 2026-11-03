@@ -393,8 +393,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    *   updates are processed via `#syncQueryPipelineSet`.
    *
    * Resets to `false` if `#advancePipelines` returns a `ResetPipelinesSignal`
-   * and pipelines must be reset and rehydrated, or if a reloaded CVR is ahead
-   * of the pipelines (see `#resetPipelinesIfBehindCVR`).
+   * and pipelines must be reset and rehydrated, or if the CVR is reloaded
+   * (see `#resetPipelinesForReloadedCVR`).
    */
   #pipelinesHydrated = false;
   #servedVersion: LexiVersion | null = null;
@@ -789,7 +789,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             throw e;
           }
         }
-        if (reloaded && this.#resetPipelinesIfBehindCVR(lc, this.#cvr)) {
+        if (reloaded && this.#resetPipelinesForReloadedCVR(lc, this.#cvr)) {
           // Not every locked operation rehydrates (e.g. auth maintenance), and
           // if the replica has already caught up to the CVR there may be no
           // further version-ready signal to do it, so rehydrate here.
@@ -822,33 +822,34 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   /**
-   * The CVR is reloaded after an error clears the cached copy. By then another
-   * view-syncer may have taken over the client group and flushed the CVR at a
-   * version ahead of this instance's hydrated pipelines (e.g. its replica was
-   * further ahead). The pipelines can no longer be diffed against the CVR, so
-   * reset them and let `#maybeHydratePipelines` rehydrate once the replica has
-   * caught up to the CVR.
+   * The CVR is reloaded after an error clears the cached copy. The pipelines
+   * may no longer correspond to it:
    *
-   * A CVR behind the pipelines is expected (advancements that do not change
-   * the CVR are not flushed) and is handled by the normal update path.
+   * - Another view-syncer may have taken over the client group and flushed
+   *   the CVR, adding or removing queries (e.g. evicting them when its
+   *   hydration budget ran out), or at a version ahead of the pipelines.
+   * - The failed operation may have changed the pipelines before the CVR
+   *   flush that would have recorded the change, e.g. a hydration that failed
+   *   after some of its queries were added.
+   *
+   * Rather than reconcile them, reset the pipelines and let
+   * `#maybeHydratePipelines` rehydrate them from the reloaded CVR once the
+   * replica has caught up to it, as when a view-syncer takes over a client
+   * group.
    *
    * Returns whether the pipelines were reset.
    *
    * Must be called from within the #lock.
    */
-  #resetPipelinesIfBehindCVR(lc: LogContext, cvr: CVRSnapshot): boolean {
+  #resetPipelinesForReloadedCVR(lc: LogContext, cvr: CVRSnapshot): boolean {
     if (!this.#pipelinesHydrated) {
       return false;
     }
-    const pipelineVersion = this.#pipelines.currentVersion();
-    if (pipelineVersion >= cvr.version.stateVersion) {
-      return false;
-    }
     lc.info?.(
-      `resetting pipelines: pipelines@${pipelineVersion} are behind ` +
+      `resetting pipelines@${this.#pipelines.currentVersion()} for ` +
         `reloaded cvr@${versionString(cvr.version)}`,
     );
-    this.#pipelineResets.add(1, {reason: 'behind-cvr'});
+    this.#pipelineResets.add(1, {reason: 'cvr-reloaded'});
     // Clear the hydrated state first: reset() can throw (e.g. on an
     // incompatible schema) after it has already destroyed the pipelines.
     this.#pipelinesHydrated = false;
