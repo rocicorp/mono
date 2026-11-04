@@ -249,6 +249,16 @@ export function rowRecordToRowsRow(
   clientGroupID: string,
   rowRecord: RowRecord,
 ): RowsRow {
+  // CVRs are read with plain JSON numbers (see `plainJSON`), which would round
+  // an integer beyond the safe range.
+  const {rowKey} = rowRecord.id;
+  for (const column in rowKey) {
+    if (typeof rowKey[column] === 'bigint') {
+      throw new Error(
+        `Row key column ${rowRecord.id.table}.${column} of a CVR row is a bigint`,
+      );
+    }
+  }
   return {
     clientGroupID,
     schema: rowRecord.id.schema,

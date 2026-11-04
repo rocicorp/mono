@@ -88,6 +88,13 @@ export function liteValue(
     return stringify(val);
   }
   const obj = toLiteValue(val);
+  if (typeof obj === 'bigint' && BigInt.asIntN(64, obj) !== obj) {
+    // SQLite cannot bind an integer beyond int64, and no int8 can be one, so
+    // this is a double that was written as digits, which parse() reads as a
+    // bigint. A change logged before stringify() wrote those with an exponent
+    // is still in that form. Storing a double matches initial sync.
+    return Number(obj);
+  }
   return obj && typeof obj === 'object' ? stringify(obj) : obj;
 }
 

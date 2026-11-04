@@ -1178,12 +1178,6 @@ function getBackfilledColumns(
 }
 
 function oversizedValueDescription(value: LiteValueType): string | undefined {
-  if (typeof value === 'bigint') {
-    return BigInt.asIntN(64, value) !== value
-      ? 'valueType=bigint fitsInt64=false'
-      : undefined;
-  }
-
   const sizeBytes =
     typeof value === 'string'
       ? Buffer.byteLength(value)

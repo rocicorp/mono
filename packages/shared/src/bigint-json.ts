@@ -60,6 +60,13 @@ export function parse(
 // oxlint-disable-next-line @typescript-eslint/no-explicit-any
 function customSerializer(_: string, v: any, type: string) {
   if (type === 'bigint') return v.toString();
+  // An integer beyond the safe range is a rounded double if it is a number, so
+  // it is written in a form that parse() keeps as a number. As digits it would
+  // come back as a bigint, and not even the same value, since a double prints
+  // only the digits that identify it: 2^62 is 4611686018427388000.
+  if (type === 'number' && Number.isInteger(v) && !Number.isSafeInteger(v)) {
+    return v.toExponential();
+  }
 }
 
 /**
