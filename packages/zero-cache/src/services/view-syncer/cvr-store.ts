@@ -157,7 +157,16 @@ function asQuery(row: QueriesRow): QueryRecord {
     } satisfies CustomQueryRecord;
   }
 
-  const ast = astSchema.parse(row.clientAST);
+  const parsed = v.test(row.clientAST, astSchema);
+  if (!parsed.ok) {
+    // A newer zero-cache that was rolled back may have stored an AST this one
+    // can't parse (clients of different protocol versions share a client
+    // group). The row's rows records reference its hash, so it can't simply
+    // be skipped. Fail the group instead: the client disables it and starts
+    // over with a fresh CVR.
+    throw new InvalidClientASTError(row.queryHash, parsed.error);
+  }
+  const ast = parsed.value;
   return row.internal
     ? ({
         type: 'internal',
@@ -1532,6 +1541,21 @@ export class OwnershipError extends ProtocolErrorWithLevel {
   }
 }
 
+class InvalidClientASTError extends ProtocolErrorWithLevel {
+  readonly name = 'InvalidClientASTError';
+
+  constructor(queryHash: string, error: string) {
+    super(
+      {
+        kind: ErrorKind.SchemaVersionNotSupported,
+        message: `Could not parse AST of query ${queryHash} stored in CVR: ${error}`,
+        origin: ErrorOrigin.ZeroCache,
+      },
+      'warn',
+    );
+  }
+}
+
 export class InvalidClientSchemaError extends ProtocolErrorWithLevel {
   readonly name = 'InvalidClientSchemaError';
 
@@ -1560,6 +1584,9 @@ function cvrErrorKind(e: unknown): string {
   }
   if (e instanceof InvalidClientSchemaError) {
     return 'invalid_client_schema';
+  }
+  if (e instanceof InvalidClientASTError) {
+    return 'invalid_client_ast';
   }
   return 'error';
 }
