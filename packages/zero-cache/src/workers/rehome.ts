@@ -35,6 +35,7 @@ export function rehome(lc: LogContext, ws: WebSocket) {
       kind: ErrorKind.Rehome,
       message: 'Server is draining',
       origin: ErrorOrigin.ZeroCache,
+      maxBackoffMs: 250,
     },
     'info',
   );

@@ -85,6 +85,7 @@ import {ClientError, isServerError} from './error.ts';
 import type {WSString} from './http-string.ts';
 import type {UpdateNeededReason, ZeroOptions} from './options.ts';
 import type {QueryManager} from './query-manager.ts';
+import {STABLE_CONNECTION_MS} from './reconnect-backoff.ts';
 import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.ts';
 import type {TestZero} from './test-utils.ts';
 import {
@@ -130,6 +131,58 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
+});
+
+test('recovers quickly only after useful service, without resetting on handshakes', async () => {
+  vi.spyOn(Math, 'random').mockReturnValue(0.5);
+  const z = zeroForTest({pingTimeoutMs: 120_000});
+  try {
+    await z.triggerConnected();
+    await z.triggerPoke({});
+    await vi.advanceTimersByTimeAsync(STABLE_CONNECTION_MS);
+
+    for (const delay of [125, 125, 3750]) {
+      await z.triggerClose();
+      let reconnected = false;
+      const socket = z.socket.then(() => {
+        reconnected = true;
+      });
+      await vi.advanceTimersByTimeAsync(delay - 1);
+      expect(reconnected).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await socket;
+      expect(reconnected).toBe(true);
+      await z.triggerConnected();
+    }
+  } finally {
+    await z.close();
+  }
+});
+
+test('a useful connection does not bypass server overload directives', async () => {
+  const z = zeroForTest({pingTimeoutMs: 120_000});
+  try {
+    await z.triggerConnected();
+    await z.triggerPoke({});
+    await vi.advanceTimersByTimeAsync(STABLE_CONNECTION_MS);
+    await z.triggerError({
+      kind: ErrorKind.ServerOverloaded,
+      message: 'slow down',
+      origin: ErrorOrigin.ZeroCache,
+      minBackoffMs: 10_000,
+    });
+    let reconnected = false;
+    const socket = z.socket.then(() => {
+      reconnected = true;
+    });
+    await vi.advanceTimersByTimeAsync(9999);
+    expect(reconnected).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await socket;
+    expect(reconnected).toBe(true);
+  } finally {
+    await z.close();
+  }
 });
 
 test('expose and unexpose', async () => {

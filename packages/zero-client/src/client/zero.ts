@@ -176,6 +176,7 @@ import {MutationTracker} from './mutation-tracker.ts';
 import {MutatorProxy} from './mutator-proxy.ts';
 import type {UpdateNeededReason, ZeroOptions} from './options.ts';
 import {QueryManager} from './query-manager.ts';
+import {ReconnectBackoff} from './reconnect-backoff.ts';
 import {
   reloadScheduled,
   reloadWithReason,
@@ -441,6 +442,7 @@ export class Zero<
   // on disconnect.
   #messageCount = 0;
   #connectedAt = 0;
+  readonly #reconnectBackoff = new ReconnectBackoff(RUN_LOOP_INTERVAL_MS);
   // Reset on successful connection.
   #connectErrorCount = 0;
 
@@ -893,6 +895,7 @@ export class Zero<
         // poke must be the one to restore it.
         if (socket !== undefined && this.#socket === socket) {
           this.#queryManager.markGotQueriesAuthoritative();
+          this.#reconnectBackoff.receivedPoke();
         }
       },
       e => this.#onPokeError(e),
@@ -1685,6 +1688,7 @@ export class Zero<
     }
     this.#connectedCount++;
     this.#connectedAt = now;
+    this.#reconnectBackoff.connected(now);
     this.#metrics.lastConnectError.clear();
     const proceedingConnectErrorCount = this.#connectErrorCount;
     this.#connectErrorCount = 0;
@@ -2037,6 +2041,7 @@ export class Zero<
         unreachable(connectionStatus);
     }
 
+    this.#reconnectBackoff.disconnected(Date.now());
     this.#socketResolver = resolver();
     this.#messageCount = 0;
     this.#connectStart = undefined; // don't reset this._totalToConnectStart
@@ -2223,6 +2228,20 @@ export class Zero<
     };
   }
 
+  #throwIfRunLoopError(state: ConnectionManager['state']): void {
+    // The initial-connect path allows an immediate retry after a socket
+    // close. Once recovery has a budget, closes must go through the same
+    // delay policy as failed attempts and server handoff directives.
+    if (
+      this.#reconnectBackoff.recovering &&
+      state.name === ConnectionStatus.Connecting &&
+      state.reason
+    ) {
+      throw state.reason;
+    }
+    throwIfConnectionError(state);
+  }
+
   async #runLoop() {
     this.#lc.info?.(`Starting Zero version: ${this.version}`);
 
@@ -2284,13 +2303,11 @@ export class Zero<
     }
     this.#connectionManager.initialized();
 
-    let backoffMs: number | undefined;
     let additionalConnectParams: Record<string, string> | undefined;
 
     while (this.#connectionManager.shouldContinueRunLoop()) {
       runLoopCounter++;
       let lc = getLogContext();
-      backoffMs = RUN_LOOP_INTERVAL_MS;
 
       try {
         const currentState = this.#connectionManager.state;
@@ -2313,7 +2330,7 @@ export class Zero<
             });
 
             if (visibilityResult.key === 'stateChange') {
-              throwIfConnectionError(visibilityResult.result);
+              this.#throwIfRunLoopError(visibilityResult.result);
               break;
             }
 
@@ -2382,7 +2399,7 @@ export class Zero<
               }
             }
 
-            throwIfConnectionError(this.#connectionManager.state);
+            this.#throwIfRunLoopError(this.#connectionManager.state);
 
             // Now we have a new socket, update lc with the new wsid.
             assert(this.#socket, 'Expected socket after reconnection');
@@ -2434,7 +2451,7 @@ export class Zero<
                 }
 
                 case 'stateChange': {
-                  throwIfConnectionError(raceResult.result);
+                  this.#throwIfRunLoopError(raceResult.result);
                   break;
                 }
 
@@ -2549,15 +2566,12 @@ export class Zero<
             // a need to transition to a new state and we should continue retrying
 
             const backoffParams = getBackoffParams(transition.reason);
-            if (backoffParams) {
-              if (backoffParams.minBackoffMs !== undefined) {
-                backoffMs = Math.max(backoffMs, backoffParams.minBackoffMs);
-              }
-              if (backoffParams.maxBackoffMs !== undefined) {
-                backoffMs = Math.min(backoffMs, backoffParams.maxBackoffMs);
-              }
-              additionalConnectParams = backoffParams.reconnectParams;
-            }
+            const backoffMs = this.#reconnectBackoff.nextDelay(
+              backoffParams,
+              isServerError(transition.reason) &&
+                transition.reason.kind === ErrorKind.ServerOverloaded,
+            );
+            additionalConnectParams = backoffParams?.reconnectParams;
 
             lc.debug?.(
               'Sleeping',
@@ -2782,7 +2796,7 @@ export class Zero<
           'ping aborted due to connection state change',
           raceResult.result,
         );
-        throwIfConnectionError(raceResult.result);
+        this.#throwIfRunLoopError(raceResult.result);
         break;
       }
 
