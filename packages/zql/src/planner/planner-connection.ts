@@ -1,4 +1,6 @@
 import {assert} from '../../../shared/src/asserts.ts';
+import {getOrInsertComputed} from '../../../shared/src/map.ts';
+import {TupleMap} from '../../../shared/src/tuple-map.ts';
 import type {
   Condition,
   Ordering,
@@ -144,6 +146,25 @@ export class PlannerConnection {
    */
   #cachedAccesses: Map<string, ConnectionAccess> = new Map();
 
+  /**
+   * The cost model's results, by everything its arguments depend on besides
+   * the table and the sort, which never change: whether the
+   * pushed conditions all count (see {@link #filtersFor}), the per-branch
+   * filter, and the columns of the constraint.
+   *
+   * Unlike the caches above, this one is kept for the lifetime of the
+   * connection. The planner tries every flip pattern and most patterns read
+   * this connection in a way an earlier pattern already did, and a cost model
+   * call can be expensive (the SQLite one prepares a statement). A connection
+   * lives for one planning run, so the costs are not kept across changes to
+   * the table statistics.
+   */
+  readonly #modelCosts = new TupleMap<readonly unknown[], ModelCost>();
+
+  /** The selectivity with each per-branch filter. Kept like `#modelCosts`. */
+  readonly #perBranchSelectivities: Map<NoSubqueryCondition, number> =
+    new Map();
+
   constructor(
     table: string,
     model: ConnectionCostModel,
@@ -262,20 +283,12 @@ export class PlannerConnection {
     // simple OR branch in UFI mode) with the connection-time filter so
     // the cost model sees the same effective filter the runtime applies.
     const perBranchFilter = this.#perBranchFilters.get(key);
-    const filters = andFilters(
-      this.#filtersFor(mergedConstraint),
-      perBranchFilter,
-    );
-    const {startupCost, fanout, rows, plan} = this.#model(
-      this.table,
-      this.#sort,
+    const {
       filters,
-      mergedConstraint,
-    );
+      cost: {startupCost, fanout, rows, plan},
+    } = this.#modelCost(mergedConstraint, perBranchFilter);
     const selectivity = perBranchFilter
-      ? this.#computeSelectivity(
-          andFilters(this.#unpushedFilters, perBranchFilter),
-        )
+      ? this.#perBranchSelectivity(perBranchFilter)
       : this.selectivity;
     cost = {
       startupCost,
@@ -311,6 +324,40 @@ export class PlannerConnection {
     }
 
     return cost;
+  }
+
+  #modelCost(
+    constraint: PlannerConstraint | undefined,
+    perBranchFilter: NoSubqueryCondition | undefined,
+  ): ModelCost {
+    const allPushedCount =
+      this.#pushed !== undefined && this.#parentJoin?.type === 'flipped';
+    return this.#modelCosts.getOrInsertComputed(
+      [
+        allPushedCount,
+        perBranchFilter,
+        // Column names are strings, so `undefined` is not one of them.
+        ...(constraint ? Object.keys(constraint) : [undefined]),
+      ],
+      () => {
+        const filters = andFilters(
+          this.#filtersFor(constraint),
+          perBranchFilter,
+        );
+        return {
+          filters,
+          cost: this.#model(this.table, this.#sort, filters, constraint),
+        };
+      },
+    );
+  }
+
+  #perBranchSelectivity(perBranchFilter: NoSubqueryCondition): number {
+    return getOrInsertComputed(
+      this.#perBranchSelectivities,
+      perBranchFilter,
+      f => this.#computeSelectivity(andFilters(this.#unpushedFilters, f)),
+    );
   }
 
   /**
@@ -516,6 +563,12 @@ function withoutConjuncts(
       return c;
   }
 }
+
+/** A cost model result and the filters it was computed for. */
+type ModelCost = {
+  readonly filters: Condition | undefined;
+  readonly cost: CostModelCost;
+};
 
 type FanoutEst = {
   fanout: number;
