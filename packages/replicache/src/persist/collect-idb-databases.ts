@@ -1,6 +1,5 @@
 import type {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
-import type {MaybePromise} from '../../../shared/src/types.ts';
 import {initBgIntervalProcess} from '../bg-interval.ts';
 import {InvalidRefCountError} from '../dag/invalid-ref-count-error.ts';
 import {StoreImpl} from '../dag/store-impl.ts';
@@ -141,11 +140,11 @@ export async function collectIDBDatabases(
     // Add the deleted clients to all the dbs that survived the collection.
     let newDeletedClients: DeletedClients = deletedClientsToRemove;
     for (const name of dbNamesToKeep) {
+      const perdag = newDagStore(name, kvStoreProvider.create);
       let dbDeletedClients: DeletedClients;
       try {
-        dbDeletedClients = await withWrite(
-          newDagStore(name, kvStoreProvider.create),
-          dagWrite => addDeletedClients(dagWrite, deletedClientsToRemove),
+        dbDeletedClients = await withWrite(perdag, dagWrite =>
+          addDeletedClients(dagWrite, deletedClientsToRemove),
         );
       } catch (e) {
         if (!(e instanceof InvalidRefCountError)) {
@@ -156,6 +155,8 @@ export async function collectIDBDatabases(
         // collecting into the others, instead of letting one corrupt
         // database break every collection run forever.
         continue;
+      } finally {
+        await closeIgnoringErrors(perdag);
       }
       newDeletedClients = mergeDeletedClients(
         newDeletedClients,
@@ -210,6 +211,7 @@ async function dropDatabases(
  * Creates the dag store used to inspect and update a database during
  * collection. Callers can override it to install store hooks, for example so
  * a corrupt ref count found while writing deleted clients is recovered from.
+ * Collection closes every store it creates once it is done with it.
  */
 export type NewDagStore = (name: string, kvCreateStore: CreateStore) => Store;
 
@@ -222,14 +224,14 @@ function defaultNewDagStore(name: string, kvCreateStore: CreateStore): Store {
  * If any client has a recent heartbeat or there are pending mutations we
  * return `[false]`. Otherwise we return `[true, deletedClients]`.
  */
-function gatherDatabaseInfoForCollect(
+async function gatherDatabaseInfoForCollect(
   db: IndexedDBDatabase,
   now: number,
   maxAge: number,
   enableMutationRecovery: boolean,
   kvCreateStore: CreateStore,
   newDagStore: NewDagStore,
-): MaybePromise<
+): Promise<
   [canCollect: false] | [canCollect: true, deletedClients: DeletedClients]
 > {
   if (db.replicacheFormatVersion > FormatVersion.Latest) {
@@ -245,12 +247,18 @@ function gatherDatabaseInfoForCollect(
     () =>
       `Expected replicacheFormatVersion to be DD31, V6, or V7, got ${db.replicacheFormatVersion}`,
   );
-  return canDatabaseBeCollectedAndGetDeletedClientIDs(
-    enableMutationRecovery,
-    newDagStore(db.name, kvCreateStore),
-    now,
-    maxAge,
-  );
+  // Closed before the database is dropped, so the drop does not find it open.
+  const perdag = newDagStore(db.name, kvCreateStore);
+  try {
+    return await canDatabaseBeCollectedAndGetDeletedClientIDs(
+      enableMutationRecovery,
+      perdag,
+      now,
+      maxAge,
+    );
+  } finally {
+    await closeIgnoringErrors(perdag);
+  }
 }
 
 /**
@@ -394,10 +402,10 @@ function dropTargets(
 }
 
 /**
- * A store that failed to open may also fail to close; the drop's own result
- * is what the caller needs.
+ * A store that failed to open may also fail to close; the drop's or the
+ * collection's own result is what the caller needs.
  */
-function closeIgnoringErrors(store: IDBDatabasesStore): Promise<void> {
+function closeIgnoringErrors(store: {close(): Promise<void>}): Promise<void> {
   return store.close().catch(() => undefined);
 }
 

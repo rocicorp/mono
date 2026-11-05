@@ -14,7 +14,12 @@ import * as FormatVersion from '../format-version-enum.ts';
 import {getKVStoreProvider} from '../get-kv-store-provider.ts';
 import {assertHash, fakeHash, newRandomHash} from '../hash.ts';
 import {IDBStore} from '../kv/idb-store.ts';
-import {dropMemStore, hasMemStore, MemStore} from '../kv/mem-store.ts';
+import {
+  clearAllNamedMemStoresForTesting,
+  dropMemStore,
+  hasMemStore,
+  MemStore,
+} from '../kv/mem-store.ts';
 import type {CreateStore} from '../kv/store.ts';
 import {TestMemStore} from '../kv/test-mem-store.ts';
 import type {ClientGroupID, ClientID} from '../sync/ids.ts';
@@ -45,6 +50,7 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    clearAllNamedMemStoresForTesting();
   });
 
   type Entries = [
@@ -91,7 +97,10 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
   }) => {
     test(name + ' > time ' + now, async () => {
       const store = new IDBDatabasesStore(_ => new TestMemStore());
-      const clientDagStores = new Map<IndexedDBName, Store>();
+      // Like Replicache's own, this opens a new store on the database every
+      // time it is called, since collection closes the stores it creates.
+      const newDagStore = (name: IndexedDBName, _kvCreateStore?: CreateStore) =>
+        new StoreImpl(new MemStore(name), newRandomHash, assertHash);
       for (const [
         db,
         clients,
@@ -99,8 +108,7 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
         deletedClientIDs,
         deletedClientGroupIDs,
       ] of entries) {
-        const dagStore = new TestStore();
-        clientDagStores.set(db.name, dagStore);
+        const dagStore = newDagStore(db.name);
 
         await store.putDatabaseForTesting(db);
 
@@ -157,12 +165,6 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
           );
         }
       }
-
-      const newDagStore = (name: string, _kvCreateStore: CreateStore) => {
-        const dagStore = clientDagStores.get(name);
-        assertNotUndefined(dagStore);
-        return dagStore;
-      };
 
       const kvStoreProvider = {
         create: (_name: string) => new TestMemStore(),
@@ -974,6 +976,60 @@ test('dropDatabase', async () => {
 
   // deleting non-existent db fails silently.
   await dropDatabase('bonk');
+});
+
+test('collection closes every store it opens', async () => {
+  const opened: MemStore[] = [];
+  const kvStoreProvider = {
+    create: (name: string) => {
+      const kvStore = new MemStore(name);
+      opened.push(kvStore);
+      return kvStore;
+    },
+    drop: dropMemStore,
+  };
+  const store = new IDBDatabasesStore(_ => new TestMemStore());
+  const now = 10_000;
+  const maxAge = 1_000;
+  // kept has an active client and stale does not, so collection inspects
+  // both, drops stale and writes its client into kept as deleted.
+  for (const [name, heartbeatTimestampMs] of [
+    ['kept', now],
+    ['stale', 0],
+  ] as const) {
+    await store.putDatabaseForTesting({
+      name,
+      replicacheName: 'app',
+      replicacheFormatVersion: FormatVersion.Latest,
+      schemaVersion: '1',
+    });
+    const dagStore = new StoreImpl(
+      new MemStore(name),
+      newRandomHash,
+      assertHash,
+    );
+    await setClientsForTesting(
+      makeClientMap({
+        [name + 'Client']: {headHash: fakeHash(name), heartbeatTimestampMs},
+      }),
+      dagStore,
+    );
+    await dagStore.close();
+  }
+
+  await collectIDBDatabases(
+    store,
+    now,
+    maxAge,
+    kvStoreProvider,
+    true,
+    vi.fn<OnClientsDeleted>(),
+  );
+
+  expect(Object.keys(await store.getDatabases())).toEqual(['kept']);
+  // One store to inspect each database, and one to write into kept.
+  expect(opened.map(kvStore => kvStore.closed)).toEqual([true, true, true]);
+  await dropMemStore('kept');
 });
 
 test('a corrupt database found during collection is skipped and does not break collecting the others', async () => {
