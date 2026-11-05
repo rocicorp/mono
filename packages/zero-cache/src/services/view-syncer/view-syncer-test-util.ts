@@ -859,6 +859,9 @@ export async function setup(
       forwardCookies:
         config.push?.forwardCookies ?? config.mutate?.forwardCookies ?? false,
     },
+    undefined,
+    undefined,
+    config.auth.requireServerUserID,
   );
   const vs = new ViewSyncerService(
     config,
@@ -1052,6 +1055,9 @@ export function restartViewSyncer(params: {
       forwardCookies:
         config.push?.forwardCookies ?? config.mutate?.forwardCookies ?? false,
     },
+    undefined,
+    undefined,
+    config.auth.requireServerUserID,
   );
 
   const vs = new ViewSyncerService(

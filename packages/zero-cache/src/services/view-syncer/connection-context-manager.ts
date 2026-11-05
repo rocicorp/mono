@@ -29,8 +29,10 @@ export type UserState = {readonly id: string | null};
  *   (`null` for a logged-out caller). The connection's claimed userID must
  *   match it.
  * - `server-unverified`: the API server answered without a userID, so it did
- *   not vouch for the caller. Only a logged-out connection, or a userID that
- *   a legacy JWT has already verified, is accepted.
+ *   not vouch for the caller. With `requireServerUserID`, only a logged-out
+ *   connection, or a userID that a legacy JWT has already verified, is
+ *   accepted. Without it, the claimed userID is trusted and a warning is
+ *   logged.
  * - `client-fallback`: no API server is involved, so the userID provided by
  *   the client in the connection params is trusted as-is (a legacy JWT, when
  *   configured, has verified it).
@@ -203,6 +205,8 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
   readonly #retransformIntervalMs: number | undefined;
   readonly #queryConfig: FetchConfig | undefined;
   readonly #pushConfig: FetchConfig | undefined;
+  readonly #requireServerUserID: boolean;
+  #warnedUnverifiedUser = false;
   #sharedRetransformReady = false;
   #nextInsertionOrder = 0;
 
@@ -214,6 +218,7 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
     pushConfig?: FetchConfig,
     validateLegacyJWT?: ValidateLegacyJWT,
     now?: () => number,
+    requireServerUserID = false,
   ) {
     this.#lc = lc;
     this.#now = now ?? Date.now;
@@ -228,6 +233,7 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
     this.#queryConfig = queryConfig;
     this.#pushConfig = pushConfig;
     this.#validateLegacyJWT = validateLegacyJWT;
+    this.#requireServerUserID = requireServerUserID;
   }
 
   /**
@@ -446,15 +452,25 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
       // The API server did not name the user, so nothing backs the claimed
       // userID. Trusting it would let a connection pin the client group to a
       // userID it does not own.
-      throw new ProtocolErrorWithLevel(
-        {
-          kind: ErrorKind.Unauthorized,
-          message:
-            'Connection userID was not validated by the API server. The API server must return a userID for authenticated connections.',
-          origin: ErrorOrigin.ZeroCache,
-        },
-        'warn',
-      );
+      if (this.#requireServerUserID) {
+        throw new ProtocolErrorWithLevel(
+          {
+            kind: ErrorKind.Unauthorized,
+            message:
+              'Connection userID was not validated by the API server. The API server must return a userID for authenticated connections.',
+            origin: ErrorOrigin.ZeroCache,
+          },
+          'warn',
+        );
+      }
+      if (!this.#warnedUnverifiedUser) {
+        this.#warnedUnverifiedUser = true;
+        this.#lc.warn?.(
+          'The API server answered without a userID, so the userID claimed by the client was not verified. ' +
+            'Return the userID from your query and mutate endpoints (zero-server does this when you pass userID to handleQueryRequest and handleMutateRequest), ' +
+            'then set ZERO_AUTH_REQUIRE_SERVER_USER_ID=true to refuse unverified userIDs.',
+        );
+      }
     }
 
     // The incoming user state is either the validated user state from the server

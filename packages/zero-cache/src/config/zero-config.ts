@@ -208,6 +208,16 @@ const authOptions = {
       `If unset, periodic shared retransform is disabled.`,
     ],
   },
+  requireServerUserID: {
+    type: v.boolean().optional(() => false),
+    desc: [
+      `Refuse a connection that claims a userID when the API server's answer to`,
+      `/query or /mutate does not include a userID, unless a legacy JWT verified`,
+      `it. Without this, zero-cache trusts the userID the client claims and logs`,
+      `a warning. Turn it on once your API server returns the userID ({bold null}`,
+      `for logged-out callers).`,
+    ],
+  },
 };
 
 const makeDeprecationMessage = (flag: string) =>

@@ -284,6 +284,8 @@ export default async function runWorker(
       customQueryConfig,
       pushConfig,
       validateLegacyJWT,
+      undefined,
+      config.auth.requireServerUserID,
     );
 
     lc.debug?.(
