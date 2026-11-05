@@ -533,6 +533,8 @@ export class DownstreamSender {
   readonly #ws: WebSocketLike;
   readonly #protocolVersion: number;
   #pokeChunkEncoder: PokeChunkEncoder | undefined;
+  /** The last finished poke's buffer, so the next poke allocates nothing. */
+  #idlePokeChunkBuffer: Uint8Array | undefined;
 
   constructor(lc: LogContext, ws: WebSocketLike, protocolVersion: number) {
     this.#lc = lc;
@@ -552,7 +554,10 @@ export class DownstreamSender {
             this.#pokeChunkEncoder === undefined,
             'cannot start a poke while another poke is in progress',
           );
-          this.#pokeChunkEncoder = new PokeChunkEncoder();
+          this.#pokeChunkEncoder = new PokeChunkEncoder(
+            this.#idlePokeChunkBuffer,
+          );
+          this.#idlePokeChunkBuffer = undefined;
           break;
         case 'pokePart':
           this.#sendPokePart(data, callback, serialized);
@@ -604,7 +609,10 @@ export class DownstreamSender {
 
     void encoder
       .finish(chunk => sendBinary(this.#lc, this.#ws, chunk))
-      .then(() => sendAsync(this.#lc, this.#ws, pokeEnd))
+      .then(buffer => {
+        this.#idlePokeChunkBuffer = buffer;
+        return sendAsync(this.#lc, this.#ws, pokeEnd);
+      })
       .then(
         () => invokeCallback(callback),
         error => invokeCallback(callback, toError(error)),
