@@ -1,6 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect, test, vi} from 'vitest';
 import {getSizeOfValue} from '../../../shared/src/size-of-value.ts';
+import {asyncIterableToArray} from '../async-iterable-to-array.ts';
 import type {Chunk} from '../dag/chunk.ts';
 import {TestStore} from '../dag/test-store.ts';
 import {Read as DBRead} from '../db/read.ts';
@@ -13,6 +14,45 @@ import {BTreeRead} from './read.ts';
 import {BTreeWrite} from './write.ts';
 
 const formatVersion = FormatVersion.Latest;
+
+test.each([
+  [8192, 16384],
+  [2, 3],
+])('Unicode diff with node sizes %i/%i', async (min, max) => {
+  const store = new TestStore();
+  await withWrite(store, async dagWrite => {
+    const previous = makeTree(dagWrite, min, max);
+    for (let i = 0; i < 12; i++) {
+      await previous.put(`ascii-${i}`, i);
+    }
+    await previous.put('\u{10000}', 'before');
+    await previous.flush();
+
+    const current = new BTreeWrite(
+      dagWrite,
+      formatVersion,
+      previous.rootHash,
+      min,
+      max,
+      () => 1,
+      0,
+    );
+    await current.put('\ue000', 'added');
+    await current.put('\u{10000}', 'after');
+    await current.flush();
+
+    expect(await current.get('\ue000')).toBe('added');
+    expect(await current.get('\u{10000}')).toBe('after');
+    expect(await asyncIterableToArray(current.diff(previous))).toEqual([
+      {op: 'add', key: '\ue000', newValue: 'added'},
+      {op: 'change', key: '\u{10000}', oldValue: 'before', newValue: 'after'},
+    ]);
+    expect(await asyncIterableToArray(previous.diff(current))).toEqual([
+      {op: 'del', key: '\ue000', oldValue: 'added'},
+      {op: 'change', key: '\u{10000}', oldValue: 'after', newValue: 'before'},
+    ]);
+  });
+});
 
 // Small min/max sizes force a deep, multi-level tree so the internal-node
 // branch of scanForHash (the one that prefetches children) is exercised.

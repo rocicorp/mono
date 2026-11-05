@@ -1,3 +1,4 @@
+import {compareUTF8} from 'compare-utf8';
 import {deepEqual, type ReadonlyJSONValue} from '../../../shared/src/json.ts';
 
 export type Splice = [at: number, removed: number, added: number, from: number];
@@ -55,7 +56,9 @@ export function* computeSplices<T>(
       }
       previousIndex++;
       currentIndex++;
-    } else if (previous[previousIndex][KEY] < current[currentIndex][KEY]) {
+    } else if (
+      compareUTF8(previous[previousIndex][KEY], current[currentIndex][KEY]) < 0
+    ) {
       // previous was removed
       if (!splice) {
         splice = newSplice();
