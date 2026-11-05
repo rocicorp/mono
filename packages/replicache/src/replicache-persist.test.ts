@@ -23,6 +23,7 @@ import {
 } from './persist/clients.ts';
 import {HEARTBEAT_INTERVAL} from './persist/heartbeat.ts';
 import {IDBDatabasesStore} from './persist/idb-databases-store.ts';
+import type {ReplicacheOptions} from './replicache-options.ts';
 import {
   ReplicacheTest,
   addData,
@@ -39,6 +40,106 @@ import type {MutatorDefs} from './types.ts';
 import {withRead, withWriteNoImplicitCommit} from './with-transactions.ts';
 
 initReplicacheTesting();
+
+test('close releases snapshot pins while preserving pending mutations and other clients', async () => {
+  const name = 'close-snapshot-pins';
+  const pullURL = 'https://close-snapshot-pins.test/pull';
+  const options = {kvStore: 'mem', pullURL, mutators: {addData}} satisfies Omit<
+    ReplicacheOptions<{addData: typeof addData}>,
+    'name'
+  >;
+  const implOptions = {
+    ...disableAllBackgroundProcesses,
+    enablePullAndPushInOpen: false,
+  };
+  const first = await replicacheForTesting(name, options, implOptions, {
+    useUniqueName: false,
+  });
+  fetchMocker.postOnce(
+    pullURL,
+    makePullResponseV1(
+      first.clientID,
+      0,
+      [{op: 'put', key: 'remote', value: 'old snapshot'}],
+      1,
+    ),
+  );
+  await first.pull();
+  await first.persist();
+  const firstClient = await withRead(first.perdag, read =>
+    getClient(first.clientID, read),
+  );
+  assertNotUndefined(firstClient);
+  assertClientV6(firstClient);
+  const oldSnapshot = firstClient.persistHash;
+  assertNotUndefined(oldSnapshot);
+  assert(oldSnapshot !== null);
+
+  const second = await replicacheForTesting(name, options, implOptions, {
+    useUniqueName: false,
+  });
+  fetchMocker.postOnce(
+    pullURL,
+    makePullResponseV1(
+      second.clientID,
+      0,
+      [{op: 'put', key: 'remote', value: 'new snapshot'}],
+      2,
+    ),
+  );
+  await second.pull();
+  await second.persist();
+  await first.mutate.addData({pending: 'unsent mutation'});
+  await first.persist();
+  await second.impl.refresh();
+  const groupID = await first.clientGroupID;
+  assertNotUndefined(groupID);
+  const before = await withRead(second.perdag, read =>
+    getClientGroup(groupID, read),
+  );
+  assertNotUndefined(before);
+  expect(before.mutationIDs[first.clientID]).toBe(1);
+  expect(before.lastServerAckdMutationIDs[first.clientID] ?? 0).toBe(0);
+  expect(
+    await withRead(second.perdag, read => read.hasChunk(oldSnapshot)),
+  ).toBe(true);
+
+  const queryStarted = resolver<void>();
+  const releaseQuery = resolver<void>();
+  const query = first.query(async tx => {
+    queryStarted.resolve();
+    await releaseQuery.promise;
+    return tx.get('remote');
+  });
+  await queryStarted.promise;
+  const closing = first.close();
+  releaseQuery.resolve();
+  expect(await query).toBe('old snapshot');
+  await closing;
+
+  expect(
+    await withRead(second.perdag, read => read.hasChunk(oldSnapshot)),
+  ).toBe(false);
+  const closedClient = await withRead(second.perdag, read =>
+    getClient(first.clientID, read),
+  );
+  assertNotUndefined(closedClient);
+  assertClientV6(closedClient);
+  expect(closedClient.refreshHashes).toEqual([]);
+  expect(closedClient.persistHash).toBeNull();
+  expect(
+    await withRead(second.perdag, read => getClientGroup(groupID, read)),
+  ).toEqual(before);
+  await second.impl.refresh();
+  expect(await second.query(tx => tx.get('remote'))).toBe('new snapshot');
+  expect(await second.query(tx => tx.get('pending'))).toBe('unsent mutation');
+  await second.close();
+  const reopened = await replicacheForTesting(name, options, implOptions, {
+    useUniqueName: false,
+  });
+  expect(await reopened.query(tx => tx.get('remote'))).toBe('new snapshot');
+  expect(await reopened.query(tx => tx.get('pending'))).toBe('unsent mutation');
+});
 
 let perdag: Store | undefined;
 afterEach(async () => {
@@ -259,8 +360,14 @@ describe('onClientStateNotFound', () => {
     );
     await rep.mutate.addData({foo: 'bar'});
     await rep.persist();
-    await corruptClientsRefCountForTesting(rep.perdag);
     await rep.close();
+    const closedPerdag = new StoreImpl(
+      new IDBStore(rep.idbName),
+      newRandomHash,
+      assertHash,
+    );
+    await corruptClientsRefCountForTesting(closedPerdag);
+    await closedPerdag.close();
 
     // A new instance on the same database registers its client in the
     // `clients` chunk during open, before `ready` resolves. Without the

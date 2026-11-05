@@ -1960,7 +1960,7 @@ async function testMemStoreWithCounters<MD extends MutatorDefs>(
 
   await rep.close();
   expect(store.readCount, 'readCount').toBe(0);
-  expect(store.writeCount, 'writeCount').toBe(0);
+  expect(store.writeCount, 'writeCount').toBe(1);
   expect(store.closeCount, 'closeCount').toBe(1);
 }
 
