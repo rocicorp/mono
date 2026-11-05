@@ -66,10 +66,13 @@ import {
 import {initClientGroupGC} from './persist/client-group-gc.ts';
 import {disableClientGroup} from './persist/client-groups.ts';
 import {
+  assertClientV6,
   ClientStateNotFoundError,
+  getClient,
   initClientV6,
   type OnClientsDeleted,
   hasClientState as persistHasClientState,
+  setClient,
 } from './persist/clients.ts';
 import {
   COLLECT_IDB_INTERVAL,
@@ -943,6 +946,9 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    * When closed all subscriptions end and no more read or writes are allowed.
    */
   async close(): Promise<void> {
+    const releaseSnapshotPins =
+      !this.#persistAbortController.signal.aborted &&
+      !this.#refreshAbortController.signal.aborted;
     this.#closed = true;
     const {promise, resolve} = resolver();
     closingInstances.set(this.name, promise);
@@ -957,7 +963,47 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         this.#onVisibilityChange,
       );
 
-      await Promise.race([this.#ready, this.#openFailed.promise]);
+      const opened = await Promise.race([
+        this.#ready.then(() => true),
+        this.#openFailed.promise.then(() => false),
+      ]);
+      if (opened) {
+        await Promise.all([this.stopPersist(), this.stopRefresh()]);
+        if (
+          releaseSnapshotPins &&
+          !this.#storageFailure &&
+          !this.#corruptDatabaseRecovery
+        ) {
+          try {
+            // drain queries and mutations before deleting chunks their lazy
+            // reads might still need from the persistent store.
+            await withWriteNoImplicitCommit(this.memdag, () =>
+              withWrite(this.perdag, async write => {
+                const client = await getClient(this.clientID, write);
+                if (!client) return;
+                assertClientV6(client);
+                // the closed memdag needs no snapshot pins. keep the client
+                // identity and group, including unacknowledged mutations.
+                await setClient(
+                  this.clientID,
+                  {
+                    ...client,
+                    refreshHashes: [],
+                    persistHash: null,
+                  },
+                  write,
+                );
+              }),
+            );
+          } catch (error) {
+            // cleanup must still close the handles if storage fails here.
+            this.#lc.debug?.(
+              'Failed to release snapshot pins during close',
+              error,
+            );
+          }
+        }
+      }
       const closingPromises = [
         this.memdag.close(),
         this.perdag.close(),

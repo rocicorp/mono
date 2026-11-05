@@ -34,7 +34,6 @@ import {
 import {
   IDBDatabasesStore,
   type IndexedDBDatabase,
-  type IndexedDBName,
 } from './idb-databases-store.ts';
 import {makeClientGroupMap} from './test-utils.ts';
 
@@ -91,7 +90,9 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
   }) => {
     test(name + ' > time ' + now, async () => {
       const store = new IDBDatabasesStore(_ => new TestMemStore());
-      const clientDagStores = new Map<IndexedDBName, Store>();
+      const prefix = newRandomHash();
+      const newDagStore = (name: string, _kvCreateStore: CreateStore) =>
+        new StoreImpl(new MemStore(prefix + name), newRandomHash, assertHash);
       for (const [
         db,
         clients,
@@ -99,8 +100,7 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
         deletedClientIDs,
         deletedClientGroupIDs,
       ] of entries) {
-        const dagStore = new TestStore();
-        clientDagStores.set(db.name, dagStore);
+        const dagStore = newDagStore(db.name, () => new TestMemStore());
 
         await store.putDatabaseForTesting(db);
 
@@ -156,13 +156,8 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
             setDeletedClients(dagWrite, deletedClients),
           );
         }
+        await dagStore.close();
       }
-
-      const newDagStore = (name: string, _kvCreateStore: CreateStore) => {
-        const dagStore = clientDagStores.get(name);
-        assertNotUndefined(dagStore);
-        return dagStore;
-      };
 
       const kvStoreProvider = {
         create: (_name: string) => new TestMemStore(),
@@ -203,6 +198,7 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
           expect(
             await withRead(dagStore, read => getDeletedClients(read)),
           ).toEqual(expectedDeletedClients);
+          await dagStore.close();
         }
       }
     });
@@ -779,6 +775,99 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
     }
   }
 });
+
+test.each(['success', 'read failure', 'write failure'])(
+  'collection closes its temporary stores on %s',
+  async outcome => {
+    const prefix = newRandomHash();
+    const provider = {
+      create: (name: string) => new MemStore(prefix + name),
+      drop: (name: string) => dropMemStore(prefix + name),
+    };
+    const registry = new IDBDatabasesStore(provider.create);
+    const live = new StoreImpl(
+      provider.create('active'),
+      newRandomHash,
+      assertHash,
+    );
+    const stale = new StoreImpl(
+      provider.create('stale'),
+      newRandomHash,
+      assertHash,
+    );
+    for (const name of outcome === 'read failure'
+      ? ['active']
+      : ['active', 'stale']) {
+      await registry.putDatabaseForTesting({
+        name,
+        replicacheName: 'app',
+        schemaVersion: '1',
+        replicacheFormatVersion: FormatVersion.Latest,
+      });
+    }
+    await setClientsForTesting(
+      makeClientMap({
+        activeClient: {
+          headHash: fakeHash('active'),
+          heartbeatTimestampMs: 10_000,
+        },
+      }),
+      live,
+    );
+    await setClientsForTesting(
+      makeClientMap({
+        staleClient: {headHash: fakeHash('stale'), heartbeatTimestampMs: 0},
+      }),
+      stale,
+    );
+    await stale.close();
+
+    const opened: MemStore[] = [];
+    const failure = new Error(outcome);
+    const newDagStore = (name: string) => {
+      const kv = provider.create(name);
+      opened.push(kv);
+      const dag = new StoreImpl(kv, newRandomHash, assertHash);
+      if (name === 'active' && outcome === 'read failure') {
+        vi.spyOn(dag, 'read').mockRejectedValue(failure);
+      }
+      if (name === 'active' && outcome === 'write failure') {
+        vi.spyOn(dag, 'write').mockRejectedValue(failure);
+      }
+      return dag;
+    };
+    const onClientsDeleted = vi.fn<OnClientsDeleted>();
+    const collection = collectIDBDatabases(
+      registry,
+      10_000,
+      1_000,
+      provider,
+      true,
+      onClientsDeleted,
+      newDagStore,
+    );
+    if (outcome === 'success') {
+      await collection;
+      expect(onClientsDeleted).toHaveBeenCalledExactlyOnceWith([
+        {clientID: 'staleClient', clientGroupID: 'make-client-group-id'},
+      ]);
+      expect(await withRead(live, getDeletedClients)).toEqual([
+        {clientID: 'staleClient', clientGroupID: 'make-client-group-id'},
+      ]);
+    } else {
+      await expect(collection).rejects.toBe(failure);
+    }
+    expect(opened.length).toBe(outcome === 'read failure' ? 1 : 3);
+    expect(opened.every(store => store.closed)).toBe(true);
+    // the collector owns only the handles it opened, not the live instance.
+    expect(await withRead(live, read => read.getHead('clients'))).toBeDefined();
+    expect(await registry.getDatabases()).toHaveProperty('active');
+    await live.close();
+    await registry.close();
+    await provider.drop('active');
+    await provider.drop('stale');
+  },
+);
 
 test('should not collect database with actively heartbeating client', async () => {
   const store = new IDBDatabasesStore(_ => new TestMemStore());
