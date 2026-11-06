@@ -1,6 +1,6 @@
 import {act, Suspense, useEffect, type ReactNode} from 'react';
 import {hydrateRoot, type Root} from 'react-dom/client';
-import {renderToString} from 'react-dom/server';
+import {renderToReadableStream} from 'react-dom/server';
 import {afterEach, describe, expect, test, vi} from 'vitest';
 import {queryInternalsTag, type QueryImpl} from './bindings.ts';
 import {
@@ -76,6 +76,17 @@ function List({query}: {query: Query<string, Schema>}) {
   );
 }
 
+function PartialList({query}: {query: Query<string, Schema>}) {
+  const [rows] = useSuspenseQuery(query, {suspendUntil: 'partial'});
+  return (
+    <ul>
+      {(rows as unknown as Row[]).map(r => (
+        <li key={r.id}>{r.id}</li>
+      ))}
+    </ul>
+  );
+}
+
 function SuspenseList({
   query,
   onHydrated,
@@ -97,47 +108,84 @@ function SuspenseList({
 const rows = [{id: 'a'}, {id: 'b'}];
 
 describe('collecting on the server', () => {
-  function renderCollected(
+  /** Starts a streaming render, as a server does, without waiting for it. */
+  async function startRender(
     query: Query<string, Schema>,
-    emitted: unknown[] | undefined,
+    Component: typeof List | typeof PartialList = List,
   ) {
     const {zero, emit} = newZero();
     const collector = new QuerySnapshotCollector();
-    const app = (
+    const stream = await renderToReadableStream(
       <ZeroProvider zero={zero}>
         <QuerySnapshotProvider collector={collector}>
-          <List query={query} />
+          <Suspense fallback={<i>fallback</i>}>
+            <Component query={query} />
+          </Suspense>
         </QuerySnapshotProvider>
-      </ZeroProvider>
+      </ZeroProvider>,
     );
-    renderToString(app);
-    if (emitted) {
-      emit(...emitted);
-      renderToString(app);
-    }
-    return collector.toJSON();
+    let ready = false;
+    const allReady = stream.allReady.then(() => {
+      ready = true;
+    });
+    const settle = () => new Promise(resolve => setTimeout(resolve, 10));
+    return {
+      emit,
+      collector,
+      isReady: async () => {
+        await settle();
+        return ready;
+      },
+      html: async () => {
+        await allReady;
+        return new Response(stream).text();
+      },
+    };
   }
 
-  test('records what was rendered, keyed by query hash', () => {
-    expect(renderCollected(newQuery('q1'), [rows, 'complete'])).toEqual({
-      q1: {data: rows, type: 'complete'},
-    });
+  test('records what was rendered, keyed by query hash', async () => {
+    const {emit, collector, html} = await startRender(newQuery('q1'));
+    emit(rows, 'complete');
+    await html();
+    expect(collector.toJSON()).toEqual({q1: {data: rows, type: 'complete'}});
   });
 
-  test('records a result the server has not confirmed as unknown', () => {
-    expect(renderCollected(newQuery('q2'), undefined)).toEqual({
-      q2: {data: [], type: 'unknown'},
-    });
+  test('useQuery waits for the server instead of rendering an empty page', async () => {
+    const {emit, isReady, html} = await startRender(newQuery('q2'));
+    emit([], 'unknown');
+    expect(await isReady()).toBe(false);
+
+    emit(rows, 'complete');
+    expect(await isReady()).toBe(true);
+    expect(await html()).toContain('<li>a</li><li>b</li>');
   });
 
-  test('skips errored queries, whose details hold a retry function', () => {
-    expect(
-      renderCollected(newQuery('q3'), [
-        [],
-        'error',
-        {error: 'app', id: 'q3', name: 'q3', message: 'boom'},
-      ]),
-    ).toEqual({});
+  test('useQuery does not render local rows the server has not confirmed', async () => {
+    const {emit, isReady, html} = await startRender(newQuery('q3'));
+    emit([{id: 'partial'}], 'unknown');
+    expect(await isReady()).toBe(false);
+
+    emit(rows, 'complete');
+    expect(await html()).not.toContain('partial');
+  });
+
+  test('suspendUntil partial still waits for the server', async () => {
+    const {emit, isReady, html} = await startRender(
+      newQuery('q4'),
+      PartialList,
+    );
+    emit([{id: 'partial'}], 'unknown');
+    expect(await isReady()).toBe(false);
+
+    emit(rows, 'complete');
+    expect(await html()).not.toContain('partial');
+  });
+
+  test('skips errored queries, whose details hold a retry function', async () => {
+    const {emit, collector, html} = await startRender(newQuery('q5'));
+    emit([], 'error', {error: 'app', id: 'q5', name: 'q5', message: 'boom'});
+    await html();
+    expect(collector.toJSON()).toEqual({});
   });
 });
 
@@ -180,8 +228,11 @@ describe('hydrating on the client', () => {
     };
   }
 
-  function hydrateSeeded(hash: string) {
+  function hydrateSeeded(hash: string, initialConnection?: string) {
     const client = newZero();
+    if (initialConnection) {
+      client.setConnection(initialConnection);
+    }
     const query = newQuery(hash);
     const snapshots: QuerySnapshots = {
       [hash]: {data: rows, type: 'complete'},
@@ -243,6 +294,30 @@ describe('hydrating on the client', () => {
       expect(text()).toEqual(['local']);
     },
   );
+
+  test.each(['disconnected', 'error', 'needs-auth', 'closed'])(
+    'keeps the seed over an empty view when the connection becomes %s',
+    name => {
+      const {emit, setConnection, text} = hydrateSeeded(`h11-${name}`);
+      act(() => emit([], 'unknown'));
+      act(() => setConnection(name));
+      expect(text()).toEqual(['a', 'b']);
+    },
+  );
+
+  test('keeps the seed when the connection was already lost', () => {
+    const {emit, text} = hydrateSeeded('h12', 'disconnected');
+    act(() => emit([], 'unknown'));
+    expect(text()).toEqual(['a', 'b']);
+  });
+
+  test('shows local rows that arrive after the connection was lost', () => {
+    const {emit, setConnection, text} = hydrateSeeded('h13');
+    act(() => emit([], 'unknown'));
+    act(() => setConnection('disconnected'));
+    act(() => emit([{id: 'offline-write'}], 'unknown'));
+    expect(text()).toEqual(['offline-write']);
+  });
 
   test('stays on the seed through a reconnect attempt', () => {
     const {emit, setConnection, text} = hydrateSeeded('h7');

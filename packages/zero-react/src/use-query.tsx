@@ -250,6 +250,11 @@ export function useQuery<
   );
 
   if (collector && q && enabled) {
+    // A server render is all a crawler sees, so it can't show a loading state
+    // that fills in later, or rows the server has yet to confirm.
+    if (view && !view.complete) {
+      suspend(view.waitForComplete());
+    }
     collector.record(asQueryInternals(q).hash(), snapshot[0], snapshot[1]);
   }
 
@@ -338,7 +343,8 @@ export function useSuspenseQuery<
   );
 
   if (view && enabled) {
-    if (suspendUntil === 'complete' && !view.complete) {
+    // Collecting always waits for 'complete', for the reason given in useQuery.
+    if ((suspendUntil === 'complete' || collector) && !view.complete) {
       suspend(view.waitForComplete());
     }
 
@@ -707,6 +713,7 @@ class ViewWrapper<
     | [Immutable<HumanReadable<TReturn>>, ResultType, ErroredQuery | undefined]
     | undefined;
   #holdingSeed = false;
+  #connectionLost = false;
   #stopWatchingConnection: (() => void) | undefined;
   readonly #singular: boolean;
   // A top-level aggregate reads its empty value (0 or null) until the server's
@@ -766,25 +773,34 @@ class ViewWrapper<
       this.#complete = true;
       this.#completeResolver.resolve();
     }
-    if (seed.type !== 'unknown' || this.#hasRows()) {
+    if (seed.type !== 'unknown' || this.#hasRows(this.#snapshot[0])) {
       this.#nonEmpty = true;
       this.#nonEmptyResolver.resolve();
     }
 
     const {state} = this.#zero.connection;
-    if (!canStillConfirmSeed(state.current)) {
-      return;
-    }
     this.#holdingSeed = true;
+    this.#connectionLost = !canStillConfirmSeed(state.current);
     this.#stopWatchingConnection = state.subscribe(current => {
-      if (!canStillConfirmSeed(current)) {
-        const held = this.#heldResult;
+      this.#connectionLost = !canStillConfirmSeed(current);
+      const held = this.#heldResult;
+      if (held && this.#canReplaceSeedOffline(held[0], held[1])) {
         this.#stopHoldingSeed();
-        if (held) {
-          this.#onData(...held);
-        }
+        this.#onData(...held);
       }
     });
+  }
+
+  /**
+   * With no server to confirm it, the seed gives way only to rows the client
+   * actually has. An empty view says nothing about the data: it is what a
+   * client that never connected holds, such as a crawler with no WebSocket, and
+   * replacing the seed with it would blank a page that rendered fine.
+   */
+  #canReplaceSeedOffline(data: unknown, resultType: ResultType): boolean {
+    return (
+      this.#connectionLost && (resultType === 'cached' || this.#hasRows(data))
+    );
   }
 
   #stopHoldingSeed(): void {
@@ -794,12 +810,10 @@ class ViewWrapper<
     this.#stopWatchingConnection = undefined;
   }
 
-  #hasRows(): boolean {
+  #hasRows(data: unknown): boolean {
     return (
       !this.#aggregate &&
-      (this.#singular
-        ? this.#snapshot[0] !== undefined
-        : (this.#snapshot[0] as unknown[]).length !== 0)
+      (this.#singular ? data !== undefined : (data as unknown[]).length !== 0)
     );
   }
 
@@ -809,7 +823,11 @@ class ViewWrapper<
     error?: ErroredQuery,
   ) => {
     if (this.#holdingSeed) {
-      if (resultType !== 'complete' && resultType !== 'error') {
+      if (
+        resultType !== 'complete' &&
+        resultType !== 'error' &&
+        !this.#canReplaceSeedOffline(snap, resultType)
+      ) {
         this.#heldResult = [snap, resultType, error];
         return;
       }
@@ -849,7 +867,7 @@ class ViewWrapper<
       this.#nonEmptyResolver.resolve();
     }
 
-    const hasData = this.#hasRows();
+    const hasData = this.#hasRows(this.#snapshot[0]);
     // A 'cached' result is the server-confirmed answer from a previous
     // session, so even an empty one is something to render. It never
     // satisfies `complete`; only a confirmation on this connection does.
