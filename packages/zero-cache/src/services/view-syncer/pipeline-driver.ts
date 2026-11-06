@@ -26,6 +26,7 @@ import {ChangeIndex} from '../../../../zql/src/ivm/change-index.ts';
 import {ChangeType} from '../../../../zql/src/ivm/change-type.ts';
 import type {Change} from '../../../../zql/src/ivm/change.ts';
 import type {Node} from '../../../../zql/src/ivm/data.ts';
+import type {JoinIndex} from '../../../../zql/src/ivm/join-index.ts';
 import {
   skipYields,
   throwOutput,
@@ -92,13 +93,16 @@ import {
   ZERO_VERSION_COLUMN_NAME,
 } from '../replicator/schema/replication-state.ts';
 import {checkClientSchema} from './client-schema.ts';
-import {
-  clientSchemaKey,
-  type CloneShadow,
-  type PipelineStateSource,
-} from './clone-shadow.ts';
 import {CLIENT_LMID_QUERY_ID, CLIENT_MUTATION_RESULTS_QUERY_ID} from './cvr.ts';
 import type {DeferredWritesBudget} from './deferred-writes-budget.ts';
+import {
+  clientSchemaKey,
+  copyPipelineState,
+  usesAggregates,
+  type OutputRow,
+  type PipelineDonors,
+  type PipelineStateSource,
+} from './pipeline-donors.ts';
 import {planWarningMessage} from './plan-warnings.ts';
 import {
   PushCostEstimator,
@@ -141,7 +145,7 @@ type CompanionPipeline = {
 
 type Pipeline = {
   readonly input: Input;
-  /** Set once the pipeline is offered as a donor to the clone shadow. */
+  /** Set once the pipeline is offered to other client groups as a donor. */
   stopDonating?: (() => void) | undefined;
   readonly hydrationTimeMs: number;
   readonly hydrationRowCount: number;
@@ -555,10 +559,15 @@ export class PipelineDriver {
    */
   readonly #changedRowSetSignatures = new Set<string>();
 
-  readonly #cloneShadow: CloneShadow | undefined;
+  readonly #donors: PipelineDonors | undefined;
   #clientSchemaKey: string | undefined;
   /** The operator storages created so far by the hydration in progress. */
   #hydratingOperators: Storage[] | undefined;
+  #donorRows:
+    | ((queryID: string) => readonly OutputRow[] | undefined)
+    | undefined;
+  /** The join indexes created so far by the hydration in progress. */
+  #hydratingJoinIndexes: JoinIndex[] = [];
   readonly #lc: LogContext;
   readonly #snapshotter: Snapshotter;
   readonly #storage: ClientGroupStorage;
@@ -650,9 +659,9 @@ export class PipelineDriver {
     config?: ZeroConfig,
     deferredWrites?: DeferredWritesBudget,
     queryStats?: QueryStats | undefined,
-    cloneShadow?: CloneShadow | undefined,
+    donors?: PipelineDonors | undefined,
   ) {
-    this.#cloneShadow = cloneShadow;
+    this.#donors = donors;
     this.#lc = lc.withContext('clientGroupID', clientGroupID);
     this.#snapshotter = snapshotter;
     this.#storage = storage;
@@ -672,6 +681,16 @@ export class PipelineDriver {
         : undefined;
     this.#yieldThresholdMs = yieldThresholdMs;
     this.#queryStats = queryStats;
+  }
+
+  /**
+   * Provides the rows a query has output, which only the owner of the CVR knows,
+   * so that its pipelines can donate. It should return undefined if it can't say
+   * consistently with the pipeline at the moment. It is called once as soon as a
+   * pipeline can donate, so that it can get ready to answer.
+   */
+  setDonorRows(rows: (queryID: string) => readonly OutputRow[] | undefined) {
+    this.#donorRows = rows;
   }
 
   /**
@@ -714,7 +733,7 @@ export class PipelineDriver {
   }
 
   #initAndResetCommon(clientSchema: ClientSchema) {
-    this.#clientSchemaKey = this.#cloneShadow && clientSchemaKey(clientSchema);
+    this.#clientSchemaKey = this.#donors && clientSchemaKey(clientSchema);
     const {db} = this.#snapshotter.current();
     const fullTables = new Map<string, LiteTableSpecWithReplicationStatus>();
     computeZqlSpecs(
@@ -1190,7 +1209,9 @@ export class PipelineDriver {
     this.#hydrateContext = {
       timer,
     };
-    this.#hydratingOperators = this.#cloneShadow ? [] : undefined;
+    this.#hydratingOperators = this.#donors ? [] : undefined;
+    this.#hydratingJoinIndexes = [];
+    let copied = false;
     // Hydration has the driver to itself, so the rows read by all of its
     // tables in the meantime are the rows read by this hydration. Tables
     // added by the hydration start from zero, which this also accounts for.
@@ -1237,6 +1258,7 @@ export class PipelineDriver {
             return this.#getSource(name);
           },
           createStorage: () => this.#createStorage(),
+          onJoinIndex: index => this.#hydratingJoinIndexes.push(index),
           decorateSourceInput: (input: SourceInput, _queryID: string): Input =>
             new MeasurePushOperator(
               new QueryFailureLoggingOperator(
@@ -1276,10 +1298,31 @@ export class PipelineDriver {
         push: change => this.#streamPushed(queryID, schema, change),
       });
 
+      const donor = this.#findDonor(
+        transformationHash,
+        resolvedQuery,
+        companionInputs,
+      );
+      if (donor) {
+        for (const change of this.#copyFrom(
+          donor.source,
+          donor.rows,
+          queryID,
+          transformationHash,
+          tables,
+        )) {
+          if (change !== 'yield') {
+            hydrationRowCount++;
+          }
+          yield change;
+        }
+        copied = true;
+      }
+
       // The client runs scalar gates as plain EXISTS, so the companions are
       // hydrated like the query: their rows, and the rows behind any EXISTS
       // nested in them, are synced too. Index -1 is the query's own pipeline.
-      for (let i = -1; i < companionInputs.length; i++) {
+      for (let i = -1; !copied && i < companionInputs.length; i++) {
         const pipeline = i < 0 ? input : companionInputs[i];
         for (const change of must(this.#streamer).streamNodes(
           queryID,
@@ -1378,7 +1421,13 @@ export class PipelineDriver {
       });
       this.#abandoned.delete(queryID);
       hydrationFinished = true;
-      this.#runCloneShadow(queryID, transformationHash, hydrationTimeMs);
+      this.#offerAsDonor(
+        queryID,
+        transformationHash,
+        hydrationTimeMs,
+        copied,
+        companionInputs.length === 0 && !usesAggregates(resolvedQuery),
+      );
       this.#queryStats?.recordHydration(
         {queryName, shape},
         {
@@ -1456,17 +1505,111 @@ export class PipelineDriver {
     }
   }
 
+  /** @returns A pipeline to copy the query being hydrated from, if any. */
+  #findDonor(
+    transformationHash: string,
+    query: AST,
+    companionInputs: readonly Input[],
+  ) {
+    if (
+      !this.#donors?.copy ||
+      companionInputs.length > 0 ||
+      usesAggregates(query)
+    ) {
+      return undefined;
+    }
+    const donor = this.#donors.findDonor(
+      `${this.#clientSchemaKey}/${transformationHash}`,
+      this.currentVersion(),
+    );
+    // Equal hashes should plan alike, but a pipeline with a different shape
+    // can't use the state, and hydrating is always correct.
+    return donor?.source.operators.length ===
+      this.#hydratingOperators?.length &&
+      donor?.source.copyable?.joinIndexes.length ===
+        this.#hydratingJoinIndexes.length
+      ? donor
+      : undefined;
+  }
+
   /**
-   * Compares the query that just hydrated with what another client group's
-   * pipeline could have provided, then offers it to later groups in turn. A
-   * failure here must not affect the hydration it is only measuring.
+   * Gives the query being hydrated the state and rows of another pipeline, which
+   * is at the same version. They have to come together from one pipeline: a
+   * hydration can legitimately pick different proof rows for an EXISTS, and those
+   * rows and the Cap state that tracks them must agree.
    */
-  #runCloneShadow(
+  *#copyFrom(
+    donor: PipelineStateSource,
+    rows: readonly OutputRow[],
+    queryID: string,
+    transformationHash: string,
+    tables: Set<string>,
+  ): Iterable<RowChange | 'yield'> {
+    const start = performance.now();
+    const stateEntries = copyPipelineState(
+      donor,
+      must(this.#hydratingOperators),
+      this.#hydratingJoinIndexes,
+    );
+    must(this.#donors).recordCopy(
+      `${this.#clientSchemaKey}/${transformationHash}`,
+      stateEntries,
+      performance.now() - start,
+    );
+
+    for (const {table, rowKey, count} of rows) {
+      tables.add(table);
+      this.#getSource(table);
+      const row = withMinRowVersion(
+        must(this.getRow(table, rowKey as RowKey)),
+        must(this.#tableSpecs.get(table)).tableSpec.minRowVersion,
+      );
+      for (let i = 0; i < count; i++) {
+        yield {type: ChangeType.ADD, queryID, table, rowKey, row} as RowChange;
+      }
+      if (this.#shouldYield()) {
+        yield 'yield';
+      }
+    }
+  }
+
+  /**
+   * The rows a query has output, if they account for the query's row-set
+   * signature. Otherwise they are not what the pipeline holds, and a copy of the
+   * pipeline's state would disagree with them.
+   */
+  #verifiedDonorRows(queryID: string): readonly OutputRow[] | undefined {
+    const rows = this.#donorRows?.(queryID);
+    if (!rows) {
+      return undefined;
+    }
+    let signature = 0n;
+    for (const {table, rowKey, count} of rows) {
+      // XOR cancels out in pairs, so only an odd count leaves a trace.
+      if (count % 2 === 1) {
+        signature ^= rowIDSignatureUnit({
+          schema: '',
+          table,
+          rowKey: rowKey as RowKey,
+        });
+      }
+    }
+    return signature === this.#rowSetSignatures.get(queryID) ? rows : undefined;
+  }
+
+  /**
+   * Offers a query that just finished to later client groups. One that hydrated
+   * is first compared with what a donor could have provided, and a failure there
+   * must not affect the hydration it is only measuring.
+   */
+  #offerAsDonor(
     queryID: string,
     transformationHash: string,
     hydrationTimeMs: number,
+    copied: boolean,
+    copyable: boolean,
   ) {
-    const shadow = this.#cloneShadow;
+    const shadow = this.#donors;
     const pipeline = this.#pipelines.get(queryID);
     // Internal queries embed the client group, so they could never be shared.
     if (
@@ -1484,11 +1627,24 @@ export class PipelineDriver {
         this.#advanceContext !== null || this.#costBasedAdvanceIncomplete,
       rowSetSignature: () => this.#rowSetSignatures.get(queryID),
       operators: must(this.#hydratingOperators),
+      ...(shadow.copy && copyable
+        ? {
+            copyable: {
+              joinIndexes: this.#hydratingJoinIndexes,
+              rows: () => this.#verifiedDonorRows(queryID),
+            },
+          }
+        : {}),
     };
-    try {
-      shadow.compare(key, source, hydrationTimeMs);
-    } catch (e) {
-      this.#lc.warn?.('clone shadow comparison failed', e);
+    if (!copied) {
+      try {
+        shadow.compare(key, source, hydrationTimeMs);
+      } catch (e) {
+        this.#lc.warn?.('hydration clone comparison failed', e);
+      }
+    }
+    if (source.copyable) {
+      this.#donorRows?.(queryID);
     }
     pipeline.stopDonating = shadow.register(key, source);
   }
@@ -2833,6 +2989,13 @@ export class PipelineDriver {
 }
 
 /** Turns the output of query pipelines into the row changes sent to clients. */
+function withMinRowVersion(row: Row, minRowVersion: string | null | undefined) {
+  const rowVersion = row[ZERO_VERSION_COLUMN_NAME];
+  return typeof rowVersion === 'string' && rowVersion < (minRowVersion ?? '00')
+    ? {...row, [ZERO_VERSION_COLUMN_NAME]: minRowVersion}
+    : row;
+}
+
 class Streamer {
   readonly #primaryKeys: Map<string, PrimaryKey>;
   readonly #tableSpecs: Map<string, LiteAndZqlSpec>;
@@ -2940,13 +3103,7 @@ class Streamer {
         if (isAggregate) {
           row = this.#stampAggregateRow(table, rowKey as RowKey, row, op);
         } else {
-          const rowVersion = row[ZERO_VERSION_COLUMN_NAME];
-          if (
-            typeof rowVersion === 'string' &&
-            rowVersion < (minRowVersion ?? '00')
-          ) {
-            row = {...row, [ZERO_VERSION_COLUMN_NAME]: minRowVersion};
-          }
+          row = withMinRowVersion(row, minRowVersion);
         }
       }
 

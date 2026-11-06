@@ -563,6 +563,11 @@ export class CVRStore {
     return this.#rowCache.getRowRecords();
   }
 
+  /** The row records, for a caller that can't wait for them to be loaded. */
+  loadedRowRecords(): ReadonlyMap<RowID, RowRecord> | undefined {
+    return this.#rowCache.loadedRowRecords();
+  }
+
   putRowRecord(row: RowRecord): void {
     this.#pendingRowRecordUpdates.set(row.id, row);
   }

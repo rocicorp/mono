@@ -672,17 +672,18 @@ export const zeroOptions = {
     ],
   },
 
-  enableCloneShadow: {
-    type: v.boolean().optional(() => false),
+  hydrationClone: {
+    type: v.literalUnion('off', 'shadow', 'on').optional(() => 'off'),
     desc: [
-      `Measure whether hydrations could be copied from another client group.`,
+      `Whether a client group can take a query's hydration from another group on`,
+      `its sync worker that already has that query live at the same version.`,
       ``,
-      `When enabled, each query that hydrates is compared with the same query in`,
-      `other client groups on its sync worker, and the outcome is reported in the`,
-      `{bold sync.clone-shadow} metric. Hydration itself is unchanged.`,
+      `{bold shadow} still hydrates, and compares the result with what could have`,
+      `been copied. {bold on} copies when it can. The outcomes are reported in the`,
+      `{bold sync.hydration-clone} metric.`,
       ``,
-      `Comparing reads the operator state of both pipelines, which takes CPU and`,
-      `holds up the worker for large queries.`,
+      `Both read the operator state of the pipelines involved, holding up the worker`,
+      `for large queries.`,
     ],
     hidden: true,
   },

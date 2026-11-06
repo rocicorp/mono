@@ -97,7 +97,7 @@ export class TestBuilderDelegate implements BuilderDelegate {
       cloned[name] = s.cloneData();
     }
     for (const [name, join] of Object.entries(this.#joins)) {
-      cloned[name] = join.parentIndexForTest.entriesForTest();
+      cloned[name] = join.parentIndex.entriesForTest();
     }
     return cloned;
   }
