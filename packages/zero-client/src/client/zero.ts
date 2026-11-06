@@ -1809,6 +1809,8 @@ export class Zero<
       return;
     }
 
+    const affinityKey = this.#options.affinityKey ?? this.userID;
+
     assert(this.#server, 'No server provided');
     const socketOrigin = toWSString(this.#server);
 
@@ -1874,7 +1876,9 @@ export class Zero<
       this.#options.mutateHeaders,
       this.#options.queryURL ?? this.#options.getQueriesURL,
       this.#options.queryHeaders,
-      additionalConnectParams,
+      affinityKey === undefined
+        ? additionalConnectParams
+        : {affinityKey, ...additionalConnectParams},
       activeClientsManager,
       this.#options.maxHeaderLength,
       event => this.#addConnectEvent(lc, attempt, event),
