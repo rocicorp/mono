@@ -700,7 +700,7 @@ class ViewWrapper<
   #nonEmptyResolver = resolver<void>();
   readonly #zero: Pick<
     Zero<TSchema, undefined, TContext>,
-    'materialize' | 'closed' | 'connection'
+    'materialize' | 'closed' | 'connection' | 'hasPendingMutations'
   >;
   // What the server rendered, which hydration has to match however far the view
   // has moved on: a Suspense boundary can hydrate long after this view is live.
@@ -737,7 +737,7 @@ class ViewWrapper<
     query: Query<TTable, TSchema, TReturn>,
     zero: Pick<
       Zero<TSchema, undefined, TContext>,
-      'materialize' | 'closed' | 'connection'
+      'materialize' | 'closed' | 'connection' | 'hasPendingMutations'
     >,
     ttl: TTL,
     onDematerialized: (
@@ -784,7 +784,7 @@ class ViewWrapper<
     this.#stopWatchingConnection = state.subscribe(current => {
       this.#connectionLost = !canStillConfirmSeed(current);
       const held = this.#heldResult;
-      if (held && this.#canReplaceSeedOffline(held[0], held[1])) {
+      if (held && this.#canReplaceSeed(held[1])) {
         this.#stopHoldingSeed();
         this.#onData(...held);
       }
@@ -792,14 +792,18 @@ class ViewWrapper<
   }
 
   /**
-   * With no server to confirm it, the seed gives way only to rows the client
-   * actually has. An empty view says nothing about the data: it is what a
-   * client that never connected holds, such as a crawler with no WebSocket, and
-   * replacing the seed with it would blank a page that rendered fine.
+   * Whether the client's rows should replace an unconfirmed seed. Only 'cached'
+   * rows can: they are a whole result, if perhaps an old one. Anything else may
+   * be missing most of what the seed shows, down to nothing at all for a client
+   * that never connected, such as a crawler with no WebSocket.
+   *
+   * Even then, the seed is usually newer, so it gives way only once there is no
+   * server to confirm it or the user's own write would otherwise stay hidden.
    */
-  #canReplaceSeedOffline(data: unknown, resultType: ResultType): boolean {
+  #canReplaceSeed(resultType: ResultType): boolean {
     return (
-      this.#connectionLost && (resultType === 'cached' || this.#hasRows(data))
+      resultType === 'cached' &&
+      (this.#connectionLost || this.#zero.hasPendingMutations)
     );
   }
 
@@ -826,7 +830,7 @@ class ViewWrapper<
       if (
         resultType !== 'complete' &&
         resultType !== 'error' &&
-        !this.#canReplaceSeedOffline(snap, resultType)
+        !this.#canReplaceSeed(resultType)
       ) {
         this.#heldResult = [snap, resultType, error];
         return;

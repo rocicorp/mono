@@ -42,6 +42,7 @@ function newZero() {
   const zero = {
     clientID: `snapshot-client-${clientCount++}`,
     connection,
+    hasPendingMutations: false,
     materialize: vi.fn(() => ({
       addListener: (cb: Listener) => listeners.add(cb),
       destroy: () => listeners.clear(),
@@ -56,6 +57,9 @@ function newZero() {
       }
     },
     connectionListenerCount: () => connectionListeners.size,
+    setPendingMutations: (pending: boolean) => {
+      (zero as {hasPendingMutations: boolean}).hasPendingMutations = pending;
+    },
     setConnection: (name: string) => {
       connection.state.current = {name};
       for (const cb of connectionListeners) {
@@ -311,12 +315,47 @@ describe('hydrating on the client', () => {
     expect(text()).toEqual(['a', 'b']);
   });
 
-  test('shows local rows that arrive after the connection was lost', () => {
+  test('keeps the seed over unconfirmed rows after the connection was lost', () => {
     const {emit, setConnection, text} = hydrateSeeded('h13');
-    act(() => emit([], 'unknown'));
     act(() => setConnection('disconnected'));
     act(() => emit([{id: 'offline-write'}], 'unknown'));
-    expect(text()).toEqual(['offline-write']);
+    expect(text()).toEqual(['a', 'b']);
+  });
+
+  test('shows cached rows that arrive after the connection was lost', () => {
+    const {emit, setConnection, text} = hydrateSeeded('h14');
+    act(() => setConnection('disconnected'));
+    act(() => emit([{id: 'local'}], 'cached'));
+    expect(text()).toEqual(['local']);
+  });
+
+  test('a write ends the hold for a client with cached rows', () => {
+    const {emit, setPendingMutations, text} = hydrateSeeded('h15');
+    act(() => emit([{id: 'old'}], 'cached'));
+    expect(text()).toEqual(['a', 'b']);
+
+    setPendingMutations(true);
+    act(() => emit([{id: 'old'}, {id: 'write'}], 'cached'));
+    expect(text()).toEqual(['old', 'write']);
+  });
+
+  test('a write keeps the seed for a client with no cached rows', () => {
+    const {emit, setPendingMutations, text} = hydrateSeeded('h16');
+    act(() => emit([], 'unknown'));
+
+    setPendingMutations(true);
+    act(() => emit([{id: 'write'}], 'unknown'));
+    expect(text()).toEqual(['a', 'b']);
+
+    act(() => emit([{id: 'a'}, {id: 'b'}, {id: 'write'}], 'complete'));
+    expect(text()).toEqual(['a', 'b', 'write']);
+  });
+
+  test('a write elsewhere leaves a view it did not change on the seed', () => {
+    const {emit, setPendingMutations, text} = hydrateSeeded('h17');
+    act(() => emit([{id: 'old'}], 'cached'));
+    setPendingMutations(true);
+    expect(text()).toEqual(['a', 'b']);
   });
 
   test('stays on the seed through a reconnect attempt', () => {
