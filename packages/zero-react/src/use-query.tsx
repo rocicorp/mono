@@ -444,6 +444,15 @@ function makeError(retry: () => void, error: ErroredQuery): QueryErrorDetails {
   };
 }
 
+/**
+ * How long a view with no subscribers survives after it was last rendered.
+ *
+ * Only `subscribe` tells us React kept a render, and it never runs for a render
+ * React discards or for a server render, so a view has to expire on its own.
+ * Expiring one React did keep is harmless: subscribing materializes it again.
+ */
+export const RENDER_LEASE_MS = 10_000;
+
 // oxlint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyViewWrapper = ViewWrapper<any, any, any, any, any>;
 
@@ -546,6 +555,7 @@ export class ViewStore {
     getSnapshot: () => QueryResult<TReturn>;
     subscribeReactInternals: (internals: () => void) => () => void;
     updateTTL: (ttl: TTL) => void;
+    renewLease: () => void;
     waitForComplete: () => Promise<void>;
     waitForNonEmpty: () => Promise<void>;
     complete: boolean;
@@ -558,6 +568,7 @@ export class ViewStore {
         getSnapshot: () => getDefaultSnapshot(qi.format.singular),
         subscribeReactInternals: disabledSubscriber,
         updateTTL: () => {},
+        renewLease: () => {},
         waitForComplete: () => Promise.resolve(),
         waitForNonEmpty: () => Promise.resolve(),
         complete: false,
@@ -591,6 +602,7 @@ export class ViewStore {
       byHash.set(hash, existing);
     } else {
       existing.updateTTL(ttl);
+      existing.renewLease();
     }
     return existing as ViewWrapper<TTable, TSchema, TReturn, MD, TContext>;
   }
@@ -640,12 +652,17 @@ class ViewWrapper<
   #completeResolver = resolver<void>();
   #nonEmpty = false;
   #nonEmptyResolver = resolver<void>();
-  readonly #zero: Pick<Zero<TSchema, undefined, TContext>, 'materialize'>;
+  readonly #zero: Pick<
+    Zero<TSchema, undefined, TContext>,
+    'materialize' | 'closed'
+  >;
   readonly #singular: boolean;
   // A top-level aggregate reads its empty value (0 or null) until the server's
   // result arrives, so its value never says there is something to render.
   readonly #aggregate: boolean;
   #destroyTimer: ReturnType<typeof setTimeout> | undefined;
+  #awaitedForComplete = false;
+  #awaitedForNonEmpty = false;
 
   // Inputs of the previous #onData call. When a view flush delivers
   // reference-identical data with the same resultType and error, the previous
@@ -659,7 +676,7 @@ class ViewWrapper<
 
   constructor(
     query: Query<TTable, TSchema, TReturn>,
-    zero: Pick<Zero<TSchema, undefined, TContext>, 'materialize'>,
+    zero: Pick<Zero<TSchema, undefined, TContext>, 'materialize' | 'closed'>,
     ttl: TTL,
     onDematerialized: (
       view: ViewWrapper<TTable, TSchema, TReturn, MD, TContext>,
@@ -674,6 +691,7 @@ class ViewWrapper<
     this.#aggregate = aggregate !== undefined;
     this.#snapshot = getDefaultSnapshot(singular);
     this.#materializeIfNeeded();
+    this.renewLease();
   }
 
   #onData = (
@@ -778,32 +796,62 @@ class ViewWrapper<
 
       // only schedule a cleanup task if we have no listeners left
       if (this.#reactInternals.size === 0) {
-        this.#destroyTimer = setTimeout(() => {
-          this.#destroyTimer = undefined;
-
-          // We already destroyed the view
-          if (this.#view === undefined) {
-            return;
-          }
-
-          // Someone re-registered a listener on this view before the timeout elapsed.
-          // This happens often in strict-mode which forces a component
-          // to mount, unmount, remount.
-          if (this.#reactInternals.size > 0) {
-            return;
-          }
-
-          this.#view.destroy();
-          this.#view = undefined;
-          this.#complete = false;
-          this.#completeResolver = resolver();
-          this.#nonEmpty = false;
-          this.#nonEmptyResolver = resolver();
-          this.#onDematerialized(this);
-        }, 10);
+        this.#scheduleDestroy(10);
       }
     };
   };
+
+  /**
+   * Keeps a view with no subscribers alive for another {@link RENDER_LEASE_MS}.
+   * Called for every render, since a render is the only sign of use such a view
+   * gets.
+   */
+  renewLease(): void {
+    if (this.#reactInternals.size === 0) {
+      this.#scheduleDestroy(RENDER_LEASE_MS);
+    }
+  }
+
+  #scheduleDestroy(delayMs: number): void {
+    clearTimeout(this.#destroyTimer);
+    this.#destroyTimer = setTimeout(() => {
+      this.#destroyTimer = undefined;
+
+      // We already destroyed the view
+      if (this.#view === undefined) {
+        return;
+      }
+
+      // Someone re-registered a listener on this view before the timeout elapsed.
+      // This happens often in strict-mode which forces a component
+      // to mount, unmount, remount.
+      if (this.#reactInternals.size > 0) {
+        return;
+      }
+
+      // Destroying the view would replace the resolvers, leaving a suspended
+      // render waiting on a promise nothing will ever settle. Once Zero has
+      // closed, nothing could settle it anyway.
+      if (
+        !this.#zero.closed &&
+        ((this.#awaitedForComplete && !this.#complete) ||
+          (this.#awaitedForNonEmpty && !this.#nonEmpty))
+      ) {
+        this.#scheduleDestroy(RENDER_LEASE_MS);
+        return;
+      }
+
+      this.#view.destroy();
+      this.#view = undefined;
+      this.#complete = false;
+      this.#completeResolver = resolver();
+      this.#nonEmpty = false;
+      this.#nonEmptyResolver = resolver();
+      this.#awaitedForComplete = false;
+      this.#awaitedForNonEmpty = false;
+      this.#onDematerialized(this);
+    }, delayMs);
+  }
 
   updateTTL(ttl: TTL): void {
     // `getView` calls this on every render, and forwarding an unchanged TTL
@@ -823,6 +871,7 @@ class ViewWrapper<
   }
 
   waitForComplete(): Promise<void> {
+    this.#awaitedForComplete = true;
     return this.#completeResolver.promise;
   }
 
@@ -831,6 +880,7 @@ class ViewWrapper<
   }
 
   waitForNonEmpty(): Promise<void> {
+    this.#awaitedForNonEmpty = true;
     return this.#nonEmptyResolver.promise;
   }
 }
