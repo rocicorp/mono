@@ -1,3 +1,10 @@
+export {
+  QuerySnapshotCollector,
+  QuerySnapshotProvider,
+  serializeQuerySnapshots,
+  type QuerySnapshot,
+  type QuerySnapshots,
+} from './query-snapshots.tsx';
 export {useConnectionState} from './use-connection-state.tsx';
 export {
   useQuery,

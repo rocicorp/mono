@@ -1,4 +1,4 @@
-import React, {useRef, useSyncExternalStore} from 'react';
+import React, {useContext, useRef, useSyncExternalStore} from 'react';
 import {deepEqual} from '../../shared/src/json.ts';
 import {resolver} from '../../shared/src/resolver.ts';
 import {TESTING} from '../../shared/src/testing.ts';
@@ -8,11 +8,17 @@ import {
   asQueryInternals,
   DEFAULT_TTL_MS,
 } from './bindings.ts';
+import {
+  QuerySnapshotContext,
+  type QuerySnapshot,
+  type QuerySnapshots,
+} from './query-snapshots.tsx';
 import {useZero} from './zero-provider.tsx';
 import type {
   AnyMutatorRegistry,
   BaseDefaultContext,
   BaseDefaultSchema,
+  ConnectionState,
   CustomMutatorDefs,
   DefaultContext,
   DefaultSchema,
@@ -228,17 +234,26 @@ export function useQuery<
 
   // When query is falsy, use disabled subscriber/snapshot to maintain hook order
   const q = useStableQuery(query, zero);
-  const view = q ? viewStore.getView(zero, q, enabled, ttl) : undefined;
+  const {collector, snapshots} = useContext(QuerySnapshotContext);
+  const view = q
+    ? viewStore.getView(zero, q, enabled, ttl, snapshots)
+    : undefined;
 
   // https://react.dev/reference/react/useSyncExternalStore
   // Always call useSyncExternalStore to maintain consistent hook order
-  return useSyncExternalStore(
+  const snapshot = useSyncExternalStore(
     view?.subscribeReactInternals ?? disabledSubscriber,
     view?.getSnapshot ??
       (getDisabledSnapshot as () => MaybeQueryResult<TReturn>),
-    view?.getSnapshot ??
+    view?.getServerSnapshot ??
       (getDisabledSnapshot as () => MaybeQueryResult<TReturn>),
   );
+
+  if (collector && q && enabled) {
+    collector.record(asQueryInternals(q).hash(), snapshot[0], snapshot[1]);
+  }
+
+  return snapshot;
 }
 
 // Overload 1: Query
@@ -307,7 +322,10 @@ export function useSuspenseQuery<
 
   // When query is falsy, use disabled subscriber/snapshot to maintain hook order
   const q = useStableQuery(query, zero);
-  const view = q ? viewStore.getView(zero, q, enabled, ttl) : undefined;
+  const {collector, snapshots} = useContext(QuerySnapshotContext);
+  const view = q
+    ? viewStore.getView(zero, q, enabled, ttl, snapshots)
+    : undefined;
 
   // https://react.dev/reference/react/useSyncExternalStore
   // Always call useSyncExternalStore to maintain consistent hook order
@@ -315,7 +333,7 @@ export function useSuspenseQuery<
     view?.subscribeReactInternals ?? disabledSubscriber,
     view?.getSnapshot ??
       (getDisabledSnapshot as () => MaybeQueryResult<TReturn>),
-    view?.getSnapshot ??
+    view?.getServerSnapshot ??
       (getDisabledSnapshot as () => MaybeQueryResult<TReturn>),
   );
 
@@ -327,6 +345,12 @@ export function useSuspenseQuery<
     if (suspendUntil === 'partial' && !view.nonEmpty) {
       suspend(view.waitForNonEmpty());
     }
+  }
+
+  // After the suspends above, so a render that suspends records nothing and the
+  // retry that finishes records what the page actually shows.
+  if (collector && q && enabled) {
+    collector.record(asQueryInternals(q).hash(), snapshot[0], snapshot[1]);
   }
 
   return snapshot;
@@ -453,6 +477,13 @@ function makeError(retry: () => void, error: ErroredQuery): QueryErrorDetails {
  */
 export const RENDER_LEASE_MS = 10_000;
 
+/** Whether a seeded view can still expect the server to confirm its query. */
+function canStillConfirmSeed({name}: ConnectionState): boolean {
+  return (
+    name === 'initializing' || name === 'connecting' || name === 'connected'
+  );
+}
+
 // oxlint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyViewWrapper = ViewWrapper<any, any, any, any, any>;
 
@@ -551,8 +582,10 @@ export class ViewStore {
     q: Query<TTable, TSchema, TReturn>,
     enabled: boolean,
     ttl: TTL,
+    snapshots?: QuerySnapshots | undefined,
   ): {
     getSnapshot: () => QueryResult<TReturn>;
+    getServerSnapshot: () => QueryResult<TReturn>;
     subscribeReactInternals: (internals: () => void) => () => void;
     updateTTL: (ttl: TTL) => void;
     renewLease: () => void;
@@ -566,6 +599,7 @@ export class ViewStore {
     if (!enabled) {
       return {
         getSnapshot: () => getDefaultSnapshot(qi.format.singular),
+        getServerSnapshot: () => getDefaultSnapshot(qi.format.singular),
         subscribeReactInternals: disabledSubscriber,
         updateTTL: () => {},
         renewLease: () => {},
@@ -581,20 +615,26 @@ export class ViewStore {
     let byHash = this.#views.get(clientID);
     let existing = byHash?.get(hash);
     if (!existing) {
-      existing = new ViewWrapper(q, zero, ttl, view => {
-        const views = this.#views.get(clientID);
-        const currentView = views?.get(hash);
-        if (currentView && currentView !== view) {
-          // we replaced the view with a new one already.
-          return;
-        }
-        views?.delete(hash);
-        if (views?.size === 0) {
-          // Nothing is left for this client, so drop its map rather than
-          // keeping one per client id the page has ever seen.
-          this.#views.delete(clientID);
-        }
-      });
+      existing = new ViewWrapper(
+        q,
+        zero,
+        ttl,
+        view => {
+          const views = this.#views.get(clientID);
+          const currentView = views?.get(hash);
+          if (currentView && currentView !== view) {
+            // we replaced the view with a new one already.
+            return;
+          }
+          views?.delete(hash);
+          if (views?.size === 0) {
+            // Nothing is left for this client, so drop its map rather than
+            // keeping one per client id the page has ever seen.
+            this.#views.delete(clientID);
+          }
+        },
+        snapshots?.[hash],
+      );
       if (!byHash) {
         byHash = new Map();
         this.#views.set(clientID, byHash);
@@ -654,8 +694,20 @@ class ViewWrapper<
   #nonEmptyResolver = resolver<void>();
   readonly #zero: Pick<
     Zero<TSchema, undefined, TContext>,
-    'materialize' | 'closed'
+    'materialize' | 'closed' | 'connection'
   >;
+  // What the server rendered, which hydration has to match however far the view
+  // has moved on: a Suspense boundary can hydrate long after this view is live.
+  readonly #serverSnapshot: QueryResult<TReturn> | undefined;
+  // While set, the seed stays on screen and the view's results wait here. A
+  // view that has not heard from the server can only offer rows at least as old
+  // as the seed, even when they are 'cached', so showing them would make the
+  // page jump backwards.
+  #heldResult:
+    | [Immutable<HumanReadable<TReturn>>, ResultType, ErroredQuery | undefined]
+    | undefined;
+  #holdingSeed = false;
+  #stopWatchingConnection: (() => void) | undefined;
   readonly #singular: boolean;
   // A top-level aggregate reads its empty value (0 or null) until the server's
   // result arrives, so its value never says there is something to render.
@@ -676,11 +728,15 @@ class ViewWrapper<
 
   constructor(
     query: Query<TTable, TSchema, TReturn>,
-    zero: Pick<Zero<TSchema, undefined, TContext>, 'materialize' | 'closed'>,
+    zero: Pick<
+      Zero<TSchema, undefined, TContext>,
+      'materialize' | 'closed' | 'connection'
+    >,
     ttl: TTL,
     onDematerialized: (
       view: ViewWrapper<TTable, TSchema, TReturn, MD, TContext>,
     ) => void,
+    seed?: QuerySnapshot | undefined,
   ) {
     this.#query = query;
     this.#zero = zero;
@@ -689,9 +745,62 @@ class ViewWrapper<
     const {singular, aggregate} = asQueryInternals(query).format;
     this.#singular = singular;
     this.#aggregate = aggregate !== undefined;
-    this.#snapshot = getDefaultSnapshot(singular);
+    this.#snapshot = seed
+      ? getSnapshot(
+          singular,
+          seed.data as HumanReadable<TReturn>,
+          seed.type,
+          this.#retry,
+        )
+      : getDefaultSnapshot(singular);
+    this.#serverSnapshot = seed && this.#snapshot;
+    if (seed) {
+      this.#seed(seed);
+    }
     this.#materializeIfNeeded();
     this.renewLease();
+  }
+
+  #seed(seed: QuerySnapshot): void {
+    if (seed.type === 'complete') {
+      this.#complete = true;
+      this.#completeResolver.resolve();
+    }
+    if (seed.type !== 'unknown' || this.#hasRows()) {
+      this.#nonEmpty = true;
+      this.#nonEmptyResolver.resolve();
+    }
+
+    const {state} = this.#zero.connection;
+    if (!canStillConfirmSeed(state.current)) {
+      return;
+    }
+    this.#holdingSeed = true;
+    this.#stopWatchingConnection = state.subscribe(current => {
+      if (!canStillConfirmSeed(current)) {
+        const held = this.#heldResult;
+        this.#stopHoldingSeed();
+        if (held) {
+          this.#onData(...held);
+        }
+      }
+    });
+  }
+
+  #stopHoldingSeed(): void {
+    this.#holdingSeed = false;
+    this.#heldResult = undefined;
+    this.#stopWatchingConnection?.();
+    this.#stopWatchingConnection = undefined;
+  }
+
+  #hasRows(): boolean {
+    return (
+      !this.#aggregate &&
+      (this.#singular
+        ? this.#snapshot[0] !== undefined
+        : (this.#snapshot[0] as unknown[]).length !== 0)
+    );
   }
 
   #onData = (
@@ -699,6 +808,14 @@ class ViewWrapper<
     resultType: ResultType,
     error?: ErroredQuery,
   ) => {
+    if (this.#holdingSeed) {
+      if (resultType !== 'complete' && resultType !== 'error') {
+        this.#heldResult = [snap, resultType, error];
+        return;
+      }
+      this.#stopHoldingSeed();
+    }
+
     const wasCached = this.#snapshot[1].type === 'cached';
     const changed =
       this.#lastResultType === undefined ||
@@ -732,11 +849,7 @@ class ViewWrapper<
       this.#nonEmptyResolver.resolve();
     }
 
-    const hasData =
-      !this.#aggregate &&
-      (this.#singular
-        ? this.#snapshot[0] !== undefined
-        : (this.#snapshot[0] as unknown[]).length !== 0);
+    const hasData = this.#hasRows();
     // A 'cached' result is the server-confirmed answer from a previous
     // session, so even an empty one is something to render. It never
     // satisfies `complete`; only a confirmation on this connection does.
@@ -779,6 +892,8 @@ class ViewWrapper<
   };
 
   getSnapshot = () => this.#snapshot;
+
+  getServerSnapshot = () => this.#serverSnapshot ?? this.#snapshot;
 
   subscribeReactInternals = (internals: () => void): (() => void) => {
     this.#reactInternals.add(internals);
@@ -841,6 +956,7 @@ class ViewWrapper<
         return;
       }
 
+      this.#stopHoldingSeed();
       this.#view.destroy();
       this.#view = undefined;
       this.#complete = false;

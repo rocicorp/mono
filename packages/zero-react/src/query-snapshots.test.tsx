@@ -1,0 +1,295 @@
+import {act, Suspense, useEffect, type ReactNode} from 'react';
+import {hydrateRoot, type Root} from 'react-dom/client';
+import {renderToString} from 'react-dom/server';
+import {afterEach, describe, expect, test, vi} from 'vitest';
+import {queryInternalsTag, type QueryImpl} from './bindings.ts';
+import {
+  QuerySnapshotCollector,
+  QuerySnapshotProvider,
+  serializeQuerySnapshots,
+  type QuerySnapshots,
+} from './query-snapshots.tsx';
+import {useQuery, useSuspenseQuery} from './use-query.tsx';
+import {ZeroProvider} from './zero-provider.tsx';
+import type {Query, Schema, Zero} from './zero.ts';
+
+type Row = {id: string};
+type Listener = (...args: unknown[]) => void;
+
+let clientCount = 0;
+
+function newQuery(hash: string): Query<string, Schema> {
+  return {
+    [queryInternalsTag]: true,
+    hash: () => hash,
+    format: {singular: false},
+  } as unknown as QueryImpl<string, Schema>;
+}
+
+/** Each Zero gets a new client id, since views are shared per client id. */
+function newZero() {
+  const listeners = new Set<Listener>();
+  const connectionListeners = new Set<Listener>();
+  const connection = {
+    state: {
+      current: {name: 'connecting'} as {name: string},
+      subscribe: (cb: Listener) => {
+        connectionListeners.add(cb);
+        return () => connectionListeners.delete(cb);
+      },
+    },
+  };
+  const zero = {
+    clientID: `snapshot-client-${clientCount++}`,
+    connection,
+    materialize: vi.fn(() => ({
+      addListener: (cb: Listener) => listeners.add(cb),
+      destroy: () => listeners.clear(),
+      updateTTL() {},
+    })),
+  } as unknown as Zero<Schema>;
+  return {
+    zero,
+    emit: (...args: unknown[]) => {
+      for (const cb of listeners) {
+        cb(...args);
+      }
+    },
+    connectionListenerCount: () => connectionListeners.size,
+    setConnection: (name: string) => {
+      connection.state.current = {name};
+      for (const cb of connectionListeners) {
+        cb(connection.state.current);
+      }
+    },
+  };
+}
+
+function List({query}: {query: Query<string, Schema>}) {
+  const [rows, details] = useQuery(query);
+  return (
+    <ul data-type={details.type}>
+      {(rows as unknown as Row[]).map(r => (
+        <li key={r.id}>{r.id}</li>
+      ))}
+    </ul>
+  );
+}
+
+function SuspenseList({
+  query,
+  onHydrated,
+}: {
+  query: Query<string, Schema>;
+  onHydrated: () => void;
+}) {
+  const [rows] = useSuspenseQuery(query, {suspendUntil: 'complete'});
+  useEffect(onHydrated, [onHydrated]);
+  return (
+    <ul>
+      {(rows as unknown as Row[]).map(r => (
+        <li key={r.id}>{r.id}</li>
+      ))}
+    </ul>
+  );
+}
+
+const rows = [{id: 'a'}, {id: 'b'}];
+
+describe('collecting on the server', () => {
+  function renderCollected(
+    query: Query<string, Schema>,
+    emitted: unknown[] | undefined,
+  ) {
+    const {zero, emit} = newZero();
+    const collector = new QuerySnapshotCollector();
+    const app = (
+      <ZeroProvider zero={zero}>
+        <QuerySnapshotProvider collector={collector}>
+          <List query={query} />
+        </QuerySnapshotProvider>
+      </ZeroProvider>
+    );
+    renderToString(app);
+    if (emitted) {
+      emit(...emitted);
+      renderToString(app);
+    }
+    return collector.toJSON();
+  }
+
+  test('records what was rendered, keyed by query hash', () => {
+    expect(renderCollected(newQuery('q1'), [rows, 'complete'])).toEqual({
+      q1: {data: rows, type: 'complete'},
+    });
+  });
+
+  test('records a result the server has not confirmed as unknown', () => {
+    expect(renderCollected(newQuery('q2'), undefined)).toEqual({
+      q2: {data: [], type: 'unknown'},
+    });
+  });
+
+  test('skips errored queries, whose details hold a retry function', () => {
+    expect(
+      renderCollected(newQuery('q3'), [
+        [],
+        'error',
+        {error: 'app', id: 'q3', name: 'q3', message: 'boom'},
+      ]),
+    ).toEqual({});
+  });
+});
+
+describe('serializeQuerySnapshots', () => {
+  test('cannot close the script tag it is embedded in', () => {
+    const json = serializeQuerySnapshots({
+      q: {data: ['</script><img src=x>\u2028'], type: 'complete'},
+    });
+    expect(json).not.toContain('<');
+    expect(json).not.toContain('\u2028');
+    expect(JSON.parse(json)).toEqual({
+      q: {data: ['</script><img src=x>\u2028'], type: 'complete'},
+    });
+  });
+});
+
+describe('hydrating on the client', () => {
+  let root: Root | undefined;
+
+  afterEach(() => {
+    act(() => root?.unmount());
+    root = undefined;
+    document.body.replaceChildren();
+  });
+
+  function hydrate(ui: ReactNode, html: string) {
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    document.body.append(container);
+    const recoverableErrors: unknown[] = [];
+    act(() => {
+      root = hydrateRoot(container, ui, {
+        onRecoverableError: e => recoverableErrors.push(e),
+      });
+    });
+    return {
+      recoverableErrors,
+      text: () =>
+        Array.from(container.querySelectorAll('li'), li => li.innerHTML),
+    };
+  }
+
+  function hydrateSeeded(hash: string) {
+    const client = newZero();
+    const query = newQuery(hash);
+    const snapshots: QuerySnapshots = {
+      [hash]: {data: rows, type: 'complete'},
+    };
+    const app = (
+      <ZeroProvider zero={client.zero}>
+        <QuerySnapshotProvider snapshots={snapshots}>
+          <List query={query} />
+        </QuerySnapshotProvider>
+      </ZeroProvider>
+    );
+    return {
+      ...client,
+      ...hydrate(app, '<ul data-type="complete"><li>a</li><li>b</li></ul>'),
+    };
+  }
+
+  test('matches the server HTML', () => {
+    const {recoverableErrors, text} = hydrateSeeded('h1');
+    expect(recoverableErrors).toEqual([]);
+    expect(text()).toEqual(['a', 'b']);
+  });
+
+  test('keeps showing the seed over an empty view', () => {
+    const {emit, text} = hydrateSeeded('h2');
+    act(() => emit([], 'unknown'));
+    expect(text()).toEqual(['a', 'b']);
+  });
+
+  test('keeps showing the seed over cached rows, which may be older', () => {
+    const {emit, text} = hydrateSeeded('h3');
+    act(() => emit([{id: 'stale'}], 'cached'));
+    expect(text()).toEqual(['a', 'b']);
+  });
+
+  test('switches to the live view once the server confirms it', () => {
+    const {emit, text} = hydrateSeeded('h4');
+    act(() => emit([{id: 'fresh'}], 'complete'));
+    expect(text()).toEqual(['fresh']);
+    act(() => emit([{id: 'fresh'}, {id: 'optimistic'}], 'unknown'));
+    expect(text()).toEqual(['fresh', 'optimistic']);
+  });
+
+  test('shows a server error rather than holding the seed', () => {
+    const {emit, text} = hydrateSeeded('h5');
+    act(() =>
+      emit([], 'error', {error: 'app', id: 'h5', name: 'h5', message: 'boom'}),
+    );
+    expect(text()).toEqual([]);
+  });
+
+  test.each(['disconnected', 'error', 'needs-auth', 'closed'])(
+    'falls back to local rows when the connection becomes %s',
+    name => {
+      const {emit, setConnection, text} = hydrateSeeded(`h6-${name}`);
+      act(() => emit([{id: 'local'}], 'cached'));
+      expect(text()).toEqual(['a', 'b']);
+      act(() => setConnection(name));
+      expect(text()).toEqual(['local']);
+    },
+  );
+
+  test('stays on the seed through a reconnect attempt', () => {
+    const {emit, setConnection, text} = hydrateSeeded('h7');
+    act(() => emit([], 'unknown'));
+    act(() => setConnection('connected'));
+    expect(text()).toEqual(['a', 'b']);
+  });
+
+  test('useSuspenseQuery hydrates a complete seed without suspending', () => {
+    const {zero} = newZero();
+    const query = newQuery('h8');
+    const onHydrated = vi.fn();
+    const {recoverableErrors, text} = hydrate(
+      <ZeroProvider zero={zero}>
+        <QuerySnapshotProvider snapshots={{h8: {data: rows, type: 'complete'}}}>
+          <Suspense fallback={<i>fallback</i>}>
+            <SuspenseList query={query} onHydrated={onHydrated} />
+          </Suspense>
+        </QuerySnapshotProvider>
+      </ZeroProvider>,
+      '<!--$--><ul><li>a</li><li>b</li></ul><!--/$-->',
+    );
+    expect(recoverableErrors).toEqual([]);
+    expect(text()).toEqual(['a', 'b']);
+    expect(onHydrated).toHaveBeenCalledOnce();
+  });
+
+  test('stops watching the connection when the view is destroyed', async () => {
+    const {connectionListenerCount, text} = hydrateSeeded('h10');
+    expect(text()).toEqual(['a', 'b']);
+    expect(connectionListenerCount()).toBe(1);
+    act(() => root?.unmount());
+    root = undefined;
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(connectionListenerCount()).toBe(0);
+  });
+
+  test('a query with no snapshot starts empty as usual', () => {
+    const {zero} = newZero();
+    const {text} = hydrate(
+      <ZeroProvider zero={zero}>
+        <QuerySnapshotProvider snapshots={{}}>
+          <List query={newQuery('h9')} />
+        </QuerySnapshotProvider>
+      </ZeroProvider>,
+      '<ul data-type="unknown"></ul>',
+    );
+    expect(text()).toEqual([]);
+  });
+});
