@@ -17,6 +17,8 @@ import {
   ReplicationMessages,
   type FakeReplicator,
 } from '../replicator/test-utils.ts';
+import {TrackedRows} from './pipeline-donors-test-util.ts';
+import {PipelineDonors, type DonorResult} from './pipeline-donors.ts';
 import {PipelineDriver, type RowChange, type Timer} from './pipeline-driver.ts';
 import {Snapshotter} from './snapshotter.ts';
 
@@ -199,7 +201,7 @@ describe('pipeline rows do not depend on history', () => {
     dbFile.delete();
   });
 
-  function newDriver() {
+  function newDriver(donors?: PipelineDonors) {
     const id = `group${nextGroup++}`;
     const driver = new PipelineDriver(
       lc,
@@ -210,64 +212,74 @@ describe('pipeline rows do not depend on history', () => {
       id,
       new InspectorDelegate(undefined),
       () => 200,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      donors,
     );
     driver.init(CLIENT_SCHEMA);
     return driver;
   }
 
+  function workload(seed: number) {
+    const random = mulberry32(seed);
+    const pick = (n: number) => Math.floor(random() * n);
+    const issues = new Map<string, number>();
+    const comments = new Map<string, {issueID: string; rank: number}>();
+    let version = 1;
+    let nextID = 0;
+
+    const change = () => {
+      const op = pick(7);
+      const issueIDs = [...issues.keys()];
+      const commentIDs = [...comments.keys()];
+      const anyIssue = issueIDs[pick(issueIDs.length)];
+      const anyComment = commentIDs[pick(commentIDs.length)];
+      if (op === 0 || issueIDs.length === 0) {
+        const id = `i${nextID++}`;
+        const rank = pick(20);
+        issues.set(id, rank);
+        return messages.insert('issues', {id, rank});
+      }
+      if (op === 1 || (op === 2 && issueIDs.length > 0)) {
+        const rank = pick(20);
+        issues.set(anyIssue, rank);
+        return messages.update('issues', {id: anyIssue, rank});
+      }
+      if (op === 3) {
+        issues.delete(anyIssue);
+        return messages.delete('issues', {id: anyIssue});
+      }
+      if (op === 4 || commentIDs.length === 0) {
+        const id = `c${nextID++}`;
+        const row = {issueID: anyIssue, rank: pick(20)};
+        comments.set(id, row);
+        return messages.insert('comments', {id, ...row});
+      }
+      if (op === 5) {
+        const row = {issueID: anyIssue, rank: pick(20)};
+        comments.set(anyComment, row);
+        return messages.update('comments', {id: anyComment, ...row});
+      }
+      comments.delete(anyComment);
+      return messages.delete('comments', {id: anyComment});
+    };
+
+    const commit = (count: number) => {
+      version++;
+      replicator.processTransaction(
+        String(version).padStart(4, '0'),
+        ...(Array.from({length: count}, change) as never[]),
+      );
+    };
+    return {commit, pick, comments};
+  }
+
   describe.each(Object.keys(QUERIES))('%s', name => {
     test.each(Array.from({length: SEEDS}, (_, i) => i + 1))('seed %i', seed => {
       const ast = QUERIES[name];
-      const random = mulberry32(seed);
-      const pick = (n: number) => Math.floor(random() * n);
-      const issues = new Map<string, number>();
-      const comments = new Map<string, {issueID: string; rank: number}>();
-      let version = 1;
-      let nextID = 0;
-
-      const change = () => {
-        const op = pick(7);
-        const issueIDs = [...issues.keys()];
-        const commentIDs = [...comments.keys()];
-        const anyIssue = issueIDs[pick(issueIDs.length)];
-        const anyComment = commentIDs[pick(commentIDs.length)];
-        if (op === 0 || issueIDs.length === 0) {
-          const id = `i${nextID++}`;
-          const rank = pick(20);
-          issues.set(id, rank);
-          return messages.insert('issues', {id, rank});
-        }
-        if (op === 1 || (op === 2 && issueIDs.length > 0)) {
-          const rank = pick(20);
-          issues.set(anyIssue, rank);
-          return messages.update('issues', {id: anyIssue, rank});
-        }
-        if (op === 3) {
-          issues.delete(anyIssue);
-          return messages.delete('issues', {id: anyIssue});
-        }
-        if (op === 4 || commentIDs.length === 0) {
-          const id = `c${nextID++}`;
-          const row = {issueID: anyIssue, rank: pick(20)};
-          comments.set(id, row);
-          return messages.insert('comments', {id, ...row});
-        }
-        if (op === 5) {
-          const row = {issueID: anyIssue, rank: pick(20)};
-          comments.set(anyComment, row);
-          return messages.update('comments', {id: anyComment, ...row});
-        }
-        comments.delete(anyComment);
-        return messages.delete('comments', {id: anyComment});
-      };
-
-      const commit = (count: number) => {
-        version++;
-        replicator.processTransaction(
-          String(version).padStart(4, '0'),
-          ...(Array.from({length: count}, change) as never[]),
-        );
-      };
+      const {commit, pick, comments} = workload(seed);
 
       commit(12);
       const longLived = newDriver();
@@ -321,6 +333,55 @@ describe('pipeline rows do not depend on history', () => {
         }
       } finally {
         longLived.destroy();
+      }
+    });
+  });
+
+  describe.each(Object.keys(QUERIES))('copying %s', name => {
+    test.each(Array.from({length: SEEDS}, (_, i) => i + 1))('seed %i', seed => {
+      const ast = QUERIES[name];
+      const {commit, pick} = workload(seed);
+      const results: DonorResult[] = [];
+      const clones = new PipelineDonors({
+        lc,
+        copy: true,
+        onResult: r => results.push(r),
+      });
+
+      commit(12);
+      const donor = newDriver(clones);
+      const donorRows = new TrackedRows();
+      donor.setDonorRows(() => donorRows.rows());
+      const delivered = new Delivered();
+      delivered.apply(donorRows.apply(donor.addQuery('h', 'q', ast, timer)));
+      for (let step = 0, n = pick(10); step < n; step++) {
+        commit(1 + pick(3));
+        delivered.apply(donorRows.apply(donor.advance(timer).changes));
+      }
+
+      const clone = newDriver(clones);
+      const copied = new Delivered();
+      copied.apply(clone.addQuery('h', 'q', ast, timer));
+      expect(results.at(-1)?.outcome).toBe('copied');
+      expect(copied.snapshot()).toEqual(delivered.snapshot());
+      expect(clone.rowSetSignature('q')).toBe(donor.rowSetSignature('q'));
+
+      try {
+        for (let step = 0; step < STEPS; step++) {
+          commit(1 + pick(3));
+          delivered.apply(donor.advance(timer).changes);
+          copied.apply(clone.advance(timer).changes);
+
+          expect(copied.snapshot(), `rows at step ${step}`).toEqual(
+            delivered.snapshot(),
+          );
+          expect(clone.rowSetSignature('q'), `signature at step ${step}`).toBe(
+            donor.rowSetSignature('q'),
+          );
+        }
+      } finally {
+        donor.destroy();
+        clone.destroy();
       }
     });
   });

@@ -179,6 +179,9 @@ export interface BuilderDelegate {
    */
   createStorage(name: string): Storage;
 
+  /** Called with each join's parent index, in build order. */
+  onJoinIndex?: ((index: JoinIndex) => void) | undefined;
+
   decorateInput(input: Input, name: string): Input;
 
   addEdge(source: InputBase, dest: InputBase): void;
@@ -868,6 +871,7 @@ function applyFilterWithFlips(
         boundProvider,
         parentIndex,
       });
+      delegate.onJoinIndex?.(flippedJoin.parentIndex);
       delegate.addEdge(end, flippedJoin);
       delegate.addEdge(child, flippedJoin);
       end = delegate.decorateInput(flippedJoin, flippedJoinName);
@@ -1236,6 +1240,7 @@ function applyCorrelatedSubQuery(
     boundProvider,
     exists,
   });
+  delegate.onJoinIndex?.(join.parentIndex);
   delegate.addEdge(end, join);
   delegate.addEdge(childInput, join);
   return delegate.decorateInput(join, joinName);

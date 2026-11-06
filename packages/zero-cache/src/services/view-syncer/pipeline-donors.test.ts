@@ -2,6 +2,7 @@ import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import type {JSONValue} from '../../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../../shared/src/must.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import {
@@ -17,11 +18,12 @@ import {
   ReplicationMessages,
   type FakeReplicator,
 } from '../replicator/test-utils.ts';
+import {TrackedRows} from './pipeline-donors-test-util.ts';
 import {
-  CloneShadow,
-  type CloneShadowResult,
+  PipelineDonors,
+  type DonorResult,
   type PipelineStateSource,
-} from './clone-shadow.ts';
+} from './pipeline-donors.ts';
 import {PipelineDriver, type Timer} from './pipeline-driver.ts';
 import {Snapshotter} from './snapshotter.ts';
 
@@ -76,10 +78,11 @@ describe('clone shadow', () => {
   let replica: Database;
   let replicator: FakeReplicator;
   let storage: DatabaseStorage;
-  let shadow: CloneShadow;
+  let shadow: PipelineDonors;
   let nextGroup: number;
   let version: number;
-  const results: CloneShadowResult[] = [];
+  const results: DonorResult[] = [];
+  const trackedRows = new Map<PipelineDriver, TrackedRows>();
 
   beforeEach(() => {
     dbFile = new DbFile('clone_shadow');
@@ -111,7 +114,7 @@ describe('clone shadow', () => {
   });
 
   function newShadow(maxStateEntries?: number) {
-    return new CloneShadow({
+    return new PipelineDonors({
       lc,
       maxStateEntries,
       onResult: r => results.push(r),
@@ -120,7 +123,7 @@ describe('clone shadow', () => {
 
   function newDriver(
     clientSchema = CLIENT_SCHEMA,
-    cloneShadow: CloneShadow | null = shadow,
+    donors: PipelineDonors | null = shadow,
   ) {
     const id = `group${nextGroup++}`;
     const driver = new PipelineDriver(
@@ -136,14 +139,19 @@ describe('clone shadow', () => {
       undefined,
       undefined,
       undefined,
-      cloneShadow ?? undefined,
+      donors ?? undefined,
     );
     driver.init(clientSchema);
+    const tracked = new TrackedRows();
+    trackedRows.set(driver, tracked);
+    driver.setDonorRows(() => tracked.rows());
     return driver;
   }
 
   function hydrate(driver: PipelineDriver, hash: string, ast: AST) {
-    return [...driver.addQuery(hash, `q-${hash}`, ast, timer)];
+    return must(trackedRows.get(driver)).apply(
+      driver.addQuery(hash, `q-${hash}`, ast, timer),
+    );
   }
 
   function hydrated(driver: PipelineDriver, hash: string, ast: AST) {
@@ -160,7 +168,7 @@ describe('clone shadow', () => {
   }
 
   function advance(driver: PipelineDriver) {
-    return [...driver.advance(timer).changes];
+    return must(trackedRows.get(driver)).apply(driver.advance(timer).changes);
   }
 
   test('reports no donor for the first group to hydrate a query', () => {
@@ -291,6 +299,128 @@ describe('clone shadow', () => {
       advance(fresh);
       expect(donor.rowSetSignature('q-a')).toBe(fresh.rowSetSignature('q-a'));
     }
+  });
+
+  describe('copying', () => {
+    function copying() {
+      return new PipelineDonors({
+        lc,
+        copy: true,
+        onResult: r => results.push(r),
+      });
+    }
+
+    test('copies a query from a donor without reading its rows again', () => {
+      shadow = copying();
+      const donor = newDriver();
+      const donorRows = hydrate(donor, 'a', WITH_COMMENTS);
+      const clone = newDriver();
+      const cloneRows = hydrate(clone, 'a', WITH_COMMENTS);
+      expect(results.at(-1)?.outcome).toBe('copied');
+      const rowsOf = (changes: typeof donorRows) =>
+        changes
+          .filter(c => c !== 'yield')
+          .map(c => JSON.stringify([c.table, c.rowKey, c.row]))
+          .sort();
+      expect(rowsOf(cloneRows)).toEqual(rowsOf(donorRows));
+      expect(clone.hydrationStats('q-a')?.rowsRead).toBeLessThan(
+        donor.hydrationStats('q-a')?.rowsRead ?? 0,
+      );
+    });
+
+    test('a copy can donate in turn', () => {
+      shadow = copying();
+      const first = newDriver();
+      hydrate(first, 'a', TOP_2);
+      const second = newDriver();
+      hydrate(second, 'a', TOP_2);
+      first.destroy();
+      hydrate(newDriver(), 'a', TOP_2);
+      expect(results.at(-1)?.outcome).toBe('copied');
+    });
+
+    test('a copy outlives its donor', () => {
+      shadow = copying();
+      const first = newDriver();
+      hydrate(first, 'a', ALL);
+      const clone = newDriver();
+      hydrate(clone, 'a', ALL);
+      first.destroy();
+      commit(messages.insert('issues', {id: '5', rank: 50}));
+      expect(advance(clone).filter(c => c !== 'yield')).toHaveLength(1);
+    });
+
+    test('hydrates normally at another version', () => {
+      shadow = copying();
+      hydrate(newDriver(), 'a', ALL);
+      commit(messages.insert('issues', {id: '5', rank: 50}));
+      const rows = hydrate(newDriver(), 'a', ALL);
+      expect(results.at(-1)?.outcome).toBe('version-mismatch');
+      expect(rows.filter(c => c !== 'yield')).toHaveLength(5);
+    });
+
+    test('hydrates normally while the donor is advancing', () => {
+      shadow = copying();
+      const donor = newDriver();
+      hydrate(donor, 'a', ALL);
+      commit(messages.insert('issues', {id: '5', rank: 50}));
+      const changes = donor.advance(timer).changes[Symbol.iterator]();
+      changes.next();
+      hydrate(newDriver(), 'a', ALL);
+      expect(results.at(-1)?.outcome).toBe('donor-busy');
+      while (!changes.next().done) {
+        // Finishes the advance.
+      }
+    });
+
+    test('does not copy a query with an aggregate', () => {
+      shadow = copying();
+      const count = {...ALL, aggregate: {fn: 'count'}} as unknown as AST;
+      hydrate(newDriver(), 'a', count);
+      hydrate(newDriver(), 'a', count);
+      expect(results.at(-1)?.outcome).not.toBe('copied');
+    });
+
+    test('hydrates normally when the donor cannot provide its rows', () => {
+      shadow = copying();
+      const donor = newDriver();
+      hydrate(donor, 'a', ALL);
+      donor.setDonorRows(() => undefined);
+      const rows = hydrate(newDriver(), 'a', ALL);
+      expect(results.at(-1)?.outcome).not.toBe('copied');
+      expect(rows.filter(c => c !== 'yield')).toHaveLength(4);
+    });
+
+    test('hydrates normally when the rows do not match the pipeline', () => {
+      shadow = copying();
+      const donor = newDriver();
+      hydrate(donor, 'a', ALL);
+      donor.setDonorRows(() => [
+        {table: 'issues', rowKey: {id: '1'}, count: 1},
+      ]);
+      const rows = hydrate(newDriver(), 'a', ALL);
+      expect(results.at(-1)?.outcome).not.toBe('copied');
+      expect(rows.filter(c => c !== 'yield')).toHaveLength(4);
+    });
+
+    test('asks a donor for its rows as soon as it can donate', () => {
+      shadow = copying();
+      const donor = newDriver();
+      const asked: string[] = [];
+      donor.setDonorRows(queryID => {
+        asked.push(queryID);
+        return undefined;
+      });
+      hydrate(donor, 'a', ALL);
+      expect(asked).toEqual(['q-a']);
+    });
+
+    test('the first group hydrates normally', () => {
+      shadow = copying();
+      const rows = hydrate(newDriver(), 'a', ALL);
+      expect(results.at(-1)?.outcome).toBe('no-donor');
+      expect(rows.filter(c => c !== 'yield')).toHaveLength(4);
+    });
   });
 
   test('does nothing without a shadow', () => {
