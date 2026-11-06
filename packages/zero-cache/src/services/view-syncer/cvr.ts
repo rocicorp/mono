@@ -83,8 +83,8 @@ export type CVRSnapshot = {
   readonly pinnedUser: PinnedUser | null;
 };
 
-const CLIENT_LMID_QUERY_ID = 'lmids';
-const CLIENT_MUTATION_RESULTS_QUERY_ID = 'mutationResults';
+export const CLIENT_LMID_QUERY_ID = 'lmids';
+export const CLIENT_MUTATION_RESULTS_QUERY_ID = 'mutationResults';
 
 function assertNotInternal(
   query: QueryRecord,

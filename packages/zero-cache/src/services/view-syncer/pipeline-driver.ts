@@ -93,6 +93,12 @@ import {
   ZERO_VERSION_COLUMN_NAME,
 } from '../replicator/schema/replication-state.ts';
 import {checkClientSchema} from './client-schema.ts';
+import {
+  clientSchemaKey,
+  type CloneShadow,
+  type PipelineStateSource,
+} from './clone-shadow.ts';
+import {CLIENT_LMID_QUERY_ID, CLIENT_MUTATION_RESULTS_QUERY_ID} from './cvr.ts';
 import type {DeferredWritesBudget} from './deferred-writes-budget.ts';
 import {planWarningMessage} from './plan-warnings.ts';
 import {
@@ -136,6 +142,8 @@ type CompanionPipeline = {
 
 type Pipeline = {
   readonly input: Input;
+  /** Set once the pipeline is offered as a donor to the clone shadow. */
+  stopDonating?: (() => void) | undefined;
   readonly hydrationTimeMs: number;
   readonly hydrationRowCount: number;
   readonly hydrationRowsRead: number;
@@ -548,6 +556,10 @@ export class PipelineDriver {
    */
   readonly #changedRowSetSignatures = new Set<string>();
 
+  readonly #cloneShadow: CloneShadow | undefined;
+  #clientSchemaKey: string | undefined;
+  /** The operator storages created so far by the hydration in progress. */
+  #hydratingOperators: Storage[] | undefined;
   readonly #lc: LogContext;
   readonly #snapshotter: Snapshotter;
   readonly #storage: ClientGroupStorage;
@@ -639,7 +651,9 @@ export class PipelineDriver {
     config?: ZeroConfig,
     deferredWrites?: DeferredWritesBudget,
     queryStats?: QueryStats | undefined,
+    cloneShadow?: CloneShadow | undefined,
   ) {
+    this.#cloneShadow = cloneShadow;
     this.#lc = lc.withContext('clientGroupID', clientGroupLogID(clientGroupID));
     this.#snapshotter = snapshotter;
     this.#storage = storage;
@@ -701,6 +715,7 @@ export class PipelineDriver {
   }
 
   #initAndResetCommon(clientSchema: ClientSchema) {
+    this.#clientSchemaKey = this.#cloneShadow && clientSchemaKey(clientSchema);
     const {db} = this.#snapshotter.current();
     const fullTables = new Map<string, LiteTableSpecWithReplicationStatus>();
     computeZqlSpecs(
@@ -1176,6 +1191,7 @@ export class PipelineDriver {
     this.#hydrateContext = {
       timer,
     };
+    this.#hydratingOperators = this.#cloneShadow ? [] : undefined;
     // Hydration has the driver to itself, so the rows read by all of its
     // tables in the meantime are the rows read by this hydration. Tables
     // added by the hydration start from zero, which this also accounts for.
@@ -1363,6 +1379,7 @@ export class PipelineDriver {
       });
       this.#abandoned.delete(queryID);
       hydrationFinished = true;
+      this.#runCloneShadow(queryID, transformationHash, hydrationTimeMs);
       this.#queryStats?.recordHydration(
         {queryName, shape},
         {
@@ -1436,7 +1453,45 @@ export class PipelineDriver {
         this.#changedRowSetSignatures.delete(queryID);
       }
       this.#hydrateContext = null;
+      this.#hydratingOperators = undefined;
     }
+  }
+
+  /**
+   * Compares the query that just hydrated with what another client group's
+   * pipeline could have provided, then offers it to later groups in turn. A
+   * failure here must not affect the hydration it is only measuring.
+   */
+  #runCloneShadow(
+    queryID: string,
+    transformationHash: string,
+    hydrationTimeMs: number,
+  ) {
+    const shadow = this.#cloneShadow;
+    const pipeline = this.#pipelines.get(queryID);
+    // Internal queries embed the client group, so they could never be shared.
+    if (
+      !shadow ||
+      !pipeline ||
+      queryID === CLIENT_LMID_QUERY_ID ||
+      queryID === CLIENT_MUTATION_RESULTS_QUERY_ID
+    ) {
+      return;
+    }
+    const key = `${this.#clientSchemaKey}/${transformationHash}`;
+    const source: PipelineStateSource = {
+      version: () => this.currentVersion(),
+      busy: () =>
+        this.#advanceContext !== null || this.#costBasedAdvanceIncomplete,
+      rowSetSignature: () => this.#rowSetSignatures.get(queryID),
+      operators: must(this.#hydratingOperators),
+    };
+    try {
+      shadow.compare(key, source, hydrationTimeMs);
+    } catch (e) {
+      this.#lc.warn?.('clone shadow comparison failed', e);
+    }
+    pipeline.stopDonating = shadow.register(key, source);
   }
 
   /**
@@ -1519,6 +1574,7 @@ export class PipelineDriver {
         level: 'debug',
       }),
     });
+    pipeline.stopDonating?.();
     pipeline.input.destroy();
     for (const companion of pipeline.companions) {
       companion.input.destroy();
@@ -2722,7 +2778,9 @@ export class PipelineDriver {
 
   /** Implements `BuilderDelegate.createStorage()` */
   #createStorage(): Storage {
-    return this.#storage.createStorage();
+    const storage = this.#storage.createStorage();
+    this.#hydratingOperators?.push(storage);
+    return storage;
   }
 
   *#push(
