@@ -253,7 +253,7 @@ export function useQuery<
     // A server render is all a crawler sees, so it can't show a loading state
     // that fills in later, or rows the server has yet to confirm.
     if (view && !view.complete) {
-      suspend(view.waitForComplete());
+      suspend(view.waitForServerRender());
     }
     collector.record(asQueryInternals(q).hash(), snapshot[0], snapshot[1]);
   }
@@ -344,7 +344,11 @@ export function useSuspenseQuery<
 
   if (view && enabled) {
     // Collecting always waits for 'complete', for the reason given in useQuery.
-    if ((suspendUntil === 'complete' || collector) && !view.complete) {
+    if (collector && !view.complete) {
+      suspend(view.waitForServerRender());
+    }
+
+    if (suspendUntil === 'complete' && !view.complete) {
       suspend(view.waitForComplete());
     }
 
@@ -483,8 +487,8 @@ function makeError(retry: () => void, error: ErroredQuery): QueryErrorDetails {
  */
 export const RENDER_LEASE_MS = 10_000;
 
-/** Whether a seeded view can still expect the server to confirm its query. */
-function canStillConfirmSeed({name}: ConnectionState): boolean {
+/** Whether a view can still expect the server to confirm its query. */
+function canStillConfirm({name}: ConnectionState): boolean {
   return (
     name === 'initializing' || name === 'connecting' || name === 'connected'
   );
@@ -596,6 +600,7 @@ export class ViewStore {
     updateTTL: (ttl: TTL) => void;
     renewLease: () => void;
     waitForComplete: () => Promise<void>;
+    waitForServerRender: () => Promise<void>;
     waitForNonEmpty: () => Promise<void>;
     complete: boolean;
     nonEmpty: boolean;
@@ -610,6 +615,7 @@ export class ViewStore {
         updateTTL: () => {},
         renewLease: () => {},
         waitForComplete: () => Promise.resolve(),
+        waitForServerRender: () => Promise.resolve(),
         waitForNonEmpty: () => Promise.resolve(),
         complete: false,
         nonEmpty: false,
@@ -715,6 +721,7 @@ class ViewWrapper<
   #holdingSeed = false;
   #connectionLost = false;
   #stopWatchingConnection: (() => void) | undefined;
+  #serverRenderWait: Promise<void> | undefined;
   readonly #singular: boolean;
   // A top-level aggregate reads its empty value (0 or null) until the server's
   // result arrives, so its value never says there is something to render.
@@ -780,9 +787,9 @@ class ViewWrapper<
 
     const {state} = this.#zero.connection;
     this.#holdingSeed = true;
-    this.#connectionLost = !canStillConfirmSeed(state.current);
+    this.#connectionLost = !canStillConfirm(state.current);
     this.#stopWatchingConnection = state.subscribe(current => {
-      this.#connectionLost = !canStillConfirmSeed(current);
+      this.#connectionLost = !canStillConfirm(current);
       const held = this.#heldResult;
       if (held && this.#canReplaceSeed(held[1])) {
         this.#stopHoldingSeed();
@@ -1011,6 +1018,44 @@ class ViewWrapper<
   waitForComplete(): Promise<void> {
     this.#awaitedForComplete = true;
     return this.#completeResolver.promise;
+  }
+
+  /**
+   * Like {@link waitForComplete}, but rejects once the connection can no longer
+   * answer. A failed render lets the server respond with an error at once,
+   * where waiting would only end when the caller gives up on the render.
+   */
+  waitForServerRender(): Promise<void> {
+    if (this.#serverRenderWait) {
+      return this.#serverRenderWait;
+    }
+    this.#awaitedForComplete = true;
+    const {state} = this.#zero.connection;
+    const {promise, resolve, reject} = resolver<void>();
+    this.#serverRenderWait = promise;
+    // React may never read this promise if the render is aborted first.
+    void promise.catch(() => {});
+
+    const settle = (settleWith: () => void) => {
+      stopWatching();
+      this.#serverRenderWait = undefined;
+      settleWith();
+    };
+    const failIfLost = (current: ConnectionState) => {
+      if (!canStillConfirm(current)) {
+        settle(() =>
+          reject(
+            new Error(
+              `Cannot render query on the server: connection is ${current.name}`,
+            ),
+          ),
+        );
+      }
+    };
+    const stopWatching = state.subscribe(failIfLost);
+    void this.#completeResolver.promise.then(() => settle(resolve));
+    failIfLost(state.current);
+    return promise;
   }
 
   get nonEmpty() {

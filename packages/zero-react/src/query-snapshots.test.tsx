@@ -116,8 +116,9 @@ describe('collecting on the server', () => {
   async function startRender(
     query: Query<string, Schema>,
     Component: typeof List | typeof PartialList = List,
+    client = newZero(),
   ) {
-    const {zero, emit} = newZero();
+    const {zero, emit} = client;
     const collector = new QuerySnapshotCollector();
     const stream = await renderToReadableStream(
       <ZeroProvider zero={zero}>
@@ -183,6 +184,76 @@ describe('collecting on the server', () => {
 
     emit(rows, 'complete');
     expect(await html()).not.toContain('partial');
+  });
+
+  test.each(['needs-auth', 'error', 'disconnected', 'closed'])(
+    'fails the render as soon as the connection becomes %s',
+    async name => {
+      const client = newZero();
+      const {isReady, html} = await startRender(
+        newQuery(`q6-${name}`),
+        List,
+        client,
+      );
+      expect(await isReady()).toBe(false);
+
+      client.setConnection(name);
+      expect(await isReady()).toBe(true);
+      expect(await html()).toContain('<i>fallback</i>');
+    },
+  );
+
+  test('fails the render if the connection is already lost', async () => {
+    const client = newZero();
+    client.setConnection('needs-auth');
+    const {isReady, html} = await startRender(newQuery('q7'), List, client);
+    expect(await isReady()).toBe(true);
+    expect(await html()).toContain('<i>fallback</i>');
+  });
+
+  test('keeps waiting while the connection is only reconnecting', async () => {
+    const client = newZero();
+    const {emit, isReady, html} = await startRender(
+      newQuery('q8'),
+      List,
+      client,
+    );
+    client.setConnection('connecting');
+    expect(await isReady()).toBe(false);
+    client.setConnection('connected');
+    expect(await isReady()).toBe(false);
+
+    emit(rows, 'complete');
+    expect(await html()).toContain('<li>a</li>');
+  });
+
+  test('a render after the connection recovers waits for the server again', async () => {
+    const client = newZero();
+    const failed = await startRender(newQuery('q9'), List, client);
+    client.setConnection('needs-auth');
+    await failed.html();
+
+    client.setConnection('connected');
+    const {emit, isReady, html} = await startRender(
+      newQuery('q9'),
+      List,
+      client,
+    );
+    expect(await isReady()).toBe(false);
+
+    emit(rows, 'complete');
+    expect(await html()).toContain('<li>a</li>');
+  });
+
+  test('a live view still renders while the connection is lost', async () => {
+    const client = newZero();
+    const first = await startRender(newQuery('q10'), List, client);
+    client.emit(rows, 'complete');
+    await first.html();
+
+    client.setConnection('needs-auth');
+    const second = await startRender(newQuery('q10'), List, client);
+    expect(await second.html()).toContain('<li>a</li>');
   });
 
   test('skips errored queries, whose details hold a retry function', async () => {
