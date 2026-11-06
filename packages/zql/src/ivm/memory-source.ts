@@ -1,8 +1,12 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {BTreeSet} from '../../../shared/src/btree-set.ts';
 import {hasOwn} from '../../../shared/src/has-own.ts';
-import {once, toSorted} from '../../../shared/src/iterables.ts';
+import {once} from '../../../shared/src/iterables.ts';
 import {must} from '../../../shared/src/must.ts';
+import {
+  nativeSortIsAdaptive,
+  sortByNaturalRuns,
+} from '../../../shared/src/natural-runs.ts';
 import {assignProperty} from '../../../shared/src/objects.ts';
 import type {
   Condition,
@@ -251,10 +255,29 @@ export class MemorySource implements Source {
     // a different library.)
     // 3. We could even theoretically do (2) on multiple threads and then merge the
     // results!
-    const rows =
-      this.#sortedByLeadingNumberColumn(sort) ??
-      toSorted(this.#getPrimaryIndex().data, comparator);
-    const data = BTreeSet.fromSorted(comparator, rows);
+    // Three ways to get the rows into the new index's order, cheapest first.
+    //
+    // Natural-run merging leads where it can win at all -- which is only where
+    // the engine's own sort is not adaptive, since on V8 it already walks
+    // ordered input in one pass and a JS pass over the same rows is strictly
+    // worse. It is the only one of the three that can be O(N),
+    // and because it hits more often than it looks: rows arrive here in
+    // primary-key order, and a secondary sort key is usually a timestamp or
+    // sequence number that moves with insertion order, so the input is often
+    // already sorted, exactly reversed, or a few ordered batches. It declines
+    // cheaply -- bounded by `maxRuns` comparisons -- and leaves `rows`
+    // untouched when it does.
+    //
+    // The numeric path is next: it cannot reach O(N), but it beats a general
+    // comparator sort on the shape it covers. The plain sort is the floor.
+    const rows = [...this.#getPrimaryIndex().data];
+    const sorted =
+      (nativeSortIsAdaptive()
+        ? undefined
+        : sortByNaturalRuns(rows, comparator)) ??
+      this.#sortedByLeadingNumberColumn(sort, rows) ??
+      rows.sort(comparator);
+    const data = BTreeSet.fromSorted(comparator, sorted);
 
     const newIndex = {comparator, data};
     this.#indexes.set(key, newIndex);
@@ -285,7 +308,10 @@ export class MemorySource implements Source {
    * when the shape does not apply, and the caller falls back to the general
    * sort.
    */
-  #sortedByLeadingNumberColumn(sort: Ordering): Row[] | undefined {
+  #sortedByLeadingNumberColumn(
+    sort: Ordering,
+    rows: readonly Row[],
+  ): Row[] | undefined {
     const pk = this.#primaryIndexSort;
     // One leading column, then exactly the primary key ascending.
     if (sort.length !== pk.length + 1) {
@@ -304,7 +330,6 @@ export class MemorySource implements Source {
       return undefined;
     }
 
-    const rows = [...this.#getPrimaryIndex().data];
     const n = rows.length;
     // Pre-sized deliberately: these are filled by index immediately below, and
     // `Array.from({length: n})` would allocate and then fill them twice.
