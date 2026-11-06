@@ -252,8 +252,8 @@ export function useQuery<
   if (collector && q && enabled) {
     // A server render is all a crawler sees, so it can't show a loading state
     // that fills in later, or rows the server has yet to confirm.
-    if (view && !view.complete) {
-      suspend(view.waitForServerRender());
+    if (view && !view.isReadyForServerRender(collector.whenDisconnected)) {
+      suspend(view.waitForServerRender(collector.whenDisconnected));
     }
     collector.record(asQueryInternals(q).hash(), snapshot[0], snapshot[1]);
   }
@@ -344,8 +344,8 @@ export function useSuspenseQuery<
 
   if (view && enabled) {
     // Collecting always waits for 'complete', for the reason given in useQuery.
-    if (collector && !view.complete) {
-      suspend(view.waitForServerRender());
+    if (collector && !view.isReadyForServerRender(collector.whenDisconnected)) {
+      suspend(view.waitForServerRender(collector.whenDisconnected));
     }
 
     if (suspendUntil === 'complete' && !view.complete) {
@@ -600,7 +600,8 @@ export class ViewStore {
     updateTTL: (ttl: TTL) => void;
     renewLease: () => void;
     waitForComplete: () => Promise<void>;
-    waitForServerRender: () => Promise<void>;
+    isReadyForServerRender: (whenDisconnected: 'fail' | 'serve') => boolean;
+    waitForServerRender: (whenDisconnected: 'fail' | 'serve') => Promise<void>;
     waitForNonEmpty: () => Promise<void>;
     complete: boolean;
     nonEmpty: boolean;
@@ -615,6 +616,7 @@ export class ViewStore {
         updateTTL: () => {},
         renewLease: () => {},
         waitForComplete: () => Promise.resolve(),
+        isReadyForServerRender: () => true,
         waitForServerRender: () => Promise.resolve(),
         waitForNonEmpty: () => Promise.resolve(),
         complete: false,
@@ -721,7 +723,7 @@ class ViewWrapper<
   #holdingSeed = false;
   #connectionLost = false;
   #stopWatchingConnection: (() => void) | undefined;
-  #serverRenderWait: Promise<void> | undefined;
+  readonly #serverRenderWaits = new Map<'fail' | 'serve', Promise<void>>();
   readonly #singular: boolean;
   // A top-level aggregate reads its empty value (0 or null) until the server's
   // result arrives, so its value never says there is something to render.
@@ -1020,41 +1022,60 @@ class ViewWrapper<
     return this.#completeResolver.promise;
   }
 
+  isReadyForServerRender(whenDisconnected: 'fail' | 'serve'): boolean {
+    return (
+      this.#complete &&
+      (whenDisconnected === 'serve' ||
+        this.#zero.connection.state.current.name === 'connected')
+    );
+  }
+
   /**
-   * Like {@link waitForComplete}, but rejects once the connection can no longer
-   * answer. A failed render lets the server respond with an error at once,
-   * where waiting would only end when the caller gives up on the render.
+   * Waits until {@link isReadyForServerRender}, but rejects once the connection
+   * can no longer get it there. A failed render lets the server respond with an
+   * error at once, where waiting would only end when the caller gives up.
+   *
+   * The promise is kept per option because React needs the same one on each
+   * retry, and renders with different options can share this view.
    */
-  waitForServerRender(): Promise<void> {
-    if (this.#serverRenderWait) {
-      return this.#serverRenderWait;
+  waitForServerRender(whenDisconnected: 'fail' | 'serve'): Promise<void> {
+    const existing = this.#serverRenderWaits.get(whenDisconnected);
+    if (existing) {
+      return existing;
     }
     this.#awaitedForComplete = true;
     const {state} = this.#zero.connection;
     const {promise, resolve, reject} = resolver<void>();
-    this.#serverRenderWait = promise;
+    this.#serverRenderWaits.set(whenDisconnected, promise);
     // React may never read this promise if the render is aborted first.
     void promise.catch(() => {});
 
+    let settled = false;
     const settle = (settleWith: () => void) => {
+      settled = true;
       stopWatching();
-      this.#serverRenderWait = undefined;
+      this.#serverRenderWaits.delete(whenDisconnected);
       settleWith();
     };
-    const failIfLost = (current: ConnectionState) => {
-      if (!canStillConfirm(current)) {
+    const check = () => {
+      if (settled) {
+        return;
+      }
+      if (this.isReadyForServerRender(whenDisconnected)) {
+        settle(resolve);
+      } else if (!canStillConfirm(state.current)) {
         settle(() =>
           reject(
             new Error(
-              `Cannot render query on the server: connection is ${current.name}`,
+              `Cannot render query on the server: connection is ${state.current.name}`,
             ),
           ),
         );
       }
     };
-    const stopWatching = state.subscribe(failIfLost);
-    void this.#completeResolver.promise.then(() => settle(resolve));
-    failIfLost(state.current);
+    const stopWatching = state.subscribe(check);
+    void this.#completeResolver.promise.then(check);
+    check();
     return promise;
   }
 

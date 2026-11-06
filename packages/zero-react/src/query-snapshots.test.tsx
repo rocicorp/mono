@@ -7,6 +7,7 @@ import {
   QuerySnapshotCollector,
   QuerySnapshotProvider,
   serializeQuerySnapshots,
+  type QuerySnapshotCollectorOptions,
   type QuerySnapshots,
 } from './query-snapshots.tsx';
 import {useQuery, useSuspenseQuery} from './use-query.tsx';
@@ -32,7 +33,7 @@ function newZero() {
   const connectionListeners = new Set<Listener>();
   const connection = {
     state: {
-      current: {name: 'connecting'} as {name: string},
+      current: {name: 'connected'} as {name: string},
       subscribe: (cb: Listener) => {
         connectionListeners.add(cb);
         return () => connectionListeners.delete(cb);
@@ -117,9 +118,10 @@ describe('collecting on the server', () => {
     query: Query<string, Schema>,
     Component: typeof List | typeof PartialList = List,
     client = newZero(),
+    options?: QuerySnapshotCollectorOptions,
   ) {
     const {zero, emit} = client;
-    const collector = new QuerySnapshotCollector();
+    const collector = new QuerySnapshotCollector(options);
     const stream = await renderToReadableStream(
       <ZeroProvider zero={zero}>
         <QuerySnapshotProvider collector={collector}>
@@ -245,15 +247,86 @@ describe('collecting on the server', () => {
     expect(await html()).toContain('<li>a</li>');
   });
 
-  test('a live view still renders while the connection is lost', async () => {
-    const client = newZero();
-    const first = await startRender(newQuery('q10'), List, client);
-    client.emit(rows, 'complete');
-    await first.html();
+  describe('a live view when the connection is lost', () => {
+    async function liveView(hash: string) {
+      const client = newZero();
+      const first = await startRender(newQuery(hash), List, client);
+      client.emit(rows, 'complete');
+      await first.html();
+      return client;
+    }
 
-    client.setConnection('needs-auth');
-    const second = await startRender(newQuery('q10'), List, client);
-    expect(await second.html()).toContain('<li>a</li>');
+    test.each(['needs-auth', 'error', 'disconnected', 'closed'])(
+      'fails the render by default when the connection is %s',
+      async name => {
+        const client = await liveView(`q10-${name}`);
+        client.setConnection(name);
+        const {html} = await startRender(newQuery(`q10-${name}`), List, client);
+        const out = await html();
+        expect(out).toContain('<i>fallback</i>');
+        expect(out).not.toContain('<li>a</li>');
+      },
+    );
+
+    test('waits for a reconnect by default', async () => {
+      const client = await liveView('q11');
+      client.setConnection('connecting');
+      const {isReady, html} = await startRender(newQuery('q11'), List, client);
+      expect(await isReady()).toBe(false);
+
+      client.setConnection('connected');
+      expect(await isReady()).toBe(true);
+      expect(await html()).toContain('<li>a</li>');
+    });
+
+    test('fails if a reconnect ends with the connection lost', async () => {
+      const client = await liveView('q12');
+      client.setConnection('connecting');
+      const {isReady, html} = await startRender(newQuery('q12'), List, client);
+      expect(await isReady()).toBe(false);
+
+      client.setConnection('needs-auth');
+      expect(await isReady()).toBe(true);
+      expect(await html()).toContain('<i>fallback</i>');
+    });
+
+    test.each(['needs-auth', 'error', 'disconnected', 'connecting'])(
+      "renders what it holds with 'serve' when the connection is %s",
+      async name => {
+        const client = await liveView(`q13-${name}`);
+        client.setConnection(name);
+        const {html} = await startRender(
+          newQuery(`q13-${name}`),
+          List,
+          client,
+          {whenDisconnected: 'serve'},
+        );
+        expect(await html()).toContain('<li>a</li>');
+      },
+    );
+
+    test("'serve' still fails a query with nothing to show", async () => {
+      const client = newZero();
+      client.setConnection('needs-auth');
+      const {html} = await startRender(newQuery('q14'), List, client, {
+        whenDisconnected: 'serve',
+      });
+      expect(await html()).toContain('<i>fallback</i>');
+    });
+
+    test('renders with different options can share a view', async () => {
+      const client = await liveView('q15');
+      client.setConnection('connecting');
+      const failing = await startRender(newQuery('q15'), List, client);
+      const serving = await startRender(newQuery('q15'), List, client, {
+        whenDisconnected: 'serve',
+      });
+      expect(await serving.html()).toContain('<li>a</li>');
+      expect(await failing.isReady()).toBe(false);
+
+      client.setConnection('connected');
+      expect(await failing.html()).toContain('<li>a</li>');
+    });
   });
 
   test('skips errored queries, whose details hold a retry function', async () => {
