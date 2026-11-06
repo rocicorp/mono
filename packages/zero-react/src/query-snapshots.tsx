@@ -13,6 +13,22 @@ export type QuerySnapshot = {
  */
 export type QuerySnapshots = Readonly<Record<string, QuerySnapshot>>;
 
+export type QuerySnapshotCollectorOptions = {
+  /**
+   * What a query that is already live renders while Zero is not connected, when
+   * its rows may be out of date and may include rows the user can no longer see.
+   *
+   * - 'fail': wait while Zero reconnects, and fail the render once the connection
+   *   is lost. This is the default.
+   * - 'serve': render the rows it holds, with no indication that they may be old.
+   *   Only for data that is safe to show after access to it has been revoked.
+   *
+   * A query with no result yet has nothing to serve, so it behaves the same
+   * either way.
+   */
+  whenDisconnected?: 'fail' | 'serve' | undefined;
+};
+
 /**
  * Gathers what `useQuery` and `useSuspenseQuery` show during a server render.
  * Use one per render, and read it after rendering has finished: with streaming,
@@ -29,6 +45,11 @@ export type QuerySnapshots = Readonly<Record<string, QuerySnapshot>>;
  */
 export class QuerySnapshotCollector {
   readonly #snapshots: Record<string, QuerySnapshot> = {};
+  readonly whenDisconnected: 'fail' | 'serve';
+
+  constructor({whenDisconnected = 'fail'}: QuerySnapshotCollectorOptions = {}) {
+    this.whenDisconnected = whenDisconnected;
+  }
 
   record(hash: string, data: unknown, details: QueryResultDetails): void {
     if (details.type === 'error') {
