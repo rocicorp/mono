@@ -43,11 +43,11 @@ test.each([
 
     expect(await current.get('\ue000')).toBe('added');
     expect(await current.get('\u{10000}')).toBe('after');
-    expect(await asyncIterableToArray(current.diff(previous))).toEqual([
+    expect(await current.diff(previous)).toEqual([
       {op: 'add', key: '\ue000', newValue: 'added'},
       {op: 'change', key: '\u{10000}', oldValue: 'before', newValue: 'after'},
     ]);
-    expect(await asyncIterableToArray(previous.diff(current))).toEqual([
+    expect(await previous.diff(current)).toEqual([
       {op: 'del', key: '\ue000', oldValue: 'added'},
       {op: 'change', key: '\u{10000}', oldValue: 'after', newValue: 'before'},
     ]);
@@ -428,5 +428,40 @@ test('visit does not read subtrees before fromKey', async () => {
       expect(await visitedKeys(map, fromKey, prefetch)).toEqual([fromKey]);
     }
     expect(map.poisonReads).toBe(0);
+  });
+});
+
+test('diff reports changes in separate parts of the tree', async () => {
+  await withWrite(new TestStore(), async dagWrite => {
+    const before = await makeVisitTree(makeTree(dagWrite));
+    await before.flush();
+    expect((await before.getNode(before.rootHash)).level).toBeGreaterThan(1);
+
+    // One change at each end and one in the middle, with untouched subtrees
+    // between them, so an internal node has more than one stretch to diff.
+    const after = new BTreeWrite(
+      dagWrite,
+      formatVersion,
+      before.rootHash,
+      2,
+      3,
+      () => 1,
+      0,
+    );
+    await after.put('0000', 'changed');
+    await after.del('0100');
+    await after.put('0199x', 'added');
+    await after.flush();
+
+    expect(await after.diff(before)).toEqual([
+      {op: 'change', key: '0000', oldValue: '0000', newValue: 'changed'},
+      {op: 'del', key: '0100', oldValue: '0100'},
+      {op: 'add', key: '0199x', newValue: 'added'},
+    ]);
+    expect(await before.diff(after)).toEqual([
+      {op: 'change', key: '0000', oldValue: 'changed', newValue: '0000'},
+      {op: 'add', key: '0100', newValue: '0100'},
+      {op: 'del', key: '0199x', oldValue: 'added'},
+    ]);
   });
 });

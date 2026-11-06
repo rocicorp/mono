@@ -185,21 +185,32 @@ export class BTreeRead implements AsyncIterable<Entry<FrozenJSONValue>> {
     return this.entries();
   }
 
-  async *diff(last: BTreeRead): AsyncIterableIterator<InternalDiffOperation> {
+  /**
+   * The operations that turn `last` into this tree, in key order.
+   *
+   * This builds the array itself rather than yielding into one. Every caller
+   * wants all of the diff, and yielding it out of nested async generators
+   * costs more than computing it: each operation crosses a microtask boundary
+   * once per level of the tree, which on a first sync is every row.
+   */
+  async diff(last: BTreeRead): Promise<InternalDiffOperation[]> {
     const [currentNode, lastNode] = await Promise.all([
       this.getNode(this.rootHash),
       last.getNode(last.rootHash),
     ]);
-    yield* diffNodes(lastNode, currentNode, last, this);
+    const diff: InternalDiffOperation[] = [];
+    await diffNodes(lastNode, currentNode, last, this, diff);
+    return diff;
   }
 }
 
-async function* diffNodes(
+async function diffNodes(
   last: InternalNodeImpl | DataNodeImpl,
   current: InternalNodeImpl | DataNodeImpl,
   lastTree: BTreeRead,
   currentTree: BTreeRead,
-): AsyncIterableIterator<InternalDiffOperation> {
+  diff: InternalDiffOperation[],
+): Promise<void> {
   if (last.level > current.level) {
     // merge all of last's children into a new node
     // We know last is an internal node because level > 0.
@@ -208,7 +219,7 @@ async function* diffNodes(
       last.entries.length,
       lastTree,
     )) as InternalNodeImpl;
-    yield* diffNodes(lastChild, current, lastTree, currentTree);
+    await diffNodes(lastChild, current, lastTree, currentTree, diff);
     return;
   }
 
@@ -221,14 +232,15 @@ async function* diffNodes(
       current.entries.length,
       currentTree,
     )) as InternalNodeImpl;
-    yield* diffNodes(last, currentChild, lastTree, currentTree);
+    await diffNodes(last, currentChild, lastTree, currentTree, diff);
     return;
   }
 
   if (isDataNodeImpl(last) && isDataNodeImpl(current)) {
-    yield* diffEntries(
+    diffEntries(
       (last as DataNodeImpl).entries,
       (current as DataNodeImpl).entries,
+      diff,
     );
     return;
   }
@@ -253,14 +265,15 @@ async function* diffNodes(
         currentTree,
       ),
     ]);
-    yield* diffNodes(lastChild, currentChild, lastTree, currentTree);
+    await diffNodes(lastChild, currentChild, lastTree, currentTree, diff);
   }
 }
 
-function* diffEntries(
+function diffEntries(
   lastEntries: readonly Entry<FrozenJSONValue>[],
   currentEntries: readonly Entry<FrozenJSONValue>[],
-): IterableIterator<InternalDiffOperation> {
+  diff: InternalDiffOperation[],
+): void {
   const lastLength = lastEntries.length;
   const currentLength = currentEntries.length;
   let i = 0;
@@ -270,44 +283,44 @@ function* diffEntries(
     const currentKey = currentEntries[j][0];
     if (lastKey === currentKey) {
       if (!deepEqual(lastEntries[i][1], currentEntries[j][1])) {
-        yield {
+        diff.push({
           op: 'change',
           key: lastKey,
           oldValue: lastEntries[i][1],
           newValue: currentEntries[j][1],
-        };
+        });
       }
       i++;
       j++;
     } else if (compareUTF8(lastKey, currentKey) < 0) {
-      yield {
+      diff.push({
         op: 'del',
         key: lastKey,
         oldValue: lastEntries[i][1],
-      };
+      });
       i++;
     } else {
-      yield {
+      diff.push({
         op: 'add',
         key: currentKey,
         newValue: currentEntries[j][1],
-      };
+      });
       j++;
     }
   }
   for (; i < lastLength; i++) {
-    yield {
+    diff.push({
       op: 'del',
       key: lastEntries[i][0],
       oldValue: lastEntries[i][1],
-    };
+    });
   }
   for (; j < currentLength; j++) {
-    yield {
+    diff.push({
       op: 'add',
       key: currentEntries[j][0],
       newValue: currentEntries[j][1],
-    };
+    });
   }
 }
 

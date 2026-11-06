@@ -1406,7 +1406,7 @@ describe('btree node', () => {
           );
 
           const actual = [];
-          for await (const diffRes of newTree.diff(oldTree)) {
+          for (const diffRes of await newTree.diff(oldTree)) {
             actual.push(diffRes);
           }
           expect(actual).toEqual(expectedDiff);
@@ -2410,7 +2410,7 @@ describe('BTreeWrite.putMany', () => {
         );
 
         const diffs: unknown[] = [];
-        for await (const diff of tree2.diff(tree1)) {
+        for (const diff of await tree2.diff(tree1)) {
           diffs.push(diff);
         }
 
