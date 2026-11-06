@@ -257,4 +257,86 @@ describe('sortByNaturalRuns', () => {
     expect(got).toBe(input);
     expect(input.map(x => x.k)).toEqual([1, 2, 3]);
   });
+
+  describe('the default run budget', () => {
+    // sqrt(n), floored at 32. Kept as literals here rather than imported, so a
+    // change to the bound has to be restated deliberately.
+
+    /**
+     * `runs` ascending runs over `n` elements -- the shape a secondary index
+     * arrives in when the primary key leads with a different column. Keys
+     * repeat across runs, so ties are common and stability is observable.
+     */
+    function inRuns(n: number, runs: number): Item[] {
+      const per = Math.ceil(n / runs);
+      const keys: number[] = [];
+      for (let r = 0; r < runs; r++) {
+        for (let i = 0; i < per && keys.length < n; i++) {
+          keys.push(i);
+        }
+      }
+      return items(keys);
+    }
+
+    test('inRuns builds the run count it claims', () => {
+      // The other tests here mean nothing if this shape is not what it says.
+      for (const runs of [1, 2, 33, 50]) {
+        const input = inRuns(4096, runs);
+        let got = 1;
+        for (let i = 1; i < input.length; i++) {
+          if (byKey(input[i], input[i - 1]) < 0) {
+            got++;
+          }
+        }
+        expect(got, `runs=${runs}`).toBe(runs);
+      }
+    });
+
+    test('merges 50 runs, which the old fixed bound of 32 declined', () => {
+      const input = inRuns(4096, 50); // budget: sqrt(4096) === 64
+      const got = sortByNaturalRuns(input.slice(), byKey);
+      expect(got).not.toBeUndefined();
+      expect(got).toEqual(reference(input));
+      expect(sortByNaturalRuns(input.slice(), byKey, 32)).toBeUndefined();
+    });
+
+    test('scales with length: the same run count declines when shorter', () => {
+      // 40 runs is inside sqrt(4096) === 64 and outside sqrt(900) === 30,
+      // where the floor of 32 governs.
+      expect(sortByNaturalRuns(inRuns(4096, 40), byKey)).not.toBeUndefined();
+      expect(sortByNaturalRuns(inRuns(900, 40), byKey)).toBeUndefined();
+    });
+
+    test('nothing under 1024 elements changes', () => {
+      // The floor governs below 1,024, so 32 runs merge and 33 do not.
+      expect(sortByNaturalRuns(inRuns(1000, 32), byKey)).not.toBeUndefined();
+      expect(sortByNaturalRuns(inRuns(1000, 33), byKey)).toBeUndefined();
+    });
+
+    test('admits exactly as many runs as the budget', () => {
+      // sqrt(60000) is 244.9, so the budget is 244.
+      expect(sortByNaturalRuns(inRuns(60_000, 244), byKey)).not.toBeUndefined();
+      expect(sortByNaturalRuns(inRuns(60_000, 245), byKey)).toBeUndefined();
+    });
+
+    test('merges stably at every run count the budget admits', () => {
+      for (const runs of [1, 2, 31, 32, 33, 64, 100, 244]) {
+        const input = inRuns(60_000, runs);
+        const got = sortByNaturalRuns(input.slice(), byKey);
+        expect(got, `runs=${runs}`).not.toBeUndefined();
+        expect(got, `runs=${runs}`).toEqual(reference(input));
+      }
+    });
+
+    test('still declines shuffled input, and leaves it untouched', () => {
+      const rand = lcg(99);
+      const keys = Array.from({length: 20_000}, () =>
+        Math.floor(rand() * 1_000_000),
+      );
+      const input = items(keys);
+      const before = input.slice();
+      expect(sortByNaturalRuns(input, byKey)).toBeUndefined();
+      expect(input).toEqual(before);
+    });
+  });
 });

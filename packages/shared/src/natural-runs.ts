@@ -41,6 +41,77 @@
  * have done -- which keeps V8's galloping and costs Hermes nothing it was not
  * already paying.
  *
+ * ## Where the bound sits, and why it scales
+ *
+ * Merging R runs costs about `n * log2(R)` comparisons; a non-adaptive sort
+ * costs about `n * log2(n)` whatever the input looks like. So merging is worth
+ * it exactly while `log2(R)` is the smaller of the two, and `R <= sqrt(n)` is
+ * the region where it is at most half -- a bound that needs no fitted constant
+ * and tightens on its own as `n` grows. That is what `maxRuns` defaults to,
+ * floored at 32 so nothing below 1,024 elements changes.
+ *
+ * Read the other way round, that bound is a statement about the *input* rather
+ * than a tolerance for a number of runs: `R <= sqrt(n)` is the same as saying
+ * the average run is at least `sqrt(n)` long. Which is the useful form, because
+ * what makes merging pay is runs long enough to amortise a merge pass over, and
+ * that does not change when a data set grows. A fixed run count does: the
+ * bound was 32 until a table with 50 of something turned up, which is the
+ * failure mode this shape avoids.
+ *
+ * The floor used to be the whole bound, and a fixed 32 was too low to catch the
+ * shape this was written for. A secondary index built over a junction table
+ * whose primary key leads with the *other* column arrives as one ordered run
+ * per distinct value of that column: 50 runs of 1,200 rows over 60,000, for a
+ * table with 50 of them. Merging that is O(n log 50), but at `maxRuns` 32 it
+ * declined and Hermes fell through to the full non-adaptive sort this function
+ * exists to avoid.
+ *
+ * The bound is deliberately well inside the crossover, and comparisons are not
+ * the only cost: merging R runs is `ceil(log2(R))` passes, each writing every
+ * element, which an in-place sort does not do. So it was measured past the
+ * bound rather than up to it. Sorting 60,000 rows through a three-column
+ * comparator on an Android emulator, in a release build, medians of 3 repeats.
+ * The engine is Static Hermes 250829098.0.14 -- read out of the APK's
+ * `libhermesvm.so` rather than taken from the build config, because what React
+ * Native ships is not the engine `sdks/.hermesversion` pins. Hence
+ * `libhermesvm.so` and not `libhermes.so`: a different engine, not a later
+ * build of the one in the 0.12 table above.
+ *
+ * Which does not make that table stale, and it is worth being exact about what
+ * carries over. Its *comparison counts* reproduce on the shipped engine to the
+ * digit -- 1,483,630 sorted and 2,571,203 reversed at 100,000, and 741 at
+ * n = 128 -- so the two engines sort by the same algorithm, and the premise all
+ * of this rests on holds where it matters: `nativeSortIsAdaptive()` is false on
+ * the VM that actually runs, not merely on an old CLI. Its *times* do not carry
+ * over, in either direction: those were a standalone CLI on a development host,
+ * these are an emulator, and the shipped VM is about 2.3x faster than that CLI
+ * on the same host. Compare the counts, never the milliseconds.
+ *
+ * ```text
+ *   runs        native     merge
+ *   2          517.9ms    23.0ms
+ *   50         218.3ms    82.0ms
+ *   100        221.6ms    90.3ms
+ *   244        202.8ms   101.4ms   <- the bound at this size
+ *   400        210.7ms   110.9ms
+ *   1,000      199.4ms   121.5ms
+ *   shuffled   221.0ms   207.3ms
+ * ```
+ *
+ * The extra passes do show up -- merging costs five times more at 1,000 runs
+ * than at 2 -- but on this engine it still wins everywhere measured, and only
+ * on shuffled input does the margin close to nothing. At the bound it is 2x,
+ * which is the margin the bound is chosen to keep rather than the point where
+ * merging stops paying; a higher one would capture more, and no workload here
+ * calls for it. Note also that two ordered runs are the native sort's *worst*
+ * case (517.9ms, worse than shuffled), which is the asymmetry this whole
+ * function exists to exploit.
+ *
+ * On V8, which never reaches this path, merging holds level to about 1,000 runs
+ * (23.1ms against 24.1ms) and loses past 5,000 and on shuffled input (78.6ms
+ * against 43.0ms). That bounds how far merging scales on an adaptive engine; it
+ * does not justify the bound, since no caller gets here on one.
+ *
  * Declining is not free, and what bounds it is runs, not comparisons: counting
  * stops once a `maxRuns + 1`th run is known to exist, before walking that one,
  * but every run before it is walked to its end. Measured over 100,000 elements
@@ -51,10 +122,46 @@
  *   32 long runs, then more  80,000 comparisons      15%
  * ```
  *
- * The first is the shape that declines in practice, and it gives up almost at
- * once because its runs are two or three elements long. The second is the
- * honest worst case -- `maxRuns` long ordered runs followed by anything at all,
- * where the scan walks most of the array before handing it back. Nothing in the
+ * Raising the bound raises what a decline can cost, and the shape that pays is
+ * an input whose run count lands just past it. Over 60,000 elements in equal
+ * ordered runs, comparisons spent before declining:
+ *
+ * ```text
+ *   runs    at bound 32    at bound 244
+ *   245          7,840          59,780
+ *   400          4,800          36,600
+ *   1,000        1,920          14,640
+ * ```
+ *
+ * So a 245-run input now scans essentially the whole array where it used to
+ * stop after an eighth of it. What does *not* change is the ceiling: the worst
+ * case is `maxRuns` long runs followed by anything at all, and that walks
+ * almost every element at either bound -- 60,000 comparisons at 32 against
+ * 59,780 at 244. The old bound never bounded the scan below `n`; it only made
+ * fewer shapes reach it. Against the non-adaptive sort a decline falls into,
+ * which costs about 14.8 comparisons per element on the engine that gets here,
+ * a full scan is around 7% on top. (Measured as a fraction of V8's adaptive
+ * sort it looks like 17-19%, but nothing reaches this path on V8.)
+ *
+ * A scan budget cannot be separated from the merge budget without giving up
+ * merges that would have won: `R` is only known to exceed the budget once
+ * budget-many runs have been seen, and merging `R` runs has to scan all `n`
+ * elements regardless. Any limit tight enough to cut a decline short of `n`
+ * also rejects inputs just inside the bound, which is the case this change
+ * exists to serve.
+ *
+ * One interaction is worth naming because this bound makes it bigger. The
+ * caller in `MemorySource` tries this before its specialised numeric-column
+ * pass, so an ordering that the numeric pass could have handled may now pay a
+ * scan of up to `n` before taking it anyway. Bounded, and not a shape seen in
+ * the ten index builds of a cold pass -- the nine that merge are under 32 runs
+ * and the one that declines is string-keyed -- but the chain order is worth
+ * revisiting on its own measurement rather than inside a bound change.
+ *
+ * Of the two rows in the first table, shuffled is the shape that declines in
+ * practice, and it gives up almost at once because its runs are two or three
+ * elements long. The other is the honest worst case, where the scan walks most
+ * of the array before handing it back. Nothing in the
  * workloads this was built for looks like that, but it is what the bound
  * permits, and a caller sorting adversarial input should know it.
  *
@@ -133,17 +240,28 @@ export function nativeSortIsAdaptive(): boolean {
 }
 
 /**
+ * The default run budget for an array of `n` elements: `sqrt(n)`, floored at
+ * 32. Integral, because the scan compares its run count against it for
+ * equality.
+ */
+function maxRunsFor(n: number): number {
+  return Math.max(32, Math.floor(Math.sqrt(n)));
+}
+
+/**
  * Sorts `array` in place by merging its natural runs, and returns it.
  *
  * Returns `undefined`, leaving `array` **unmodified**, when it holds more than
  * `maxRuns` runs -- the caller should then sort it however it otherwise would.
+ * `maxRuns` defaults to `sqrt(array.length)`, floored at 32; see "Where the
+ * bound sits" above.
  *
  * `compare` must be a consistent comparator; results are stable.
  */
 export function sortByNaturalRuns<T>(
   array: T[],
   compare: (a: T, b: T) => number,
-  maxRuns = 32,
+  maxRuns = maxRunsFor(array.length),
 ): T[] | undefined {
   const n = array.length;
   if (n < 2) {
@@ -159,7 +277,7 @@ export function sortByNaturalRuns<T>(
     // Stop before walking another run once `maxRuns` are already in hand and
     // input is left: this call cannot succeed now, and the next run could be
     // the whole remainder of the array.
-    if (starts.length === maxRuns) {
+    if (starts.length >= maxRuns) {
       return undefined;
     }
     const start = i;
