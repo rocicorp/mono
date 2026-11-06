@@ -73,6 +73,11 @@ export const QuerySnapshotContext = createContext<QuerySnapshotContextValue>(
  *
  * Both sides need a `ZeroProvider` given an existing `zero`, because one built
  * from options renders nothing until its first effect.
+ *
+ * Snapshots are matched by query hash, which covers everything the query was
+ * built from, so a query that reads the Zero context needs the same context on
+ * both sides. One that differs misses its snapshot, and React recovers by
+ * rendering it on the client.
  */
 export function QuerySnapshotProvider({
   collector,
