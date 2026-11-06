@@ -24,6 +24,7 @@ import {MutagenService} from '../services/mutagen/mutagen.ts';
 import {PusherService} from '../services/mutagen/pusher.ts';
 import type {ReplicaState} from '../services/replicator/replicator.ts';
 import {BatchPacer} from '../services/view-syncer/batch-pacer.ts';
+import {CloneShadow} from '../services/view-syncer/clone-shadow.ts';
 import {
   type ConnectionContextManager,
   ConnectionContextManagerImpl,
@@ -255,6 +256,12 @@ export default async function runWorker(
     }).addCallback(o => o.observe(batchPacer.multiplier));
   }
 
+  // Shared by all of the view-syncers on this worker, which can only compare
+  // their pipelines with those of other groups in the same process.
+  const cloneShadow = config.enableCloneShadow
+    ? new CloneShadow({lc})
+    : undefined;
+
   // Shared by all of the view-syncers on this worker, so that the work done
   // for each query shape is logged once per worker per interval.
   const queryStats =
@@ -331,6 +338,7 @@ export default async function runWorker(
         config,
         deferredWritesBudget,
         queryStats,
+        cloneShadow,
       ),
       sub,
       drainCoordinator,

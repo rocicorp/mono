@@ -80,8 +80,8 @@ export type CVRSnapshot = {
   readonly profileID: string | null;
 };
 
-const CLIENT_LMID_QUERY_ID = 'lmids';
-const CLIENT_MUTATION_RESULTS_QUERY_ID = 'mutationResults';
+export const CLIENT_LMID_QUERY_ID = 'lmids';
+export const CLIENT_MUTATION_RESULTS_QUERY_ID = 'mutationResults';
 
 function assertNotInternal(
   query: QueryRecord,

@@ -9,17 +9,13 @@ import {
 import {newArray} from '../../../../shared/src/arrays.ts';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
-import {h64} from '../../../../shared/src/hash.ts';
 import {getOrInsertComputed} from '../../../../shared/src/map.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
 import {resolver} from '../../../../shared/src/resolver.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../../zero-protocol/src/change-desired-queries.ts';
-import {
-  normalizeClientSchema,
-  type ClientSchema,
-} from '../../../../zero-protocol/src/client-schema.ts';
+import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {
   InitConnectionBody,
   InitConnectionMessage,
@@ -84,6 +80,7 @@ import {
   type PokeHandler,
   type RowPatch,
 } from './client-handler.ts';
+import {clientSchemaKey} from './clone-shadow.ts';
 import type {
   ConnectionContext,
   ConnectionContextManager,
@@ -1183,7 +1180,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     if (this.#clientSchemaKeyCache?.schema !== schema) {
       this.#clientSchemaKeyCache = {
         schema,
-        key: h64(JSON.stringify(normalizeClientSchema(schema))).toString(36),
+        key: clientSchemaKey(schema),
       };
     }
     return this.#clientSchemaKeyCache.key;

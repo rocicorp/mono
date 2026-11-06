@@ -672,6 +672,21 @@ export const zeroOptions = {
     ],
   },
 
+  enableCloneShadow: {
+    type: v.boolean().optional(() => false),
+    desc: [
+      `Measure whether hydrations could be copied from another client group.`,
+      ``,
+      `When enabled, each query that hydrates is compared with the same query in`,
+      `other client groups on its sync worker, and the outcome is reported in the`,
+      `{bold sync.clone-shadow} metric. Hydration itself is unchanged.`,
+      ``,
+      `Comparing reads the operator state of both pipelines, which takes CPU and`,
+      `holds up the worker for large queries.`,
+    ],
+    hidden: true,
+  },
+
   deferIvmWrites: {
     type: v.boolean().optional(() => true),
     desc: [
