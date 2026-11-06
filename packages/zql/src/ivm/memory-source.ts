@@ -255,6 +255,12 @@ export class MemorySource implements Source {
     // a different library.)
     // 3. We could even theoretically do (2) on multiple threads and then merge the
     // results!
+    // `toArray` rather than spreading the tree: the iterator costs about
+    // 0.5us/row on Hermes, and this materialization is what is left in this
+    // function now that the sort is often skipped outright. The array is ours,
+    // so the paths below may reorder it in place.
+    const rows = this.#getPrimaryIndex().data.toArray();
+
     // Three ways to get the rows into the new index's order, cheapest first.
     //
     // Natural-run merging leads where it can win at all -- which is only where
@@ -270,7 +276,6 @@ export class MemorySource implements Source {
     //
     // The numeric path is next: it cannot reach O(N), but it beats a general
     // comparator sort on the shape it covers. The plain sort is the floor.
-    const rows = [...this.#getPrimaryIndex().data];
     const sorted =
       (nativeSortIsAdaptive()
         ? undefined

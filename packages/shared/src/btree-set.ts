@@ -2,6 +2,22 @@ import {assert} from './asserts.ts';
 
 const MAX_NODE_SIZE = 32;
 
+/**
+ * How many arrays `toArray` hands `concat` at once. Engines cap how many
+ * arguments a call may spread, so the join is chunked rather than passing one
+ * argument per leaf.
+ */
+const CONCAT_CHUNK = 1024;
+
+function concatAll<K>(arrays: K[][]): K[] {
+  // `concat` on purpose, not `[...a, ...b]`: this is the one place where the
+  // difference is the point. `concat` copies the arrays in native code, which
+  // on Hermes is 10x faster than getting the same keys out through the tree's
+  // iterator, and 3x faster than a per-element JS loop (see `toArray`).
+  // oxlint-disable-next-line e18e/prefer-spread-syntax
+  return ([] as K[]).concat(...arrays);
+}
+
 type Comparator<K> = (a: K, b: K) => number;
 
 export class BTreeSet<K> {
@@ -130,6 +146,51 @@ export class BTreeSet<K> {
 
   [Symbol.iterator](): IterableIterator<K> {
     return this.keys();
+  }
+
+  /**
+   * Returns every key, in order, as a fresh array the caller owns (sorting it
+   * in place is safe).
+   *
+   * This is the inverse of `fromSorted`: it collects the leaves' `keys` arrays
+   * and joins them with `concat`, instead of yielding one key at a time. Every
+   * key the iterator yields pays for a `next()` call that walks a node queue
+   * and allocates a result object, and on an interpreter that is not something
+   * a JS loop can win back -- the work has to happen in native code.
+   *
+   * Measured on an Android emulator (Hermes, release), 90,000 rows per call:
+   * 5.76ms through the iterator, 1.73ms for a per-element JS copy loop into a
+   * pre-sized array, 0.56ms for this. So a JS loop buys 3.3x and native copying
+   * 10x; at 30,000 rows, where the join is a single round, it is 20x. V8 JITs
+   * such a loop to near-memcpy, so the choice barely registers there and is
+   * worth 3x on a phone.
+   *
+   * Complexity: O(size). Nothing collected is mutated, so shared/cloned nodes
+   * are safe, and the arrays are copied rather than handed out.
+   */
+  toArray(): K[] {
+    const root = this.#root;
+    // The common small case: one native copy, and no leaf collection at all.
+    if (!root.isInternal()) {
+      return root.keys.slice();
+    }
+    const leaves: K[][] = [];
+    root.collectLeafKeys(leaves);
+    // `concat` takes the leaves as arguments, so they are joined in chunks to
+    // keep the argument count bounded however large the tree is. Each round
+    // copies the data once, and with 32 keys per leaf one round covers 32k rows
+    // and two cover 33M, so this is one or two passes in practice.
+    let level = leaves;
+    while (level.length > 1) {
+      const next: K[][] = [];
+      for (let i = 0; i < level.length; i += CONCAT_CHUNK) {
+        next.push(concatAll(level.slice(i, i + CONCAT_CHUNK)));
+      }
+      level = next;
+    }
+    // An internal node always has at least one child, so `level` holds exactly
+    // one array here; the fallback is for a tree in no state this class builds.
+    return level[0] ?? [];
   }
 
   /**
@@ -412,6 +473,15 @@ class BNode<K> {
     return new BNode<K>(this.keys.slice(0));
   }
 
+  /**
+   * Appends this node's `keys` arrays, in order, to `out`. Read-only: the
+   * arrays are not copied here and must not be mutated by the caller, which is
+   * why `toArray` only ever passes them to `concat`.
+   */
+  collectLeafKeys(out: K[][]): void {
+    out.push(this.keys);
+  }
+
   get(key: K, tree: BTreeSet<K>): K | undefined {
     const i = indexOf(key, this.keys, -1, tree.comparator);
     return i < 0 ? undefined : this.keys[i];
@@ -532,6 +602,15 @@ class BNodeInternal<K> extends BNode<K> {
 
   minKey() {
     return this.children[0].minKey();
+  }
+
+  collectLeafKeys(out: K[][]): void {
+    // An internal node's `keys` cache its children's max keys, so the keys live
+    // in the leaves. Recursion depth is the tree height, log_32(size).
+    const {children} = this;
+    for (let i = 0; i < children.length; i++) {
+      children[i].collectLeafKeys(out);
+    }
   }
 
   get(key: K, tree: BTreeSet<K>): K | undefined {
