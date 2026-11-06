@@ -88,6 +88,29 @@
  * The probe runs once, costs a few hundred comparisons, and is deliberately not
  * consulted by `sortByNaturalRuns` itself: callers decide, so the sort stays a
  * pure function that can be tested on whichever engine the tests run on.
+ *
+ * ## Why this is measured at runtime rather than compiled away
+ *
+ * The obvious alternative is a build-time flag, so that only the React Native
+ * build carries this file at all -- 1,064 bytes minified, 590 gzipped. It was
+ * considered and rejected, because "React Native" is a proxy for "Hermes" and
+ * is wrong in both directions: React Native can run on JavaScriptCore, as it
+ * did by default for years, and Hermes is embedded outside React Native. A
+ * build keyed on the former would run the natural-run sort on an engine whose
+ * own sort is already adaptive, and doing that is not merely wasted work: it
+ * measured a 6.4% regression on cold-start hydration. The probe itself is not
+ * what costs anything -- a few hundred comparisons, once: 127 where the native
+ * sort is adaptive, 741 on Hermes, which is the one that pays most and the one
+ * that gets the 17x back.
+ *
+ * Measured, sorting 128 already-sorted elements: V8 and JavaScriptCore each do
+ * exactly `n - 1` comparisons, Hermes 741. SpiderMonkey was not measured, and
+ * that is the argument rather than a hole in it. A hand-maintained list of
+ * engines would have to be right about SpiderMonkey, about whatever ships next,
+ * and about every embedding of each -- and would be wrong silently. The probe
+ * is right about all of them without being told: if SpiderMonkey turns out not
+ * to be adaptive, Firefox gets the faster path automatically, and if it is, it
+ * never pays for one it does not need.
  */
 const PROBE_SIZE = 128;
 
