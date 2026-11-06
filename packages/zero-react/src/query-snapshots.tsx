@@ -18,6 +18,11 @@ export type QuerySnapshots = Readonly<Record<string, QuerySnapshot>>;
  * Use one per render, and read it after rendering has finished: with streaming,
  * that means after `onAllReady`.
  *
+ * While collecting, every query suspends until the server confirms it, so the
+ * HTML is complete for a client that never runs it, such as a crawler. That
+ * takes a renderer that can wait, like `renderToPipeableStream`, and nothing ends
+ * the wait if zero-cache is unreachable, so abort a render that takes too long.
+ *
  * Errored queries are skipped because their details hold a retry function. The
  * client has no seed for one, so React recovers from the mismatch by rendering
  * that part of the tree on the client.
