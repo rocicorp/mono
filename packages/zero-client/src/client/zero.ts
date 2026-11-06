@@ -1304,6 +1304,14 @@ export class Zero<
   }
 
   /**
+   * Whether a mutator has run on this client without the server having
+   * acknowledged it yet.
+   */
+  get hasPendingMutations(): boolean {
+    return this.#mutationTracker.size > 0;
+  }
+
+  /**
    * Closes this Zero instance.
    *
    * Once a Zero instance has been closed it no longer syncs, you can no

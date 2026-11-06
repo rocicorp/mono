@@ -5490,3 +5490,30 @@ describe('Zero replicache refresh integration', () => {
     });
   });
 });
+
+test('hasPendingMutations is true from a mutator running until it is acknowledged', async () => {
+  const schema = createSchema({
+    tables: [
+      table('issue').columns({id: string(), value: number()}).primaryKey('id'),
+    ],
+  });
+  const mutators = defineMutatorsWithType<typeof schema>()({
+    issue: {
+      insert: defineMutatorWithType<typeof schema>()<{
+        id: string;
+        value: number;
+      }>(async ({tx, args}) => {
+        await tx.mutate.issue.insert(args);
+      }),
+    },
+  });
+  const z = zeroForTest({schema, mutators});
+  await z.triggerConnected();
+  expect(z.hasPendingMutations).toBe(false);
+
+  const {server} = z.mutate(mutators.issue.insert({id: 'a', value: 1}));
+  void server.catch(() => {});
+  expect(z.hasPendingMutations).toBe(true);
+
+  await z.close();
+});
