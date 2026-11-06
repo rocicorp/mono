@@ -142,6 +142,35 @@ export class BTreeRead implements AsyncIterable<Entry<FrozenJSONValue>> {
     );
   }
 
+  /**
+   * Calls `visitor` with each entry from `fromKey` on, in key order, until it
+   * returns `false` or the entries run out.
+   *
+   * This is for reading a long range to its end. {@link scan} is an async
+   * generator, so every entry it produces crosses a microtask boundary and is
+   * yielded again at each level of the tree above it. That is what lets a
+   * caller stop anywhere and pay only for what it read, but over a whole range
+   * it costs more than the read does, and more again on an engine that
+   * compiles async generators to state machines, as Hermes does. A visit
+   * awaits once per node and calls `visitor` for a leaf's entries in a plain
+   * loop.
+   *
+   * The tree must not be written to during the visit. `scan` notices when the
+   * root changes and restarts from the key it had reached. `visit` does not
+   * check for that and does not restart.
+   *
+   * @param prefetch Read sibling nodes in parallel before visiting them so
+   * stores can batch the reads, as for {@link scan}. A visit that stops early
+   * has then read nodes it never visits.
+   */
+  async visit(
+    fromKey: string,
+    prefetch: boolean,
+    visitor: (entry: Entry<FrozenJSONValue>) => boolean,
+  ): Promise<void> {
+    await visitNode(this, this.rootHash, fromKey, prefetch, visitor);
+  }
+
   async *keys(): AsyncIterableIterator<string> {
     const node = await this.getNode(this.rootHash);
     yield* node.keys(this);
@@ -289,6 +318,47 @@ type ReadNodeResult = readonly [
 ];
 
 type ReadNode = (hash: Hash) => Promise<ReadNodeResult>;
+
+/**
+ * Visits the entries from `fromKey` on in the subtree at `hash`. Returns
+ * whether to go on to the entries after this subtree.
+ */
+async function visitNode(
+  tree: BTreeRead,
+  hash: Hash,
+  fromKey: string,
+  prefetch: boolean,
+  visitor: (entry: Entry<FrozenJSONValue>) => boolean,
+): Promise<boolean> {
+  const node = await tree.getNode(hash);
+  let i = fromKey ? binarySearch(fromKey, node.entries) : 0;
+  if (isDataNodeImpl(node)) {
+    const {entries} = node;
+    for (; i < entries.length; i++) {
+      if (!visitor(entries[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  const {entries} = node;
+  if (prefetch) {
+    // A failure here is ignored, as in `scanForHash`: the loop below reads
+    // each child again and reports it.
+    await Promise.all(
+      entries.slice(i).map(entry => tree.getNode(entry[1]).catch(() => {})),
+    );
+  }
+  for (; i < entries.length; i++) {
+    if (!(await visitNode(tree, entries[i][1], fromKey, prefetch, visitor))) {
+      return false;
+    }
+    // Only the first subtree can hold keys before `fromKey`.
+    fromKey = '';
+  }
+  return true;
+}
 
 async function* scanForHash(
   expectedRootHash: Hash,

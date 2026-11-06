@@ -10,8 +10,9 @@ import {
   type Label,
   type Revision,
 } from '../../../zql/src/query/test/test-schemas.ts';
-import {initFromStore, IVMSourceBranch} from './ivm-branch.ts';
+import {initFromStore, IVMSourceBranch, readRowDiffs} from './ivm-branch.ts';
 
+import type {InternalDiffOperation} from '../../../replicache/src/btree/node.ts';
 import type {FrozenJSONValue} from '../../../replicache/src/frozen-json.ts';
 import type {Hash} from '../../../replicache/src/hash.ts';
 import type {Diff} from '../../../replicache/src/sync/patch.ts';
@@ -812,4 +813,56 @@ test('only the main branch registers optimistic aggregates', () => {
       r => r.aggTableName,
     ),
   ).toEqual(['aggregate:q2:comments']);
+});
+
+describe('readRowDiffs', () => {
+  const prefixes = [AGGREGATES_KEY_PREFIX, ENTITIES_KEY_PREFIX];
+
+  type Puts = Parameters<typeof createDb>[0];
+
+  /** `count` keys under `prefix`. */
+  function rows(prefix: string, count: number): Puts {
+    const puts: [string, unknown][] = [];
+    for (let i = 0; i < count; i++) {
+      puts.push([`${prefix}t/${String(i).padStart(6, '0')}`, {id: i}]);
+    }
+    return puts as Puts;
+  }
+
+  // Keys that sort immediately around the two prefixes without being under
+  // either. A read that starts or stops one entry off picks one of these up.
+  const neighbours = [
+    ['a', 1],
+    ['a.', 1],
+    ['a0', 1],
+    ['d/c/h', 1],
+    ['e', 1],
+    ['e.', 1],
+    ['e0', 1],
+    ['f/x', 1],
+    ['g/h', 1],
+    ['m/c/1', 1],
+  ] as unknown as Puts;
+
+  test.each<[name: string, puts: Puts]>([
+    ['an empty store', []],
+    ['no rows under either prefix', neighbours],
+    ['only table rows', rows('e/', 5)],
+    ['only aggregate rows', [...rows('a/', 5), ...neighbours]],
+    ['both', [...rows('e/', 5), ...rows('a/', 3), ...neighbours]],
+    // Enough rows that both ranges cross leaves.
+    ['both, across leaves', [...rows('e/', 900), ...rows('a/', 600)]],
+  ])('%s', async (_name, puts) => {
+    const {dagStore, syncHash} = await createDb(puts, timestamp++);
+    const expected: InternalDiffOperation[] = puts
+      .filter(([key]) => prefixes.some(p => key.startsWith(p)))
+      // Aggregate rows first, then table rows, each in key order.
+      .toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([key, value]) => ({
+        op: 'add',
+        key,
+        newValue: value as unknown as FrozenJSONValue,
+      }));
+    expect(await readRowDiffs(dagStore, syncHash)).toEqual(expected);
+  });
 });

@@ -278,3 +278,155 @@ test('limit 1 scan reads only the root-to-leaf path', async () => {
     expect(chunksRead).toHaveLength(rootLevel + 1);
   });
 });
+
+const visitKeys = Array.from({length: 200}, (_, i) =>
+  String(i).padStart(4, '0'),
+);
+
+/** A multi-level tree of {@link visitKeys}, each key its own value. */
+async function makeVisitTree<T extends BTreeWrite>(map: T): Promise<T> {
+  for (const k of visitKeys) {
+    await map.put(k, k);
+  }
+  return map;
+}
+
+function makePoisonTree(dagWrite: ConstructorParameters<typeof BTreeWrite>[0]) {
+  return new PoisonBTree(dagWrite, formatVersion, undefined, 2, 3, () => 1, 0);
+}
+
+/** The keys `visit` passes to its visitor, up to and including `stopAt`. */
+async function visitedKeys(
+  map: BTreeRead,
+  fromKey: string,
+  prefetch: boolean,
+  stopAt?: string,
+): Promise<string[]> {
+  const out: string[] = [];
+  await map.visit(fromKey, prefetch, ([key]) => {
+    out.push(key);
+    return key !== stopAt;
+  });
+  return out;
+}
+
+test.each([
+  ['unflushed, so its nodes are mutable', false],
+  ['flushed', true],
+])(
+  'visit passes the same entries as scan, in order (%s)',
+  async (_name, flush) => {
+    await withWrite(new TestStore(), async dagWrite => {
+      const map = await makeVisitTree(makeTree(dagWrite));
+      if (flush) {
+        await map.flush();
+      }
+      expect((await map.getNode(map.rootHash)).level).toBeGreaterThan(1);
+
+      // Before the first key, on a key, between two keys, on the last key and
+      // past it.
+      for (const fromKey of ['', '0000', '0100', '01005', '0199', '9999']) {
+        const expected = await asyncIterableToArray(map.scan(fromKey, false));
+        for (const prefetch of [false, true]) {
+          const visited: Entry<unknown>[] = [];
+          await map.visit(fromKey, prefetch, entry => {
+            visited.push(entry);
+            return true;
+          });
+          expect(visited).toEqual(expected);
+        }
+      }
+    });
+  },
+);
+
+test('visit reads a tree through BTreeRead', async () => {
+  const dagStore = new TestStore();
+  const rootHash = await withWrite(dagStore, async dagWrite => {
+    const map = await makeVisitTree(makeTree(dagWrite));
+    const hash = await map.flush();
+    await dagWrite.setHead('visit-test', hash);
+    return hash;
+  });
+
+  await withRead(dagStore, async dagRead => {
+    const map = new BTreeRead(dagRead, formatVersion, rootHash);
+    expect(await visitedKeys(map, '', true)).toEqual(visitKeys);
+    expect(await visitedKeys(map, '0150', false)).toEqual(
+      visitKeys.filter(k => k >= '0150'),
+    );
+  });
+});
+
+test('visit calls nothing for an empty tree', async () => {
+  await withRead(new TestStore(), async dagRead => {
+    const map = new BTreeRead(dagRead, formatVersion);
+    expect(await visitedKeys(map, '', true)).toEqual([]);
+    expect(await visitedKeys(map, 'a', false)).toEqual([]);
+  });
+});
+
+test('visit stops when the visitor returns false', async () => {
+  await withWrite(new TestStore(), async dagWrite => {
+    const map = await makeVisitTree(makePoisonTree(dagWrite));
+    await map.flush();
+    const root = await map.getNode(map.rootHash);
+    expect(root.entries.length).toBeGreaterThan(1);
+
+    // Stopping on the first entry of a leaf, in the middle of the tree and on
+    // the last entry: none may let the walk run on into what follows.
+    for (const fromKey of ['', '0050']) {
+      for (const stopAt of [fromKey || '0000', '0100', '0101', '0199']) {
+        for (const prefetch of [false, true]) {
+          expect(await visitedKeys(map, fromKey, prefetch, stopAt)).toEqual(
+            visitKeys.filter(k => k >= fromKey && k <= stopAt),
+          );
+        }
+      }
+    }
+
+    // Without prefetch, a visit that stops in the first subtree never reads
+    // the last one.
+    map.poisonHash = (root.entries.at(-1) as Entry<Hash>)[1];
+    expect(await visitedKeys(map, '', false, '0000')).toEqual(['0000']);
+    expect(map.poisonReads).toBe(0);
+
+    // With it, it has read the last one already, and the failure of a read
+    // the visit never needed is not reported.
+    expect(await visitedKeys(map, '', true, '0000')).toEqual(['0000']);
+    expect(map.poisonReads).toBeGreaterThan(0);
+  });
+});
+
+test('visit reports a failed read of a node it reaches, with or without prefetch', async () => {
+  await withWrite(new TestStore(), async dagWrite => {
+    const map = await makeVisitTree(makePoisonTree(dagWrite));
+    await map.flush();
+    const root = await map.getNode(map.rootHash);
+
+    map.poisonHash = (root.entries[0] as Entry<Hash>)[1];
+    for (const prefetch of [false, true]) {
+      await expect(visitedKeys(map, '', prefetch)).rejects.toThrow(
+        'poisoned chunk',
+      );
+    }
+  });
+});
+
+test('visit does not read subtrees before fromKey', async () => {
+  await withWrite(new TestStore(), async dagWrite => {
+    const map = await makeVisitTree(makePoisonTree(dagWrite));
+    await map.flush();
+    const root = await map.getNode(map.rootHash);
+
+    const firstChild = root.entries[0] as Entry<Hash>;
+    map.poisonHash = firstChild[1];
+    const fromKey = visitKeys.at(-1) ?? '';
+    expect(fromKey > firstChild[0]).toBe(true);
+
+    for (const prefetch of [false, true]) {
+      expect(await visitedKeys(map, fromKey, prefetch)).toEqual([fromKey]);
+    }
+    expect(map.poisonReads).toBe(0);
+  });
+});
