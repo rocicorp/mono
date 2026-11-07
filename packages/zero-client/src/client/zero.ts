@@ -177,6 +177,11 @@ import {MutatorProxy} from './mutator-proxy.ts';
 import type {UpdateNeededReason, ZeroOptions} from './options.ts';
 import {QueryManager} from './query-manager.ts';
 import {
+  STABLE_CONNECTION_MS,
+  isTransportFailure,
+  reconnectBackoffMs,
+} from './reconnect-backoff.ts';
+import {
   reloadScheduled,
   reloadWithReason,
   reportReloadReason,
@@ -441,6 +446,9 @@ export class Zero<
   // on disconnect.
   #messageCount = 0;
   #connectedAt = 0;
+  // Consecutive transport failures, which set the reconnect backoff. Reset
+  // when a connection that stayed up for STABLE_CONNECTION_MS ends.
+  #transportFailures = 0;
   // Reset on successful connection.
   #connectErrorCount = 0;
 
@@ -2037,6 +2045,13 @@ export class Zero<
         unreachable(connectionStatus);
     }
 
+    if (
+      this.#connectedAt !== 0 &&
+      Date.now() - this.#connectedAt >= STABLE_CONNECTION_MS
+    ) {
+      this.#transportFailures = 0;
+    }
+
     this.#socketResolver = resolver();
     this.#messageCount = 0;
     this.#connectStart = undefined; // don't reset this._totalToConnectStart
@@ -2547,6 +2562,18 @@ export class Zero<
           case NO_STATUS_TRANSITION: {
             // We continue the loop because the error does not indicate
             // a need to transition to a new state and we should continue retrying
+
+            // A transport failure carries no backoff instructions, and its
+            // usual cause clears within seconds, so it is retried soon, then
+            // less often. Errors sent by the server keep the full interval,
+            // adjusted by any backoff they carry.
+            if (isTransportFailure(transition.reason)) {
+              this.#transportFailures++;
+              backoffMs = reconnectBackoffMs(
+                this.#transportFailures,
+                RUN_LOOP_INTERVAL_MS,
+              );
+            }
 
             const backoffParams = getBackoffParams(transition.reason);
             if (backoffParams) {

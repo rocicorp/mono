@@ -85,6 +85,7 @@ import {ClientError, isServerError} from './error.ts';
 import type {WSString} from './http-string.ts';
 import type {UpdateNeededReason, ZeroOptions} from './options.ts';
 import type {QueryManager} from './query-manager.ts';
+import {STABLE_CONNECTION_MS} from './reconnect-backoff.ts';
 import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.ts';
 import type {TestZero} from './test-utils.ts';
 import {
@@ -372,6 +373,95 @@ describe('onOnlineChange callback', () => {
       await z.close().catch(() => {});
     },
   );
+
+  // Closes the socket of a connection attempt before the server acknowledges
+  // it, as a load balancer's 502 does.
+  const failAttempt = async (z: ReturnType<typeof getNewZero>['z']) => {
+    const socket = await z.socket;
+    socket.dispatchEvent(new CloseEvent('close', {wasClean: false}));
+    await vi.advanceTimersByTimeAsync(0);
+  };
+
+  // Closes a connected socket, after which the client reconnects at once.
+  const dropConnection = async (z: ReturnType<typeof getNewZero>['z']) => {
+    const socket = await z.socket;
+    socket.dispatchEvent(new CloseEvent('close', {wasClean: false}));
+    await z.waitForConnectionStatus(ConnectionStatus.Connecting);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await z.socket).not.toBe(socket);
+  };
+
+  const expectRetryAfter = async (
+    z: ReturnType<typeof getNewZero>['z'],
+    ms: number,
+  ) => {
+    await vi.advanceTimersByTimeAsync(ms - 1);
+    expect(await hasSocket(z)).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await hasSocket(z)).toBe(true);
+  };
+
+  test.each([
+    {random: 1, waits: [500, 1000, 2000, 4000, 5000, 5000]},
+    {random: 0, waits: [250, 500, 1000, 2000, 5000, 5000]},
+  ])(
+    'retries failed attempts soon, then less often (random() = $random)',
+    async ({random, waits}) => {
+      vi.spyOn(Math, 'random').mockReturnValue(random);
+      const {z} = getNewZero();
+      await z.triggerConnected();
+      await vi.advanceTimersByTimeAsync(0);
+      await dropConnection(z);
+
+      for (const ms of waits) {
+        await failAttempt(z);
+        await expectRetryAfter(z, ms);
+      }
+
+      await z.close().catch(() => {});
+    },
+  );
+
+  test.each([
+    {name: 'stays up', upMs: STABLE_CONNECTION_MS, nextWaitMs: 500},
+    {name: 'drops sooner', upMs: STABLE_CONNECTION_MS - 1, nextWaitMs: 2000},
+  ])(
+    'a connection that $name resets the backoff accordingly',
+    async ({upMs, nextWaitMs}) => {
+      vi.spyOn(Math, 'random').mockReturnValue(1);
+      const {z} = getNewZero();
+      await z.triggerConnected();
+      await vi.advanceTimersByTimeAsync(0);
+      await dropConnection(z);
+      await failAttempt(z);
+      await expectRetryAfter(z, 500);
+      await failAttempt(z);
+      await expectRetryAfter(z, 1000);
+
+      await z.triggerConnected();
+      await vi.advanceTimersByTimeAsync(upMs);
+      await dropConnection(z);
+      await failAttempt(z);
+      await expectRetryAfter(z, nextWaitMs);
+
+      await z.close().catch(() => {});
+    },
+  );
+
+  test('retries soon after a ping timeout', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(1);
+    const {z} = getNewZero();
+    await z.triggerConnected();
+    await vi.advanceTimersByTimeAsync(0);
+
+    // A ping is sent after DEFAULT_PING_TIMEOUT_MS, and no pong arrives.
+    await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS * 2);
+    await z.waitForConnectionStatus(ConnectionStatus.Connecting);
+    expect(await hasSocket(z)).toBe(false);
+    await expectRetryAfter(z, 500);
+
+    await z.close().catch(() => {});
+  });
 
   test('respects large backoff directives', async () => {
     const {z, getOnlineCount, getOfflineCount} = getNewZero();
@@ -2845,6 +2935,9 @@ function connectEvents(
 }
 
 test('Connect timeout', async () => {
+  // Wait the longest time the reconnect backoff allows, so that each retry
+  // starts at a known time.
+  vi.spyOn(Math, 'random').mockReturnValue(1);
   const z = zeroForTest({logLevel: 'debug'});
 
   const connectionStates: ConnectionState[] = [];
@@ -2895,10 +2988,11 @@ test('Connect timeout', async () => {
     );
     const nextSocketPromise = z.socket;
 
-    // We stay in connecting state and sleep for RUN_LOOP_INTERVAL_MS before trying again
+    // We don't connect while sleeping before the next attempt. The disconnect
+    // watchdog can move the state to Disconnected meanwhile.
 
     await vi.advanceTimersByTimeAsync(sleepMS - 1);
-    expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
+    expect(z.connectionStatus).not.toBe(ConnectionStatus.Connected);
     await vi.advanceTimersByTimeAsync(1);
     for (let i = 0; i < 10; i++) {
       await vi.advanceTimersByTimeAsync(0);
@@ -2910,24 +3004,19 @@ test('Connect timeout', async () => {
     currentSocket = nextSocket;
   };
 
-  await step(RUN_LOOP_INTERVAL_MS);
+  // Each timed out attempt is retried after the reconnect backoff, which
+  // doubles from FAST_RECONNECT_INITIAL_MS up to RUN_LOOP_INTERVAL_MS. Five
+  // attempts reach the 60s disconnect watchdog.
+  for (const sleepMS of [500, 1000, 2000, 4000, RUN_LOOP_INTERVAL_MS]) {
+    await step(sleepMS);
+  }
 
-  // Try again to connect
-  await step(RUN_LOOP_INTERVAL_MS);
-  await step(RUN_LOOP_INTERVAL_MS);
-  await step(RUN_LOOP_INTERVAL_MS);
-
-  // The 60s disconnect watchdog polls on its own interval independently of
-  // each retry's connect-timeout, so when both land at (approximately) the
-  // same simulated instant, the fake-timer implementation's tie-breaking
-  // order decides whether one more "connecting" state sneaks in before the
-  // watchdog fires. Assert a small range rather than an exact count to avoid
-  // depending on that ordering, while still requiring the loop to have made
-  // the expected number of connect attempts (each contributing at least one
-  // "connecting" state) and to have ended up disconnected. The leading 2 is
-  // leaving initializing plus the first attempt.
-  expect(connectionStates.length).toBeGreaterThanOrEqual(2 + 4 * 2);
-  expect(connectionStates.length).toBeLessThanOrEqual(2 + 4 * 2 + 1);
+  // The 60s disconnect watchdog fires during the sleep after the fifth
+  // attempt, at 60s, between that attempt's timeout at 57.5s and the next
+  // attempt at 62.5s, so nothing else happens at the same instant and the
+  // count is exact. The leading 2 is leaving initializing plus the first
+  // attempt, and the last state is the watchdog's 'disconnected'.
+  expect(connectionStates.length).toBe(2 + 5 * 2);
   expect(connectionStates.at(-1)?.name).toEqual('disconnected');
   expect([...new Set(connectionStates.map(s => s.name))]).toEqual([
     'connecting',
