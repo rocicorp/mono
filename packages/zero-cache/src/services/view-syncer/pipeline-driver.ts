@@ -1093,6 +1093,7 @@ export class PipelineDriver {
             return this.#getSource(name);
           },
           createStorage: () => this.#createStorage(),
+          onJoinIndex: index => this.#hydratingJoinIndexes.push(index),
           decorateSourceInput: (input: SourceInput): Input => input,
           decorateInput: input => input,
           addEdge() {},
@@ -1299,11 +1300,7 @@ export class PipelineDriver {
         push: change => this.#streamPushed(queryID, schema, change),
       });
 
-      const donor = this.#findDonor(
-        transformationHash,
-        resolvedQuery,
-        companionInputs,
-      );
+      const donor = this.#findDonor(transformationHash, query, resolvedQuery);
       if (donor) {
         for (const change of this.#copyFrom(
           donor.source,
@@ -1427,7 +1424,7 @@ export class PipelineDriver {
         transformationHash,
         hydrationTimeMs,
         copied,
-        companionInputs.length === 0 && !usesAggregates(resolvedQuery),
+        !usesAggregates(query) ? resolvedQuery : undefined,
       );
       this.#queryStats?.recordHydration(
         {queryName, shape},
@@ -1507,27 +1504,22 @@ export class PipelineDriver {
   }
 
   /** @returns A pipeline to copy the query being hydrated from, if any. */
-  #findDonor(
-    transformationHash: string,
-    query: AST,
-    companionInputs: readonly Input[],
-  ) {
-    if (
-      !this.#donors?.copy ||
-      companionInputs.length > 0 ||
-      usesAggregates(query)
-    ) {
+  #findDonor(transformationHash: string, query: AST, resolvedQuery: AST) {
+    if (!this.#donors?.copy || usesAggregates(query)) {
       return undefined;
     }
     const donor = this.#donors.findDonor(
       `${this.#clientSchemaKey}/${transformationHash}`,
       this.currentVersion(),
     );
-    // Equal hashes should plan alike, but a pipeline with a different shape
-    // can't use the state, and hydrating is always correct.
-    return donor?.source.operators.length ===
-      this.#hydratingOperators?.length &&
-      donor?.source.copyable?.joinIndexes.length ===
+    // The hash is of the query before its scalar subqueries were resolved, and a
+    // pipeline with a different plan or shape can't use the state. Equal hashes
+    // should mean none of this differs, but hydrating is always correct and a
+    // wrong copy is not.
+    return donor &&
+      deepEqual(donor.source.copyable?.query, resolvedQuery) &&
+      donor.source.operators.length === this.#hydratingOperators?.length &&
+      donor.source.copyable?.joinIndexes.length ===
         this.#hydratingJoinIndexes.length
       ? donor
       : undefined;
@@ -1608,7 +1600,7 @@ export class PipelineDriver {
     transformationHash: string,
     hydrationTimeMs: number,
     copied: boolean,
-    copyable: boolean,
+    copyableQuery: AST | undefined,
   ) {
     const shadow = this.#donors;
     const pipeline = this.#pipelines.get(queryID);
@@ -1628,9 +1620,10 @@ export class PipelineDriver {
         this.#advanceContext !== null || this.#costBasedAdvanceIncomplete,
       rowSetSignature: () => this.#rowSetSignatures.get(queryID),
       operators: must(this.#hydratingOperators),
-      ...(shadow.copy && copyable
+      ...(shadow.copy && copyableQuery
         ? {
             copyable: {
+              query: copyableQuery,
               joinIndexes: this.#hydratingJoinIndexes,
               rows: () => this.#verifiedDonorRows(queryID),
             },

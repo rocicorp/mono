@@ -25,7 +25,7 @@ import {
   type PipelineStateSource,
 } from './pipeline-donors.ts';
 import {PipelineDriver, type Timer} from './pipeline-driver.ts';
-import {Snapshotter} from './snapshotter.ts';
+import {ResetPipelinesSignal, Snapshotter} from './snapshotter.ts';
 
 const SHARD = {appID: 'this_app', shardNum: 2};
 const timer: Timer = {elapsedLap: () => 0, totalElapsed: () => 0};
@@ -413,6 +413,75 @@ describe('clone shadow', () => {
       });
       hydrate(donor, 'a', ALL);
       expect(asked).toEqual(['q-a']);
+    });
+
+    const SCALAR: AST = {
+      table: 'comments',
+      orderBy: [['id', 'asc']],
+      where: {
+        type: 'correlatedSubquery',
+        op: 'EXISTS',
+        scalar: true,
+        related: {
+          correlation: {parentField: ['issueID'], childField: ['id']},
+          subquery: {
+            table: 'issues',
+            alias: 'zsubq_issue',
+            orderBy: [['id', 'asc']],
+            where: {
+              type: 'simple',
+              op: '=',
+              left: {type: 'column', name: 'id'},
+              right: {type: 'literal', value: '1'},
+            },
+          },
+        },
+      },
+    };
+
+    test('copies a query with a scalar subquery, with the rows behind it', () => {
+      shadow = copying();
+      const donorRows = hydrate(newDriver(), 'a', SCALAR);
+      const cloneRows = hydrate(newDriver(), 'a', SCALAR);
+      expect(results.at(-1)?.outcome).toBe('copied');
+      const tablesOf = (changes: typeof donorRows) =>
+        changes
+          .filter(c => c !== 'yield')
+          .map(c => `${c.table}:${JSON.stringify(c.rowKey)}`)
+          .sort();
+      expect(tablesOf(cloneRows)).toEqual(tablesOf(donorRows));
+      expect(tablesOf(cloneRows)).toContain('issues:{"id":"1"}');
+    });
+
+    test('a copied scalar still resets when its value changes', () => {
+      shadow = copying();
+      hydrate(newDriver(), 'a', SCALAR);
+      const clone = newDriver();
+      hydrate(clone, 'a', SCALAR);
+      expect(results.at(-1)?.outcome).toBe('copied');
+      commit(messages.delete('issues', {id: '1'}));
+      expect(() => advance(clone)).toThrow(ResetPipelinesSignal);
+    });
+
+    test('does not copy a different query under the same hash', () => {
+      shadow = copying();
+      const issue = (id: string): AST => ({
+        ...ALL,
+        where: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'id'},
+          right: {type: 'literal', value: id},
+        },
+      });
+      hydrate(newDriver(), 'a', issue('1'));
+      const rows = hydrate(newDriver(), 'a', issue('2'));
+      expect(results.at(-1)?.outcome).not.toBe('copied');
+      expect(
+        rows
+          .filter(c => c !== 'yield')
+          .map(c => (c as {rowKey: object}).rowKey),
+      ).toEqual([{id: '2'}]);
     });
 
     test('the first group hydrates normally', () => {

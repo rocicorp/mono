@@ -20,7 +20,7 @@ import {
 import {TrackedRows} from './pipeline-donors-test-util.ts';
 import {PipelineDonors, type DonorResult} from './pipeline-donors.ts';
 import {PipelineDriver, type RowChange, type Timer} from './pipeline-driver.ts';
-import {Snapshotter} from './snapshotter.ts';
+import {ResetPipelinesSignal, Snapshotter} from './snapshotter.ts';
 
 /**
  * A pipeline's rows must not depend on its history, because a client group may be
@@ -81,7 +81,48 @@ const exists = (op: 'EXISTS' | 'NOT EXISTS'): AST['where'] => ({
 
 const WITH_PROOF_ROWS = new Set(['exists', 'existsLimit']);
 
+const scalar = (parentField: string, childField: string): AST['where'] => ({
+  type: 'correlatedSubquery',
+  op: 'EXISTS',
+  scalar: true,
+  related: {
+    correlation: {
+      parentField: [parentField] as CompoundKey,
+      childField: [childField] as CompoundKey,
+    },
+    subquery: {
+      table: 'issues',
+      alias: 'zsubq_issue',
+      orderBy: [['id', 'asc']],
+      where: {
+        type: 'simple',
+        op: '=',
+        left: {type: 'column', name: 'id'},
+        right: {type: 'literal', value: 'i0'},
+      },
+    },
+  },
+});
+
 const QUERIES: Record<string, AST> = {
+  // A scalar on a column that never changes, so its pipeline never resets.
+  scalar: {
+    table: 'comments',
+    orderBy: [['id', 'asc']],
+    where: scalar('issueID', 'id'),
+  },
+  // A scalar whose value changes, which resets the pipeline when it does.
+  scalarChanging: {
+    table: 'comments',
+    orderBy: [['id', 'asc']],
+    where: scalar('rank', 'rank'),
+  },
+  scalarLimit: {
+    table: 'comments',
+    orderBy: [['id', 'asc']],
+    limit: 2,
+    where: scalar('issueID', 'id'),
+  },
   all: {table: 'issues', orderBy: BY_RANK},
   limit: {table: 'issues', orderBy: BY_RANK, limit: 3},
   related: {
@@ -120,6 +161,13 @@ const QUERIES: Record<string, AST> = {
   notExists: {table: 'issues', orderBy: BY_RANK, where: exists('NOT EXISTS')},
   count: {table: 'comments', orderBy: [['id', 'asc']], limit: 4},
 };
+
+/** A scalar's value changing ends a run: the view-syncer rebuilds from there. */
+function rethrowUnlessReset(e: unknown) {
+  if (!(e instanceof ResetPipelinesSignal)) {
+    throw e;
+  }
+}
 
 function mulberry32(seed: number) {
   let a = seed;
@@ -331,6 +379,8 @@ describe('pipeline rows do not depend on history', () => {
             ).toBe(signature);
           }
         }
+      } catch (e) {
+        rethrowUnlessReset(e);
       } finally {
         longLived.destroy();
       }
@@ -354,9 +404,15 @@ describe('pipeline rows do not depend on history', () => {
       donor.setDonorRows(() => donorRows.rows());
       const delivered = new Delivered();
       delivered.apply(donorRows.apply(donor.addQuery('h', 'q', ast, timer)));
-      for (let step = 0, n = pick(10); step < n; step++) {
-        commit(1 + pick(3));
-        delivered.apply(donorRows.apply(donor.advance(timer).changes));
+      try {
+        for (let step = 0, n = pick(10); step < n; step++) {
+          commit(1 + pick(3));
+          delivered.apply(donorRows.apply(donor.advance(timer).changes));
+        }
+      } catch (e) {
+        rethrowUnlessReset(e);
+        donor.destroy();
+        return;
       }
 
       const clone = newDriver(clones);
@@ -379,6 +435,8 @@ describe('pipeline rows do not depend on history', () => {
             donor.rowSetSignature('q'),
           );
         }
+      } catch (e) {
+        rethrowUnlessReset(e);
       } finally {
         donor.destroy();
         clone.destroy();
