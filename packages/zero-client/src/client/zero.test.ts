@@ -315,6 +315,64 @@ describe('onOnlineChange callback', () => {
     await z.close().catch(() => {});
   });
 
+  // A socket is only available once the client has started reconnecting.
+  const hasSocket = async (z: ReturnType<typeof getNewZero>['z']) => {
+    const none = Symbol('none');
+    const socket = await Promise.race([
+      z.socket,
+      Promise.resolve()
+        .then(() => {})
+        .then(() => none),
+    ]);
+    return socket !== none;
+  };
+
+  test.each([
+    {name: 'clean', wasClean: true},
+    {name: 'abrupt', wasClean: false},
+  ])(
+    'reconnects without waiting after a $name close while connected',
+    async ({wasClean}) => {
+      const {z} = getNewZero();
+      await z.triggerConnected();
+      await vi.advanceTimersByTimeAsync(0);
+      const closed = await z.socket;
+      closed.dispatchEvent(new CloseEvent('close', {wasClean}));
+      await z.waitForConnectionStatus(ConnectionStatus.Connecting);
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(await z.socket).not.toBe(closed);
+
+      await z.close().catch(() => {});
+    },
+  );
+
+  test.each([
+    {maxBackoffMs: undefined, expectedMs: RUN_LOOP_INTERVAL_MS},
+    {maxBackoffMs: 500, expectedMs: 500},
+  ])(
+    'a Rehome with maxBackoffMs $maxBackoffMs reconnects after $expectedMs ms',
+    async ({maxBackoffMs, expectedMs}) => {
+      const {z} = getNewZero();
+      await z.triggerConnected();
+      await vi.advanceTimersByTimeAsync(0);
+      await z.triggerError({
+        kind: ErrorKind.Rehome,
+        message: 'Server is draining',
+        origin: ErrorOrigin.ZeroCache,
+        ...(maxBackoffMs === undefined ? {} : {maxBackoffMs}),
+      });
+      await z.waitForConnectionStatus(ConnectionStatus.Connecting);
+
+      await vi.advanceTimersByTimeAsync(expectedMs - 1);
+      expect(await hasSocket(z)).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await hasSocket(z)).toBe(true);
+
+      await z.close().catch(() => {});
+    },
+  );
+
   test('respects large backoff directives', async () => {
     const {z, getOnlineCount, getOfflineCount} = getNewZero();
     await z.triggerConnected();

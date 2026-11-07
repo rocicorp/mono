@@ -1,10 +1,22 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {WebSocket} from 'ws';
+import {randInt} from '../../../shared/src/rand.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 import {sendError} from './connection.ts';
+
+/**
+ * The range of the `maxBackoffMs` sent with a draining Rehome. Without it, the
+ * client waits its full reconnect interval (5 seconds), when all it needs to
+ * do is try again and be routed to another server. The client does not add
+ * jitter, so it is chosen per connection here, spreading out the clients that
+ * arrive together and any that a load balancer sends back before it stops
+ * routing to this server.
+ */
+export const MIN_REHOME_BACKOFF_MS = 250;
+export const MAX_REHOME_BACKOFF_MS = 1000;
 
 /**
  * Returns the `Set-Cookie` header line that expires the configured load
@@ -34,6 +46,7 @@ export function rehome(lc: LogContext, ws: WebSocket) {
     {
       kind: ErrorKind.Rehome,
       message: 'Server is draining',
+      maxBackoffMs: randInt(MIN_REHOME_BACKOFF_MS, MAX_REHOME_BACKOFF_MS),
       origin: ErrorOrigin.ZeroCache,
     },
     'info',
