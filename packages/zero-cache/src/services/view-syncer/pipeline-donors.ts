@@ -36,7 +36,7 @@ export function usesAggregates(query: AST): boolean {
  */
 export function copyPipelineState(
   donor: PipelineStateSource,
-  operators: readonly Pick<Storage, 'set'>[],
+  operators: readonly Pick<Storage, 'scan' | 'set' | 'del'>[],
   joinIndexes: readonly JoinIndex[],
 ): number {
   let entries = 0;
@@ -44,6 +44,12 @@ export function copyPipelineState(
     // Read in full first: operators can share a storage connection, which can't
     // write in the middle of a scan.
     const state = [...donor.operators[i].scan()];
+    // A scalar subquery's pipeline has already fetched to resolve its value, and
+    // what it wrote then has to give way to the donor's.
+    const existing = [...operators[i].scan()];
+    for (const [key] of existing) {
+      operators[i].del(key);
+    }
     for (const [key, value] of state) {
       operators[i].set(key, value);
     }
@@ -72,6 +78,8 @@ export type PipelineStateSource = {
 };
 
 export type CopyableState = {
+  /** The query with its scalar subqueries resolved to their values. */
+  readonly query: AST;
   readonly joinIndexes: readonly JoinIndex[];
   /**
    * The rows the pipeline has output, with how many times it output each, or
