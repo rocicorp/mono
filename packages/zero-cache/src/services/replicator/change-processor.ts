@@ -77,6 +77,8 @@ import {TableMetadataTracker} from './schema/table-metadata.ts';
 
 export type ChangeProcessorMode = ReplicatorMode | 'initial-sync';
 
+const MAX_COMMIT_ATTEMPTS = 5;
+
 const BIND_VALUE_TOO_BIG_ERROR =
   'The bound string, buffer, or bigint is too big';
 const MAX_SQLITE_BIND_BYTES = Math.min(
@@ -1131,7 +1133,7 @@ class TransactionProcessor {
     }
 
     if (this.#mode !== 'initial-sync') {
-      this.#db.commit();
+      this.#commit();
     }
 
     const elapsedMs = Date.now() - this.#startMs;
@@ -1144,6 +1146,41 @@ class TransactionProcessor {
       changeLogUpdated: this.#numChangeLogEntries > 0,
       upstreamCommitTimeMs: commit.commitTimeMs,
     };
+  }
+
+  /**
+   * A wal2 `COMMIT` can fail with SQLITE_BUSY, without consulting the
+   * busy_timeout, if it switches wal files just as the `ServingCheckpointer`
+   * briefly locks the file it is switching to: the writer releases its locks
+   * on that file before taking the read lock that it needs on it. The
+   * transaction stays open and the switch has already happened, so the next
+   * attempt does not contend for that lock.
+   *
+   * No backoff is needed between attempts: the retry does not switch files
+   * again, so it never asks for the contended lock, whether or not the
+   * checkpointer still holds it. A second failure has some other cause.
+   *
+   * This is a workaround for a bug in SQLite's wal2 branch (in
+   * `walRestartLog()`), reported at
+   * https://sqlite.org/forum/forumpost/63ba0208a66aa7139119b56edb43a416b160ca1996a23de2b0da24ca48fb9b3a.
+   * The retry runs without the read lock the failed attempt meant to take.
+   * Remove it once zero-sqlite3 includes a fix.
+   */
+  #commit() {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        this.#db.commit();
+        return;
+      } catch (e) {
+        if (
+          attempt === MAX_COMMIT_ATTEMPTS ||
+          !(e instanceof SqliteError && e.code === 'SQLITE_BUSY')
+        ) {
+          throw e;
+        }
+        this.#lc.warn?.(`SQLITE_BUSY on COMMIT (attempt ${attempt})`, e);
+      }
+    }
   }
 
   abort(lc: LogContext) {
