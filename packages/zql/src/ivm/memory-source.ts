@@ -655,10 +655,10 @@ export class MemorySource implements Source {
     // The check is not redundant with the sort. V8's TimSort is O(N) on sorted
     // input but Hermes' sort is not adaptive: always sorting doubled the load
     // time of an already ordered 180k row replica on Android (343ms -> 672ms).
-    if (!isAscending(rows, comparator)) {
-      rows.sort(comparator);
-    }
-    index.data = BTreeSet.fromSorted(comparator, rows);
+    const sorted = isAscending(rows, comparator)
+      ? rows
+      : (sortedByStringKey(rows, this.#primaryKey) ?? rows.sort(comparator));
+    index.data = BTreeSet.fromSorted(comparator, sorted);
   }
 
   *push(change: SourceChange): Stream<'yield'> {
@@ -1240,6 +1240,51 @@ function isAscending(rows: Row[], comparator: Comparator): boolean {
     }
   }
   return true;
+}
+
+// A string that sorts the same by UTF-16 code unit as it does by UTF-8 byte,
+// and that can be joined with U+0000, holds neither a surrogate nor U+0000.
+const notJoinableRe = /[\0\ud800-\udfff]/;
+
+/**
+ * `rows` in primary key order without calling a comparator, for a key whose
+ * columns all hold strings. Returns `undefined`, leaving `rows` untouched, when
+ * a key value is not a string or cannot be ordered this way.
+ *
+ * Rows whose key is not their order in the replica (a compound key is stored
+ * under a hash) reach `pushAdds` shuffled, so they get a full sort, and a
+ * comparator sort calls back into JS for each of its N log N comparisons. On
+ * Hermes that was 204ms for 60,000 rows with a two-column key. Sorting one
+ * joined string per row with the engine's own string comparison takes 64ms
+ * there, and the same as the comparator sort on V8 (33ms).
+ *
+ * The row's position rides at the end of its string. It never decides the
+ * order, because primary keys are distinct.
+ */
+function sortedByStringKey(
+  rows: readonly Row[],
+  key: PrimaryKey,
+): Row[] | undefined {
+  const joined: string[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    let s = '';
+    for (let c = 0; c < key.length; c++) {
+      const v = row[key[c]];
+      if (typeof v !== 'string' || notJoinableRe.test(v)) {
+        return undefined;
+      }
+      s += v + '\0';
+    }
+    joined.push(s + i);
+  }
+  joined.sort();
+  const sorted: Row[] = [];
+  for (let i = 0; i < joined.length; i++) {
+    const s = joined[i];
+    sorted.push(rows[Number(s.slice(s.lastIndexOf('\0') + 1))]);
+  }
+  return sorted;
 }
 
 export function makeBoundComparator(sort: Ordering): Comparator {
