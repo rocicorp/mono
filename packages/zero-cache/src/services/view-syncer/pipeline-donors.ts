@@ -36,11 +36,17 @@ export function usesAggregates(query: AST): boolean {
  */
 export function copyPipelineState(
   donor: PipelineStateSource,
-  operators: readonly Pick<Storage, 'scan' | 'set' | 'del'>[],
+  operators: readonly Storage[],
   joinIndexes: readonly JoinIndex[],
+  copyStorage?: (source: object, target: Storage) => number | undefined,
 ): number {
   let entries = 0;
   for (let i = 0; i < operators.length; i++) {
+    const copied = copyStorage?.(donor.operators[i], operators[i]);
+    if (copied !== undefined) {
+      entries += copied;
+      continue;
+    }
     // Read in full first: operators can share a storage connection, which can't
     // write in the middle of a scan.
     const state = [...donor.operators[i].scan()];

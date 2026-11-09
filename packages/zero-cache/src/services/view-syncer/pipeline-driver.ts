@@ -1542,6 +1542,7 @@ export class PipelineDriver {
       donor,
       must(this.#hydratingOperators),
       this.#hydratingJoinIndexes,
+      (source, target) => this.#storage.copyStorage(source, target),
     );
     must(this.#donors).recordCopy(
       `${this.#clientSchemaKey}/${transformationHash}`,
