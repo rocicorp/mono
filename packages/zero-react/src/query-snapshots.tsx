@@ -1,10 +1,20 @@
 import {createContext, type ReactNode} from 'react';
+import {deepEqual, type ReadonlyJSONValue} from '../../shared/src/json.ts';
 import type {QueryResultDetails} from './zero.ts';
 
 /** A query's result as a server render showed it. */
 export type QuerySnapshot = {
   readonly data: unknown;
   readonly type: 'unknown' | 'cached' | 'complete';
+  /** For a named query, so that a client that misses it can say why. */
+  readonly name?: string | undefined;
+  readonly args?: readonly ReadonlyJSONValue[] | undefined;
+};
+
+/** The name and args of a named query. */
+export type QuerySnapshotID = {
+  readonly name: string;
+  readonly args: readonly ReadonlyJSONValue[];
 };
 
 /**
@@ -51,11 +61,20 @@ export class QuerySnapshotCollector {
     this.whenDisconnected = whenDisconnected;
   }
 
-  record(hash: string, data: unknown, details: QueryResultDetails): void {
+  record(
+    hash: string,
+    data: unknown,
+    details: QueryResultDetails,
+    id?: QuerySnapshotID | undefined,
+  ): void {
     if (details.type === 'error') {
       delete this.#snapshots[hash];
     } else {
-      this.#snapshots[hash] = {data, type: details.type};
+      this.#snapshots[hash] = {
+        data,
+        type: details.type,
+        ...(id && {name: id.name, args: id.args}),
+      };
     }
   }
 
@@ -73,6 +92,58 @@ export function serializeQuerySnapshots(snapshots: QuerySnapshots): string {
   return JSON.stringify(snapshots).replace(
     /[<\u2028\u2029]/g,
     c => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`,
+  );
+}
+
+const warnedHashes = new Set<string>();
+let warnedNoSnapshots = false;
+
+/**
+ * Warns that a query hydrated without a snapshot, which makes React discard the
+ * server's HTML for it. Its own message only says that the HTML didn't match.
+ */
+export function warnHydratedWithoutSnapshot(
+  hash: string,
+  id: QuerySnapshotID | undefined,
+  snapshots: QuerySnapshots | undefined,
+): void {
+  if (!snapshots) {
+    if (!warnedNoSnapshots) {
+      warnedNoSnapshots = true;
+      // oxlint-disable-next-line no-console
+      console.warn(
+        'Zero: a query was hydrated with no query snapshots, so it renders ' +
+          'empty until it syncs. To show what the server rendered, pass the ' +
+          "server's snapshots to a QuerySnapshotProvider.",
+      );
+    }
+    return;
+  }
+  if (warnedHashes.has(hash)) {
+    return;
+  }
+  warnedHashes.add(hash);
+  const label = id ? `"${id.name}"` : `with hash ${hash}`;
+  const sameName = id
+    ? Object.values(snapshots).filter(s => s.name === id.name)
+    : [];
+  let reason: string;
+  if (sameName.some(s => deepEqual(s.args, id?.args))) {
+    reason =
+      'The server rendered it with the same args, so the Zero context ' +
+      'probably differs between server and client.';
+  } else if (sameName.length > 0) {
+    reason =
+      `The server rendered it with different args: ` +
+      `${sameName.map(s => JSON.stringify(s.args)).join(', ')}, and the ` +
+      `client with ${JSON.stringify(id?.args)}.`;
+  } else {
+    reason = 'The server did not render it, or it errored there.';
+  }
+  // oxlint-disable-next-line no-console
+  console.warn(
+    `Zero: query ${label} was hydrated with no server snapshot, so React ` +
+      `renders it again on the client. ${reason}`,
   );
 }
 
