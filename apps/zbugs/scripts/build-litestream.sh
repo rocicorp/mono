@@ -4,7 +4,7 @@
 # apps/zbugs/.litestream/bin (gitignored):
 #
 #   litestream-v3  rocicorp/litestream @ zero@v0.0.10        (packages/zero/Dockerfile)
-#   litestream-v5  rocicorp/litestream @ v0.5.18-zero.12     (packages/zero/Dockerfile)
+#   litestream-v5  rocicorp/litestream @ v0.5.18-zero.17     (packages/zero/Dockerfile)
 #
 # The v3 binary is needed even though v5 does all of the backing up: the
 # change-streamer's PurgeLocker branch is gated on `litestream.executable` --
@@ -17,7 +17,7 @@
 set -euo pipefail
 
 LITESTREAM_V3_REF="zero@v0.0.10"
-LITESTREAM_V5_VERSION="0.5.18-zero.12"
+LITESTREAM_V5_VERSION="0.5.18-zero.17"
 LITESTREAM_REPO="https://github.com/rocicorp/litestream.git"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

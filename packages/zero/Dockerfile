@@ -16,9 +16,9 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 	--mount=type=cache,target=/go/pkg \
 	go build -ldflags "-s -w -X 'main.Version=${LITESTREAM_V3_VERSION}' -extldflags '-static'" -tags osusergo,netgo,sqlite_omit_load_extension -o /usr/local/bin/litestream ./cmd/litestream
 
-FROM golang:1.26.8@sha256:3c3e25a4da13fd0478eed2df1eb35a0e667094a7124d3993a6a1d30f71c17e79 AS litestream-v5
+FROM golang:1.26.10@sha256:cfa27959837144bf4649802ba38e59daffd0dd2a7994aa83daaf113285b0f551 AS litestream-v5
 
-ARG LITESTREAM_V5_VERSION=0.5.18-zero.16
+ARG LITESTREAM_V5_VERSION=0.5.18-zero.17
 
 WORKDIR /src/
 RUN git clone --depth 1 --branch v${LITESTREAM_V5_VERSION} https://github.com/rocicorp/litestream.git
