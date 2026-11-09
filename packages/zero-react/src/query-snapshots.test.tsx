@@ -1,7 +1,7 @@
 import {act, Suspense, useEffect, type ReactNode} from 'react';
-import {hydrateRoot, type Root} from 'react-dom/client';
+import {createRoot, hydrateRoot, type Root} from 'react-dom/client';
 import {renderToReadableStream} from 'react-dom/server';
-import {afterEach, describe, expect, test, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {queryInternalsTag, type QueryImpl} from './bindings.ts';
 import {
   QuerySnapshotCollector,
@@ -19,11 +19,15 @@ type Listener = (...args: unknown[]) => void;
 
 let clientCount = 0;
 
-function newQuery(hash: string): Query<string, Schema> {
+function newQuery(
+  hash: string,
+  customQueryID?: {name: string; args: unknown[]},
+): Query<string, Schema> {
   return {
     [queryInternalsTag]: true,
     hash: () => hash,
     format: {singular: false},
+    customQueryID,
   } as unknown as QueryImpl<string, Schema>;
 }
 
@@ -155,6 +159,17 @@ describe('collecting on the server', () => {
     emit(rows, 'complete');
     await html();
     expect(collector.toJSON()).toEqual({q1: {data: rows, type: 'complete'}});
+  });
+
+  test('records the name and args of a named query', async () => {
+    const {emit, collector, html} = await startRender(
+      newQuery('q6', {name: 'issues', args: ['open']}),
+    );
+    emit(rows, 'complete');
+    await html();
+    expect(collector.toJSON()).toEqual({
+      q6: {data: rows, type: 'complete', name: 'issues', args: ['open']},
+    });
   });
 
   test('useQuery waits for the server instead of rendering an empty page', async () => {
@@ -549,5 +564,112 @@ describe('hydrating on the client', () => {
       '<ul data-type="unknown"></ul>',
     );
     expect(text()).toEqual([]);
+  });
+
+  describe('warnings', () => {
+    let warn: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warn.mockRestore();
+    });
+
+    function hydrateMissing(
+      query: Query<string, Schema>,
+      snapshots: QuerySnapshots | undefined,
+    ) {
+      const {zero} = newZero();
+      // A provider even without snapshots: the server renders above share the
+      // context with this one, and one that never finished can leave its
+      // collector behind as the default.
+      return hydrate(
+        <ZeroProvider zero={zero}>
+          <QuerySnapshotProvider snapshots={snapshots}>
+            <List query={query} />
+          </QuerySnapshotProvider>
+        </ZeroProvider>,
+        '<ul data-type="complete"><li>a</li><li>b</li></ul>',
+      );
+    }
+
+    const messages = () => warn.mock.calls.map((c: unknown[]) => String(c[0]));
+
+    test('none for a query that hydrates from its snapshot', () => {
+      hydrateSeeded('w1');
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    test('names a query the server rendered with other args', () => {
+      hydrateMissing(newQuery('w2', {name: 'issues', args: ['closed']}), {
+        other: {data: rows, type: 'complete', name: 'issues', args: ['open']},
+      });
+      expect(messages()).toEqual([
+        expect.stringMatching(
+          /"issues".*no server snapshot.*different args.*\["open"\].*\["closed"\]/s,
+        ),
+      ]);
+    });
+
+    test('points to the context when the args are the same', () => {
+      hydrateMissing(newQuery('w3', {name: 'issues', args: ['open']}), {
+        other: {data: rows, type: 'complete', name: 'issues', args: ['open']},
+      });
+      expect(messages()).toEqual([
+        expect.stringMatching(/"issues".*same args.*context/s),
+      ]);
+    });
+
+    test('says when the server did not render the query', () => {
+      hydrateMissing(newQuery('w4', {name: 'issues', args: []}), {});
+      expect(messages()).toEqual([
+        expect.stringMatching(/"issues".*did not render it, or it errored/s),
+      ]);
+    });
+
+    test('identifies a query with no name by its hash', () => {
+      hydrateMissing(newQuery('w5'), {});
+      expect(messages()).toEqual([expect.stringContaining('w5')]);
+    });
+
+    test('warns once for a query hydrated more than once', () => {
+      const query = newQuery('w6', {name: 'issues', args: []});
+      hydrateMissing(query, {});
+      act(() => root?.unmount());
+      root = undefined;
+      document.body.replaceChildren();
+      hydrateMissing(query, {});
+      expect(warn).toHaveBeenCalledOnce();
+    });
+
+    test('says once when there are no snapshots at all', () => {
+      hydrateMissing(newQuery('w7', {name: 'a', args: []}), undefined);
+      act(() => root?.unmount());
+      root = undefined;
+      document.body.replaceChildren();
+      hydrateMissing(newQuery('w8', {name: 'b', args: []}), undefined);
+      expect(messages()).toEqual([
+        expect.stringMatching(/no query snapshots.*QuerySnapshotProvider/s),
+      ]);
+    });
+
+    test('none for a query rendered on the client without hydrating', () => {
+      const {zero} = newZero();
+      const container = document.createElement('div');
+      document.body.append(container);
+      act(() => {
+        root = createRoot(container);
+        root.render(
+          <ZeroProvider zero={zero}>
+            <QuerySnapshotProvider snapshots={{}}>
+              <List query={newQuery('w9', {name: 'issues', args: []})} />
+            </QuerySnapshotProvider>
+          </ZeroProvider>,
+        );
+      });
+      expect(warn).not.toHaveBeenCalled();
+    });
   });
 });

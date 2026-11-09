@@ -10,6 +10,7 @@ import {
 } from './bindings.ts';
 import {
   QuerySnapshotContext,
+  warnHydratedWithoutSnapshot,
   type QuerySnapshot,
   type QuerySnapshots,
 } from './query-snapshots.tsx';
@@ -236,7 +237,7 @@ export function useQuery<
   const q = useStableQuery(query, zero);
   const {collector, snapshots} = useContext(QuerySnapshotContext);
   const view = q
-    ? viewStore.getView(zero, q, enabled, ttl, snapshots)
+    ? viewStore.getView(zero, q, enabled, ttl, snapshots, !!collector)
     : undefined;
 
   // https://react.dev/reference/react/useSyncExternalStore
@@ -255,7 +256,8 @@ export function useQuery<
     if (view && !view.isReadyForServerRender(collector.whenDisconnected)) {
       suspend(view.waitForServerRender(collector.whenDisconnected));
     }
-    collector.record(asQueryInternals(q).hash(), snapshot[0], snapshot[1]);
+    const qi = asQueryInternals(q);
+    collector.record(qi.hash(), snapshot[0], snapshot[1], qi.customQueryID);
   }
 
   return snapshot;
@@ -329,7 +331,7 @@ export function useSuspenseQuery<
   const q = useStableQuery(query, zero);
   const {collector, snapshots} = useContext(QuerySnapshotContext);
   const view = q
-    ? viewStore.getView(zero, q, enabled, ttl, snapshots)
+    ? viewStore.getView(zero, q, enabled, ttl, snapshots, !!collector)
     : undefined;
 
   // https://react.dev/reference/react/useSyncExternalStore
@@ -360,7 +362,8 @@ export function useSuspenseQuery<
   // After the suspends above, so a render that suspends records nothing and the
   // retry that finishes records what the page actually shows.
   if (collector && q && enabled) {
-    collector.record(asQueryInternals(q).hash(), snapshot[0], snapshot[1]);
+    const qi = asQueryInternals(q);
+    collector.record(qi.hash(), snapshot[0], snapshot[1], qi.customQueryID);
   }
 
   return snapshot;
@@ -593,6 +596,7 @@ export class ViewStore {
     enabled: boolean,
     ttl: TTL,
     snapshots?: QuerySnapshots | undefined,
+    collecting = false,
   ): {
     getSnapshot: () => QueryResult<TReturn>;
     getServerSnapshot: () => QueryResult<TReturn>;
@@ -648,6 +652,12 @@ export class ViewStore {
           }
         },
         snapshots?.[hash],
+        // React asks for the server snapshot on the client only while
+        // hydrating, and a server render has no document.
+        collecting || typeof document === 'undefined'
+          ? undefined
+          : () =>
+              warnHydratedWithoutSnapshot(hash, qi.customQueryID, snapshots),
       );
       if (!byHash) {
         byHash = new Map();
@@ -713,6 +723,7 @@ class ViewWrapper<
   // What the server rendered, which hydration has to match however far the view
   // has moved on: a Suspense boundary can hydrate long after this view is live.
   readonly #serverSnapshot: QueryResult<TReturn> | undefined;
+  #onHydrateWithoutSeed: (() => void) | undefined;
   // While set, the seed stays on screen and the view's results wait here. A
   // view that has not heard from the server can only offer rows at least as old
   // as the seed, even when they are 'cached', so showing them would make the
@@ -753,8 +764,10 @@ class ViewWrapper<
       view: ViewWrapper<TTable, TSchema, TReturn, MD, TContext>,
     ) => void,
     seed?: QuerySnapshot | undefined,
+    onHydrateWithoutSeed?: (() => void) | undefined,
   ) {
     this.#query = query;
+    this.#onHydrateWithoutSeed = seed ? undefined : onHydrateWithoutSeed;
     this.#zero = zero;
     this.#ttl = ttl;
     this.#onDematerialized = onDematerialized;
@@ -924,7 +937,14 @@ class ViewWrapper<
 
   getSnapshot = () => this.#snapshot;
 
-  getServerSnapshot = () => this.#serverSnapshot ?? this.#snapshot;
+  getServerSnapshot = () => {
+    if (this.#onHydrateWithoutSeed) {
+      const warn = this.#onHydrateWithoutSeed;
+      this.#onHydrateWithoutSeed = undefined;
+      warn();
+    }
+    return this.#serverSnapshot ?? this.#snapshot;
+  };
 
   subscribeReactInternals = (internals: () => void): (() => void) => {
     this.#reactInternals.add(internals);
