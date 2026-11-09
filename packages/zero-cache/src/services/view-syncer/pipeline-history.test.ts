@@ -240,7 +240,10 @@ describe('pipeline rows do not depend on history', () => {
     replicator = fakeReplicator(lc, replica);
     const storageDB = new Database(lc, ':memory:');
     storageDB.prepare(CREATE_STORAGE_TABLE).run();
-    storage = new DatabaseStorage(storageDB);
+    // In memory, as a sync worker keeps operator state up to its budget.
+    storage = new DatabaseStorage(storageDB, {
+      maxMemoryBytes: 64 * 1024 * 1024,
+    });
     nextGroup = 0;
   });
 
