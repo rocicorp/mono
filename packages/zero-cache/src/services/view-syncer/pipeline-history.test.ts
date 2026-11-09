@@ -160,6 +160,73 @@ const QUERIES: Record<string, AST> = {
   },
   notExists: {table: 'issues', orderBy: BY_RANK, where: exists('NOT EXISTS')},
   count: {table: 'comments', orderBy: [['id', 'asc']], limit: 4},
+  aggregateCount: {
+    table: 'comments',
+    orderBy: [['id', 'asc']],
+    aggregate: {fn: 'count'},
+  },
+  aggregateExists: {
+    table: 'issues',
+    orderBy: [['id', 'asc']],
+    where: exists('EXISTS'),
+    aggregate: {fn: 'count'},
+  },
+  aggregateSum: {
+    table: 'comments',
+    orderBy: [['id', 'asc']],
+    aggregate: {fn: 'sum', field: 'rank'},
+  },
+  // Removing the extreme makes the operator read the group again.
+  aggregateMin: {
+    table: 'comments',
+    orderBy: [['id', 'asc']],
+    aggregate: {fn: 'min', field: 'rank'},
+  },
+  aggregateLimit: {
+    table: 'comments',
+    orderBy: BY_RANK,
+    limit: 3,
+    aggregate: {fn: 'max', field: 'rank'},
+  },
+  aggregateDistinct: {
+    table: 'comments',
+    orderBy: [['issueID', 'asc']],
+    aggregate: {fn: 'count', distinct: ['issueID']},
+  },
+  groupBy: {
+    table: 'comments',
+    orderBy: [['issueID', 'asc']],
+    groupBy: ['issueID'],
+    aggregate: {fn: 'max', field: 'rank'},
+  },
+  groupByDistinct: {
+    table: 'comments',
+    orderBy: [['issueID', 'asc']],
+    groupBy: ['issueID'],
+  },
+  relatedCount: {
+    table: 'issues',
+    orderBy: BY_RANK,
+    related: [
+      {
+        ...commentsOfIssue,
+        subquery: {table: 'comments', alias: 'commentCount', orderBy: BY_RANK},
+        aggregate: {fn: 'count'},
+      },
+    ],
+  },
+  relatedMin: {
+    table: 'issues',
+    orderBy: BY_RANK,
+    limit: 3,
+    related: [
+      {
+        ...commentsOfIssue,
+        subquery: {table: 'comments', alias: 'minRank', orderBy: BY_RANK},
+        aggregate: {fn: 'min', field: 'rank'},
+      },
+    ],
+  },
 };
 
 /** A scalar's value changing ends a run: the view-syncer rebuilds from there. */
@@ -179,10 +246,15 @@ function mulberry32(seed: number) {
   };
 }
 
-/** The rows a pipeline has delivered: what a client's view would hold. */
+/**
+ * The rows a pipeline has delivered: what a client's view would hold. The CVR
+ * drops a put of a row whose version isn't above the last one it sent, so the
+ * stamps of synthetic aggregate rows have to keep rising.
+ */
 class Delivered {
   readonly #counts = new Map<string, number>();
   readonly #rows = new Map<string, unknown>();
+  readonly #stamps = new Map<string, string>();
 
   apply(changes: Iterable<RowChange | 'yield'>) {
     for (const change of changes) {
@@ -202,7 +274,18 @@ class Delivered {
         if (change.type === ChangeType.ADD) {
           this.#counts.set(key, (this.#counts.get(key) ?? 0) + 1);
         }
-        const {_0_version: _, ...row} = change.row as Record<string, unknown>;
+        const {_0_version: version, ...row} = change.row as Record<
+          string,
+          unknown
+        >;
+        if (change.table.startsWith('aggregate:')) {
+          const last = this.#stamps.get(key);
+          expect(
+            last === undefined || String(version) > last,
+            `stamp of ${key}: ${String(version)} after ${last}`,
+          ).toBe(true);
+          this.#stamps.set(key, String(version));
+        }
         this.#rows.set(key, row);
       }
     }
