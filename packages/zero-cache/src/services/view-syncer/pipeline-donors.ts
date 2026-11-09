@@ -23,6 +23,13 @@ const DEFAULT_MAX_STATE_ENTRIES = 1_000_000;
 const DEFAULT_MAX_WAIT_MS = 250;
 
 /**
+ * How long a hydration in progress can go without making progress and still
+ * be waited for. A live one runs every few milliseconds, between its turns and
+ * writes to its CVR.
+ */
+const DEFAULT_MAX_STALL_MS = 5000;
+
+/**
  * Whether a query outputs synthetic aggregate rows, whose tables are named after
  * its query ID. Matching on the serialized query can only err towards requiring
  * the same query ID, which is always correct.
@@ -125,6 +132,13 @@ export type PipelineStateSource = {
   readonly version: () => string;
   /** Whether the pipeline's state is in the middle of changing. */
   readonly busy: () => boolean;
+  /**
+   * Set for a hydration in progress, which can be waited for but not copied
+   * or compared with until it is offered again once it finishes.
+   */
+  readonly hydrating?: true | undefined;
+  /** For a hydration in progress, when it last made progress. */
+  readonly activeAt?: (() => number) | undefined;
   readonly rowSetSignature: () => bigint | undefined;
   /** In the order they were built, which identical plans share. */
   readonly operators: readonly Pick<Storage, 'scan'>[];
@@ -216,6 +230,7 @@ export class PipelineDonors {
   readonly #lc: LogContext;
   readonly #maxStateEntries: number;
   readonly #maxWaitMs: number;
+  readonly #maxStallMs: number;
   readonly #onResult: ((result: DonorResult) => void) | undefined;
   readonly #sources = new Map<string, Set<PipelineStateSource>>();
   readonly #comparisons = getOrCreateCounter(
@@ -241,18 +256,21 @@ export class PipelineDonors {
     copy = false,
     maxStateEntries = DEFAULT_MAX_STATE_ENTRIES,
     maxWaitMs = DEFAULT_MAX_WAIT_MS,
+    maxStallMs = DEFAULT_MAX_STALL_MS,
     onResult,
   }: {
     lc: LogContext;
     copy?: boolean | undefined;
     maxStateEntries?: number | undefined;
     maxWaitMs?: number | undefined;
+    maxStallMs?: number | undefined;
     onResult?: ((result: DonorResult) => void) | undefined;
   }) {
     this.#lc = lc.withContext('component', 'pipeline-donors');
     this.copy = copy;
     this.#maxStateEntries = maxStateEntries;
     this.#maxWaitMs = maxWaitMs;
+    this.#maxStallMs = maxStallMs;
     this.#onResult = onResult;
   }
 
@@ -277,7 +295,8 @@ export class PipelineDonors {
    * @returns A source to copy a pipeline from: one that can be copied, at the
    * version, that `matches`, and not in the middle of changing. Failing that,
    * how long it is worth waiting for one that is in the middle of changing,
-   * which is never more than half of what it saves.
+   * which is never more than half of what it saves, or Infinity for a
+   * hydration of the query in progress at the version.
    */
   findDonor(
     key: string,
@@ -288,6 +307,17 @@ export class PipelineDonors {
     for (const source of this.#sources.get(key) ?? []) {
       const {copyable} = source;
       if (!copyable || source.version() !== version || !matches(source)) {
+        continue;
+      }
+      if (source.hydrating) {
+        // It started first and would share the worker with this hydration,
+        // so it finishes no later than this one would, unless it has stopped.
+        if (
+          performance.now() - (source.activeAt?.() ?? 0) <=
+          this.#maxStallMs
+        ) {
+          waitMs = Infinity;
+        }
         continue;
       }
       const rows = source.busy() ? 'pending' : copyable.rows();
@@ -365,7 +395,7 @@ export class PipelineDonors {
     const version = target.version();
     let outcome: DonorResult['outcome'] = 'no-donor';
     for (const donor of this.#sources.get(key) ?? []) {
-      if (donor === target) {
+      if (donor === target || donor.hydrating) {
         continue;
       }
       if (donor.version() !== version) {

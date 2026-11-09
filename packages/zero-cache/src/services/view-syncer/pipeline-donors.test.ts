@@ -504,6 +504,120 @@ describe('clone shadow', () => {
         expect(changes.filter(c => c !== 'yield')).toHaveLength(5);
       });
 
+      describe('a hydration in progress', () => {
+        // Yields at every chance, so that other hydrations can start meanwhile.
+        const yielding: Timer = {
+          elapsedLap: () => 1000,
+          totalElapsed: () => 1000,
+        };
+
+        /** A hydration stepped by hand, as a view-syncer would interleave it. */
+        function start(driver: PipelineDriver, t: Timer = timer) {
+          const changes: (RowChange | 'yield')[] = [];
+          const it = driver
+            .addQuery('a', 'q-a', ALL, t)
+            [Symbol.iterator]() as Generator<RowChange | 'yield'>;
+          let done = false;
+          const toYield = () => {
+            for (let r = it.next(); !r.done; r = it.next()) {
+              changes.push(r.value);
+              if (r.value === 'yield') {
+                return true;
+              }
+            }
+            done = true;
+            return false;
+          };
+          const finish = () => {
+            while (toYield()) {
+              // Runs to the end.
+            }
+            return must(trackedRows.get(driver)).apply(changes);
+          };
+          return {
+            toYield,
+            finish,
+            abandon: () => it.return(undefined),
+            done: () => done,
+          };
+        }
+
+        test('is waited for and copied', () => {
+          shadow = copying();
+          const first = start(newDriver(), yielding);
+          expect(first.toYield()).toBe(true);
+          const second = start(newDriver());
+          // Waiting, where it would otherwise hydrate without yielding.
+          expect(second.toYield()).toBe(true);
+          expect(second.toYield()).toBe(true);
+          first.finish();
+          const rows = second.finish();
+          expect(results.at(-1)?.outcome).toBe('copied');
+          expect(rows.filter(c => c !== 'yield')).toHaveLength(4);
+        });
+
+        test('is waited for by every group that starts meanwhile', () => {
+          shadow = copying();
+          const first = start(newDriver(), yielding);
+          first.toYield();
+          const second = start(newDriver());
+          const third = start(newDriver());
+          expect(second.toYield()).toBe(true);
+          expect(third.toYield()).toBe(true);
+          first.finish();
+          second.finish();
+          expect(results.at(-1)?.outcome).toBe('copied');
+          third.finish();
+          expect(results.at(-1)?.outcome).toBe('copied');
+        });
+
+        test('that is abandoned leaves the waiting group to hydrate', () => {
+          shadow = copying();
+          const first = start(newDriver(), yielding);
+          first.toYield();
+          const second = start(newDriver());
+          expect(second.toYield()).toBe(true);
+          first.abandon();
+          const rows = second.finish();
+          expect(results.at(-1)?.outcome).toBe('no-donor');
+          expect(rows.filter(c => c !== 'yield')).toHaveLength(4);
+        });
+
+        test('that stops making progress is no longer waited for', () => {
+          shadow = new PipelineDonors({
+            lc,
+            copy: true,
+            maxStallMs: 20,
+            onResult: r => results.push(r),
+          });
+          // Never resumed, as by a view-syncer that stopped without ending it.
+          start(newDriver(), yielding).toYield();
+          const rows = hydrate(newDriver(), 'a', ALL);
+          expect(results.at(-1)?.outcome).toBe('no-donor');
+          expect(results.at(-1)?.waitedMs).toBeGreaterThan(0);
+          expect(rows.filter(c => c !== 'yield')).toHaveLength(4);
+        });
+
+        test('at another version is not waited for', () => {
+          shadow = copying();
+          const first = start(newDriver(), yielding);
+          first.toYield();
+          commit(messages.insert('issues', {id: '5', rank: 50}));
+          const second = start(newDriver());
+          expect(second.toYield()).toBe(false);
+          expect(second.done()).toBe(true);
+          first.finish();
+        });
+
+        test('is not compared with in shadow mode', () => {
+          const first = start(newDriver(), yielding);
+          first.toYield();
+          hydrate(newDriver(), 'a', ALL);
+          expect(results.at(-1)?.outcome).toBe('no-donor');
+          first.finish();
+        });
+      });
+
       test('a copy passes on what the hydration it replaced took', () => {
         shadow = copying();
         const first = newDriver();
