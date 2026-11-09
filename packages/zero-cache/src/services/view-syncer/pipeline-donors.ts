@@ -19,6 +19,9 @@ import {getOrCreateCounter} from '../../observability/metrics.ts';
 /** Past this, comparing one pipeline would hold up the worker too long. */
 const DEFAULT_MAX_STATE_ENTRIES = 1_000_000;
 
+/** The longest a hydration waits for a donor that is about to be ready. */
+const DEFAULT_MAX_WAIT_MS = 250;
+
 /**
  * Whether a query outputs synthetic aggregate rows, whose tables are named after
  * its query ID. Matching on the serialized query can only err towards requiring
@@ -134,12 +137,27 @@ export type CopyableState = {
   /** The query with its scalar subqueries resolved to their values. */
   readonly query: AST;
   readonly joinIndexes: readonly JoinIndex[];
+  /** What hydrating the query took, which a copy of it saves. */
+  readonly hydrationTimeMs: number;
   /**
-   * The rows the pipeline has output, with how many times it output each, or
-   * undefined if they can't be given consistently with the pipeline right now.
+   * The rows the pipeline has output, with how many times it output each.
+   * 'pending' while they can't be given consistently with the pipeline but
+   * soon can, and undefined if they can't be.
    */
-  readonly rows: () => readonly OutputRow[] | undefined;
+  readonly rows: () => readonly OutputRow[] | 'pending' | undefined;
 };
+
+/**
+ * A donor to copy from, or how long it is worth waiting for one that is about
+ * to be ready.
+ */
+export type DonorSearch =
+  | {
+      readonly source: PipelineStateSource;
+      readonly rows: readonly OutputRow[];
+    }
+  | {readonly waitMs: number}
+  | undefined;
 
 export type OutputRow = {
   readonly table: string;
@@ -162,6 +180,8 @@ export type DonorResult = {
     | 'too-large';
   readonly stateEntries: number;
   readonly compareTimeMs: number;
+  /** How long the hydration waited for a donor to be ready. */
+  readonly waitedMs?: number | undefined;
   /** Entries only the donor holds, which advancing can leave behind. */
   readonly extraDonorEntries?: number | undefined;
   /** The first entry that differs, for 'state-differ'. */
@@ -195,6 +215,7 @@ export type StateDifference = {
 export class PipelineDonors {
   readonly #lc: LogContext;
   readonly #maxStateEntries: number;
+  readonly #maxWaitMs: number;
   readonly #onResult: ((result: DonorResult) => void) | undefined;
   readonly #sources = new Map<string, Set<PipelineStateSource>>();
   readonly #comparisons = getOrCreateCounter(
@@ -207,6 +228,11 @@ export class PipelineDonors {
     'hydration-clone-matched-hydration-ms',
     'Time spent hydrating queries whose result matched a possible copy',
   );
+  readonly #waitMs = getOrCreateCounter(
+    'sync',
+    'hydration-clone-wait-ms',
+    'Time hydrations spent waiting for a donor, by whether they then copied',
+  );
 
   readonly copy: boolean;
 
@@ -214,16 +240,19 @@ export class PipelineDonors {
     lc,
     copy = false,
     maxStateEntries = DEFAULT_MAX_STATE_ENTRIES,
+    maxWaitMs = DEFAULT_MAX_WAIT_MS,
     onResult,
   }: {
     lc: LogContext;
     copy?: boolean | undefined;
     maxStateEntries?: number | undefined;
+    maxWaitMs?: number | undefined;
     onResult?: ((result: DonorResult) => void) | undefined;
   }) {
     this.#lc = lc.withContext('component', 'pipeline-donors');
     this.copy = copy;
     this.#maxStateEntries = maxStateEntries;
+    this.#maxWaitMs = maxWaitMs;
     this.#onResult = onResult;
   }
 
@@ -246,30 +275,50 @@ export class PipelineDonors {
 
   /**
    * @returns A source to copy a pipeline from: one that can be copied, at the
-   * version, and not in the middle of changing.
+   * version, that `matches`, and not in the middle of changing. Failing that,
+   * how long it is worth waiting for one that is in the middle of changing,
+   * which is never more than half of what it saves.
    */
   findDonor(
     key: string,
     version: string,
-  ): {source: PipelineStateSource; rows: readonly OutputRow[]} | undefined {
+    matches: (source: PipelineStateSource) => boolean,
+  ): DonorSearch {
+    let waitMs = 0;
     for (const source of this.#sources.get(key) ?? []) {
-      if (source.copyable && source.version() === version && !source.busy()) {
-        const rows = source.copyable.rows();
-        if (rows) {
-          return {source, rows};
-        }
+      const {copyable} = source;
+      if (!copyable || source.version() !== version || !matches(source)) {
+        continue;
+      }
+      const rows = source.busy() ? 'pending' : copyable.rows();
+      if (rows === 'pending') {
+        waitMs = Math.max(
+          waitMs,
+          Math.min(this.#maxWaitMs, copyable.hydrationTimeMs / 2),
+        );
+      } else if (rows) {
+        return {source, rows};
       }
     }
-    return undefined;
+    return waitMs > 0 ? {waitMs} : undefined;
   }
 
   /** Records a hydration that was replaced by a copy. */
-  recordCopy(key: string, stateEntries: number, copyTimeMs: number): void {
+  recordCopy(
+    key: string,
+    stateEntries: number,
+    copyTimeMs: number,
+    waitedMs: number,
+  ): void {
     this.#comparisons.add(1, {outcome: 'copied'});
+    if (waitedMs > 0) {
+      this.#waitMs.add(waitedMs, {copied: true});
+    }
     const result = {
       outcome: 'copied',
       stateEntries,
       compareTimeMs: copyTimeMs,
+      waitedMs,
     } as const;
     this.#lc.debug?.('hydration copied', {key, ...result});
     this.#onResult?.(result);
@@ -279,12 +328,20 @@ export class PipelineDonors {
     key: string,
     target: PipelineStateSource,
     hydrationTimeMs: number,
+    waitedMs = 0,
   ): DonorResult {
     const start = performance.now();
     const compared = this.#compare(key, target);
     const {outcome} = compared;
-    const result = {...compared, compareTimeMs: performance.now() - start};
+    const result = {
+      ...compared,
+      compareTimeMs: performance.now() - start,
+      ...(waitedMs > 0 && {waitedMs}),
+    };
     this.#comparisons.add(1, {outcome});
+    if (waitedMs > 0) {
+      this.#waitMs.add(waitedMs, {copied: false});
+    }
     if (outcome === 'match') {
       this.#matchedHydrationMs.add(hydrationTimeMs);
     }
