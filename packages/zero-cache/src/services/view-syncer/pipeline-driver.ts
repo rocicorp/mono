@@ -567,6 +567,10 @@ export class PipelineDriver {
   #donorRows:
     | ((queryID: string) => readonly OutputRow[] | 'pending' | undefined)
     | undefined;
+  /** Stops offering the hydration in progress to groups that would wait for it. */
+  #stopOfferingHydration: (() => void) | undefined;
+  /** When the hydration in progress last made progress. */
+  #hydrationActiveAt = 0;
   /** The join indexes created so far by the hydration in progress. */
   #hydratingJoinIndexes: JoinIndex[] = [];
   readonly #lc: LogContext;
@@ -875,6 +879,7 @@ export class PipelineDriver {
     this.#aggregateRows.clear();
     this.#rowSetSignatures.clear();
     this.#changedRowSetSignatures.clear();
+    this.#stopOfferingHydration?.();
     this.#storage.destroy();
     this.#snapshotter.destroy();
   }
@@ -1315,13 +1320,23 @@ export class PipelineDriver {
       let donor = findDonor();
       if (donor && 'waitMs' in donor) {
         const waitStart = performance.now();
-        // A donor that is advancing, or whose rows are being loaded or
-        // written, is usually ready within a few turns of the worker. Its
-        // turns come while this one yields.
-        const deadline = waitStart + donor.waitMs;
+        // A donor that is hydrating or advancing, or whose rows are being
+        // loaded or written, is usually ready within a few turns of the
+        // worker. Its turns come while this one yields.
+        let deadline = waitStart + donor.waitMs;
         while (donor && 'waitMs' in donor && performance.now() < deadline) {
           yield 'yield';
           donor = findDonor();
+          // Once a hydration waited for without a limit finishes, its rows
+          // are waited for like any donor's.
+          if (
+            deadline === Infinity &&
+            donor &&
+            'waitMs' in donor &&
+            donor.waitMs !== Infinity
+          ) {
+            deadline = performance.now() + donor.waitMs;
+          }
         }
         waitedMs = performance.now() - waitStart;
       }
@@ -1341,6 +1356,26 @@ export class PipelineDriver {
         }
         copied = true;
         copiedHydrationTimeMs = must(donor.source.copyable).hydrationTimeMs;
+      } else if (donorKey !== undefined && this.#donors?.copy) {
+        // Groups that start the same query meanwhile wait for this hydration
+        // and copy it, rather than hydrating alongside it. A hydration only
+        // registers once it has stopped waiting, so none waits for itself.
+        this.#hydrationActiveAt = performance.now();
+        this.#stopOfferingHydration = this.#donors.register(donorKey, {
+          version: () => this.currentVersion(),
+          busy: () => true,
+          hydrating: true,
+          activeAt: () => this.#hydrationActiveAt,
+          rowSetSignature: () => undefined,
+          operators: must(this.#hydratingOperators),
+          copyable: {
+            queryID,
+            query: resolvedQuery,
+            joinIndexes: this.#hydratingJoinIndexes,
+            hydrationTimeMs: 0,
+            rows: () => 'pending',
+          },
+        });
       }
 
       // The client runs scalar gates as plain EXISTS, so the companions are
@@ -1445,6 +1480,7 @@ export class PipelineDriver {
       });
       this.#abandoned.delete(queryID);
       hydrationFinished = true;
+      this.#stopOfferingHydration?.();
       this.#offerAsDonor(
         queryID,
         transformationHash,
@@ -1526,6 +1562,8 @@ export class PipelineDriver {
         this.#rowSetSignatures.delete(queryID);
         this.#changedRowSetSignatures.delete(queryID);
       }
+      this.#stopOfferingHydration?.();
+      this.#stopOfferingHydration = undefined;
       this.#hydrateContext = null;
       this.#hydratingOperators = undefined;
     }
@@ -2826,6 +2864,7 @@ export class PipelineDriver {
 
   #shouldYield(): boolean {
     if (this.#hydrateContext) {
+      this.#hydrationActiveAt = performance.now();
       return this.#hydrateContext.timer.elapsedLap() > this.#yieldThresholdMs();
     }
     if (this.#advanceContext) {
