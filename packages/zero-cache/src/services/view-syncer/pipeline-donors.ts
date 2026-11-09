@@ -5,12 +5,13 @@ import {
   type ReadonlyJSONValue,
 } from '../../../../shared/src/json.ts';
 import {must} from '../../../../shared/src/must.ts';
-import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {AST, Condition} from '../../../../zero-protocol/src/ast.ts';
 import {
   normalizeClientSchema,
   type ClientSchema,
 } from '../../../../zero-protocol/src/client-schema.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
+import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.ts';
 import type {JoinIndex} from '../../../../zql/src/ivm/join-index.ts';
 import type {Storage} from '../../../../zql/src/ivm/operator.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
@@ -67,9 +68,54 @@ export function copyPipelineState(
   return entries;
 }
 
-/** Pipelines can only be alike if their row keys are, which this determines. */
+/** Identifies a client schema, for telemetry on which pipelines are alike. */
 export function clientSchemaKey(schema: ClientSchema): string {
   return h64(JSON.stringify(normalizeClientSchema(schema))).toString(36);
+}
+
+/**
+ * Identifies how a query's rows are keyed, which is all that a client schema
+ * changes about its pipeline: the columns come from the replica. Clients whose
+ * schemas differ only in other tables can share the query's pipelines.
+ *
+ * @param query The query before its scalar subqueries were resolved, since
+ *        the rows behind them are synced too.
+ */
+export function rowKeysKey(
+  query: AST,
+  primaryKeys: ReadonlyMap<string, PrimaryKey>,
+): string {
+  const tables = [...tablesOf(query, new Set())].toSorted();
+  return h64(
+    JSON.stringify(tables.map(t => [t, primaryKeys.get(t) ?? null])),
+  ).toString(36);
+}
+
+function tablesOf(query: AST, tables: Set<string>): Set<string> {
+  tables.add(query.table);
+  for (const {subquery} of query.related ?? []) {
+    tablesOf(subquery, tables);
+  }
+  if (query.where) {
+    conditionTables(query.where, tables);
+  }
+  return tables;
+}
+
+function conditionTables(condition: Condition, tables: Set<string>) {
+  switch (condition.type) {
+    case 'and':
+    case 'or':
+      for (const c of condition.conditions) {
+        conditionTables(c, tables);
+      }
+      break;
+    case 'correlatedSubquery':
+      tablesOf(condition.related.subquery, tables);
+      break;
+    case 'simple':
+      break;
+  }
 }
 
 export type PipelineStateSource = {
@@ -133,7 +179,7 @@ export type StateDifference = {
  * The pipelines of a sync worker that other client groups could take a hydration
  * from, because hydrating a query another group already has live repeats work.
  *
- * A pipeline's identity is `(clientSchemaKey, transformationHash)`, and it can
+ * A pipeline's identity is `(rowKeysKey, transformationHash)`, and it can
  * only donate at the version the new one hydrates at. With `copy`, a matching
  * donor's state and rows replace the hydration. Without it, each group hydrates
  * and the result is compared with what would have been copied, which measures

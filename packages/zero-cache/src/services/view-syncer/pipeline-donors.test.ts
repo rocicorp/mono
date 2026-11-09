@@ -50,6 +50,14 @@ const CLIENT_SCHEMA: ClientSchema = {
   },
 };
 
+// Keys issues by a unique column other than the replica's primary key.
+const RANK_KEYED: ClientSchema = {
+  tables: {
+    ...CLIENT_SCHEMA.tables,
+    issues: {...CLIENT_SCHEMA.tables.issues, primaryKey: ['rank']},
+  },
+};
+
 const ALL: AST = {table: 'issues', orderBy: [['id', 'asc']]};
 const TOP_2: AST = {
   table: 'issues',
@@ -93,7 +101,8 @@ describe('clone shadow', () => {
     replica.exec(`
       CREATE TABLE "this_app.permissions" (lock INT PRIMARY KEY, permissions JSON, hash TEXT, _0_version TEXT NOT NULL);
       INSERT INTO "this_app.permissions" (lock, permissions, hash, _0_version) VALUES (1, NULL, NULL, '01');
-      CREATE TABLE issues (id TEXT PRIMARY KEY, rank INTEGER, _0_version TEXT NOT NULL);
+      CREATE TABLE issues (id TEXT PRIMARY KEY, rank "INTEGER|NOT_NULL", _0_version TEXT NOT NULL);
+      CREATE UNIQUE INDEX issues_rank ON issues (rank);
       CREATE TABLE comments (id TEXT PRIMARY KEY, issueID TEXT, _0_version TEXT NOT NULL);
       INSERT INTO issues VALUES ('1', 10, '01'), ('2', 20, '01'), ('3', 30, '01'), ('4', 40, '01');
       INSERT INTO comments VALUES ('c1', '1', '01'), ('c2', '3', '01');
@@ -195,12 +204,17 @@ describe('clone shadow', () => {
     expect(hydrated(newDriver(), 'b', ALL)).toBe('no-donor');
   });
 
-  test('a different client schema is not a donor', () => {
+  test('a client schema that differs in what the query does not read can donate', () => {
     hydrate(newDriver(), 'a', ALL);
     const other: ClientSchema = {
       tables: {issues: {columns: {id: {type: 'string'}}, primaryKey: ['id']}},
     };
-    expect(hydrated(newDriver(other), 'a', ALL)).toBe('no-donor');
+    expect(hydrated(newDriver(other), 'a', ALL)).toBe('match');
+  });
+
+  test('a client schema that keys a table the query reads differently is not a donor', () => {
+    hydrate(newDriver(), 'a', ALL);
+    expect(hydrated(newDriver(RANK_KEYED), 'a', ALL)).toBe('no-donor');
   });
 
   test('a donor at another version is reported as a version mismatch', () => {
@@ -565,6 +579,13 @@ describe('clone shadow', () => {
           .sort();
       expect(tablesOf(cloneRows)).toEqual(tablesOf(donorRows));
       expect(tablesOf(cloneRows)).toContain('issues:{"id":"1"}');
+    });
+
+    test('the tables behind a scalar subquery are part of the key', () => {
+      shadow = copying();
+      hydrate(newDriver(), 'a', SCALAR);
+      hydrate(newDriver(RANK_KEYED), 'a', SCALAR);
+      expect(results.at(-1)?.outcome).toBe('no-donor');
     });
 
     test('a copied scalar still resets when its value changes', () => {
