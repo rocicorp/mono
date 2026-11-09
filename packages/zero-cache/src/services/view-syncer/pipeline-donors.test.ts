@@ -24,7 +24,7 @@ import {
   type DonorResult,
   type PipelineStateSource,
 } from './pipeline-donors.ts';
-import {PipelineDriver, type Timer} from './pipeline-driver.ts';
+import {PipelineDriver, type RowChange, type Timer} from './pipeline-driver.ts';
 import {ResetPipelinesSignal, Snapshotter} from './snapshotter.ts';
 
 const SHARD = {appID: 'this_app', shardNum: 2};
@@ -373,12 +373,126 @@ describe('clone shadow', () => {
       }
     });
 
-    test('does not copy a query with an aggregate', () => {
-      shadow = copying();
-      const count = {...ALL, aggregate: {fn: 'count'}} as unknown as AST;
-      hydrate(newDriver(), 'a', count);
-      hydrate(newDriver(), 'a', count);
-      expect(results.at(-1)?.outcome).not.toBe('copied');
+    describe('aggregates', () => {
+      const COUNT: AST = {
+        table: 'comments',
+        orderBy: [['id', 'asc']],
+        aggregate: {fn: 'count'},
+      };
+      // A filter the source doesn't apply, so the count reads the rows.
+      const EXISTS_COUNT: AST = {
+        table: 'issues',
+        orderBy: [['id', 'asc']],
+        where: WITH_COMMENTS.where,
+        aggregate: {fn: 'count'},
+      };
+      const BY_ISSUE: AST = {
+        table: 'comments',
+        orderBy: [['issueID', 'asc']],
+        groupBy: ['issueID'],
+        aggregate: {fn: 'count'},
+      };
+      const COMMENT_COUNTS: AST = {
+        table: 'issues',
+        orderBy: [['id', 'asc']],
+        related: [
+          {
+            correlation: {parentField: ['id'], childField: ['issueID']},
+            subquery: {
+              table: 'comments',
+              alias: 'commentCount',
+              orderBy: [['id', 'asc']],
+            },
+            aggregate: {fn: 'count'},
+          },
+        ],
+      };
+
+      // Stamps differ between drivers, so only the contents are compared.
+      const contents = (changes: Iterable<RowChange | 'yield'>) =>
+        [...changes]
+          .filter(c => c !== 'yield')
+          .map(c => {
+            const {_0_version: _, ...row} = (c.row ?? {}) as Record<
+              string,
+              unknown
+            >;
+            return JSON.stringify([c.type, c.table, c.rowKey, row]);
+          })
+          .sort();
+
+      test.each([
+        ['a count', COUNT],
+        ['a count that reads rows', EXISTS_COUNT],
+        ['a grouped count', BY_ISSUE],
+        ['a relationship count', COMMENT_COUNTS],
+      ])('copies %s', (_name, ast) => {
+        shadow = copying();
+        const donorRows = hydrate(newDriver(), 'a', ast);
+        const cloneRows = hydrate(newDriver(), 'a', ast);
+        expect(results.at(-1)?.outcome).toBe('copied');
+        expect(contents(cloneRows)).toEqual(contents(donorRows));
+      });
+
+      test.each([
+        ['a count', COUNT],
+        ['a count that reads rows', EXISTS_COUNT],
+        ['a grouped count', BY_ISSUE],
+        ['a relationship count', COMMENT_COUNTS],
+      ])('a copy of %s keeps up with writes', (_name, ast) => {
+        shadow = copying();
+        const donor = newDriver();
+        hydrate(donor, 'a', ast);
+        const clone = newDriver();
+        hydrate(clone, 'a', ast);
+        expect(results.at(-1)?.outcome).toBe('copied');
+
+        // A new group, a new parent, and a change to an existing one.
+        commit(
+          messages.insert('comments', {id: 'c3', issueID: '2'}),
+          messages.insert('comments', {id: 'c4', issueID: '1'}),
+          messages.insert('issues', {id: '5', rank: 50}),
+        );
+        const fromClone = advance(clone);
+        expect(contents(fromClone)).toEqual(contents(advance(donor)));
+        expect(contents(fromClone)).not.toEqual([]);
+      });
+
+      test('a copied aggregate row is stamped above what the copy sent', () => {
+        shadow = copying();
+        hydrate(newDriver(), 'a', COUNT);
+        const clone = newDriver();
+        const copied = hydrate(clone, 'a', COUNT).find(c => c !== 'yield');
+        expect(results.at(-1)?.outcome).toBe('copied');
+        commit(messages.insert('comments', {id: 'c3', issueID: '2'}));
+        const edited = advance(clone).filter(c => c !== 'yield');
+        const version = (c: RowChange | undefined) =>
+          String((c?.row as Record<string, unknown>)._0_version);
+        expect(edited).toHaveLength(1);
+        expect(version(edited[0]) > version(copied)).toBe(true);
+      });
+
+      test('a copied aggregate row can be read for catch-up', () => {
+        shadow = copying();
+        hydrate(newDriver(), 'a', COUNT);
+        const clone = newDriver();
+        const row = must(hydrate(clone, 'a', COUNT).find(c => c !== 'yield'));
+        expect(results.at(-1)?.outcome).toBe('copied');
+        expect(clone.getRow(row.table, row.rowKey as never)).toEqual(row.row);
+      });
+
+      test('does not copy an aggregate of another query ID', () => {
+        shadow = copying();
+        hydrate(newDriver(), 'a', COUNT);
+        const clone = newDriver();
+        const rows = must(trackedRows.get(clone)).apply(
+          clone.addQuery('a', 'q-other', COUNT, timer),
+        );
+        expect(results.at(-1)?.outcome).not.toBe('copied');
+        expect(rows.filter(c => c !== 'yield').map(c => c.table)).toEqual([
+          'aggregate:q-other',
+        ]);
+      });
     });
 
     test('hydrates normally when the donor cannot provide its rows', () => {

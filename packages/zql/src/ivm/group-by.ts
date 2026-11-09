@@ -111,6 +111,14 @@ export function groupValues(
 }
 
 /**
+ * Set by the first fetch. Until then nothing downstream has the rows, so a
+ * push has nothing to update. It is kept in storage, which no group key can be
+ * empty in, so that the storage is all of the operator's state.
+ */
+const HYDRATED_KEY = '';
+const HYDRATED: AggState = {count: 0, sum: 0, nonNull: 0, extreme: null};
+
+/**
  * GroupBy groups its input by `columns` and reduces each group with an
  * aggregate function, as `GROUP BY` does: one row per combination of the
  * columns' values, `{...columns, _0_key, _0_value}`, plus the sum and count
@@ -138,8 +146,7 @@ export class GroupBy implements Operator {
   // them drops rows. It can count the groups without the rows being read
   // (see fetch).
   readonly #groupSource: SourceInput | undefined;
-  // Set by the first fetch. Until then nothing downstream has the rows, so a
-  // push has nothing to update.
+  // Whether HYDRATED_KEY is set, once it is.
   #hydrated = false;
 
   /**
@@ -219,6 +226,7 @@ export class GroupBy implements Operator {
       req.constraint === undefined && req.start === undefined && !req.reverse,
       'GroupBy: fetch takes no constraint, start or reverse',
     );
+    this.#storage.set(HYDRATED_KEY, HYDRATED);
     this.#hydrated = true;
     const groups = this.#groupSource?.groupCounts?.(this.#columns);
     if (groups === undefined) {
@@ -259,6 +267,7 @@ export class GroupBy implements Operator {
   }
 
   push(change: Change): Stream<'yield'> {
+    this.#hydrated ||= this.#storage.get(HYDRATED_KEY) !== undefined;
     if (!this.#hydrated) {
       return emptyArray;
     }

@@ -19,9 +19,9 @@ import {getOrCreateCounter} from '../../observability/metrics.ts';
 const DEFAULT_MAX_STATE_ENTRIES = 1_000_000;
 
 /**
- * Aggregates keep state outside operator storage and synthesize their rows, so
- * they can't be copied. Matching on the serialized query can only err towards
- * hydrating, which is always correct.
+ * Whether a query outputs synthetic aggregate rows, whose tables are named after
+ * its query ID. Matching on the serialized query can only err towards requiring
+ * the same query ID, which is always correct.
  */
 export function usesAggregates(query: AST): boolean {
   const json = JSON.stringify(query);
@@ -84,6 +84,7 @@ export type PipelineStateSource = {
 };
 
 export type CopyableState = {
+  readonly queryID: string;
   /** The query with its scalar subqueries resolved to their values. */
   readonly query: AST;
   readonly joinIndexes: readonly JoinIndex[];
@@ -98,6 +99,8 @@ export type OutputRow = {
   readonly table: string;
   readonly rowKey: Row;
   readonly count: number;
+  /** The contents of a synthetic aggregate row, which isn't in the replica. */
+  readonly row?: Row | undefined;
 };
 
 export type DonorResult = {

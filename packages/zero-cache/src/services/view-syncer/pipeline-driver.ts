@@ -1299,7 +1299,12 @@ export class PipelineDriver {
         push: change => this.#streamPushed(queryID, schema, change),
       });
 
-      const donor = this.#findDonor(transformationHash, query, resolvedQuery);
+      const donor = this.#findDonor(
+        transformationHash,
+        queryID,
+        query,
+        resolvedQuery,
+      );
       if (donor) {
         for (const change of this.#copyFrom(
           donor.source,
@@ -1423,7 +1428,7 @@ export class PipelineDriver {
         transformationHash,
         hydrationTimeMs,
         copied,
-        !usesAggregates(query) ? resolvedQuery : undefined,
+        resolvedQuery,
       );
       this.#queryStats?.recordHydration(
         {queryName, shape},
@@ -1503,8 +1508,13 @@ export class PipelineDriver {
   }
 
   /** @returns A pipeline to copy the query being hydrated from, if any. */
-  #findDonor(transformationHash: string, query: AST, resolvedQuery: AST) {
-    if (!this.#donors?.copy || usesAggregates(query)) {
+  #findDonor(
+    transformationHash: string,
+    queryID: string,
+    query: AST,
+    resolvedQuery: AST,
+  ) {
+    if (!this.#donors?.copy) {
       return undefined;
     }
     const donor = this.#donors.findDonor(
@@ -1517,6 +1527,8 @@ export class PipelineDriver {
     // wrong copy is not.
     return donor &&
       deepEqual(donor.source.copyable?.query, resolvedQuery) &&
+      // Aggregate rows belong to tables named after the query ID.
+      (!usesAggregates(query) || donor.source.copyable?.queryID === queryID) &&
       donor.source.operators.length === this.#hydratingOperators?.length &&
       donor.source.copyable?.joinIndexes.length ===
         this.#hydratingJoinIndexes.length
@@ -1550,7 +1562,27 @@ export class PipelineDriver {
       performance.now() - start,
     );
 
-    for (const {table, rowKey, count} of rows) {
+    const streamer = must(this.#streamer);
+    for (const {table, rowKey, count, row: aggregateRow} of rows) {
+      if (aggregateRow) {
+        // Stamped again, as this driver would have stamped its own output, so
+        // that its later stamps of the row come after these.
+        for (let i = 0; i < count; i++) {
+          const row = streamer.stampCopiedAggregateRow(
+            table,
+            rowKey as RowKey,
+            aggregateRow,
+          );
+          yield {
+            type: ChangeType.ADD,
+            queryID,
+            table,
+            rowKey,
+            row,
+          } as RowChange;
+        }
+        continue;
+      }
       tables.add(table);
       this.#getSource(table);
       const row = withMinRowVersion(
@@ -1587,7 +1619,24 @@ export class PipelineDriver {
         });
       }
     }
-    return signature === this.#rowSetSignatures.get(queryID) ? rows : undefined;
+    if (signature !== this.#rowSetSignatures.get(queryID)) {
+      return undefined;
+    }
+    // Synthetic aggregate rows aren't in the replica, so they go with their
+    // contents.
+    const withContents: OutputRow[] = [];
+    for (const r of rows) {
+      if (isAggregateTableName(r.table)) {
+        const row = this.getRow(r.table, r.rowKey as RowKey);
+        if (!row) {
+          return undefined;
+        }
+        withContents.push({...r, row});
+      } else {
+        withContents.push(r);
+      }
+    }
+    return withContents;
   }
 
   /**
@@ -1600,7 +1649,7 @@ export class PipelineDriver {
     transformationHash: string,
     hydrationTimeMs: number,
     copied: boolean,
-    copyableQuery: AST | undefined,
+    copyableQuery: AST,
   ) {
     const shadow = this.#donors;
     const pipeline = this.#pipelines.get(queryID);
@@ -1620,9 +1669,10 @@ export class PipelineDriver {
         this.#advanceContext !== null || this.#costBasedAdvanceIncomplete,
       rowSetSignature: () => this.#rowSetSignatures.get(queryID),
       operators: must(this.#hydratingOperators),
-      ...(shadow.copy && copyableQuery
+      ...(shadow.copy
         ? {
             copyable: {
+              queryID,
               query: copyableQuery,
               joinIndexes: this.#hydratingJoinIndexes,
               rows: () => this.#verifiedDonorRows(queryID),
@@ -3126,6 +3176,12 @@ class Streamer {
         }
       }
     }
+  }
+
+  /** Stamps an aggregate row that another driver output, for this one's output. */
+  stampCopiedAggregateRow(table: string, rowKey: RowKey, row: Row): Row {
+    const {[ZERO_VERSION_COLUMN_NAME]: _, ...contents} = row;
+    return this.#stampAggregateRow(table, rowKey, contents, ChangeType.ADD);
   }
 
   /**
