@@ -105,6 +105,60 @@ describe('SyncerAssigner affinity', () => {
     expect(assigner.assign('after', 'popular').worker).toBe(worker);
   });
 
+  /** Places groups for `key` until one lands off `worker`, and returns where. */
+  function overflow(assigner: SyncerAssigner, key: string, worker: number) {
+    for (let i = 0; i < 50; i++) {
+      const placed = assigner.assign(`${key}-${i}`, key).worker;
+      if (placed !== worker) {
+        return placed;
+      }
+    }
+    throw new Error('never overflowed');
+  }
+
+  test('sends overflow to a worker that already has the key', () => {
+    const assigner = new SyncerAssigner('task', 3);
+    const {worker} = assigner.assign('first', 'popular');
+    const second = overflow(assigner, 'popular', worker);
+    // A worker that has none of the key is emptier, but has nothing to share.
+    expect(assigner.assign('next', 'popular').worker).toBe(second);
+  });
+
+  test('prefers the least loaded of the workers that have the key', () => {
+    const assigner = new SyncerAssigner('task', 3);
+    const {worker} = assigner.assign('first', 'popular');
+    const second = overflow(assigner, 'popular', worker);
+    const third = 3 - worker - second;
+    assigner.assign('other', 'other');
+    expect(assigner.getWorkerLoad(third)).toBe(1);
+    // Both workers with the key are within the skew, and the second is emptier.
+    expect(assigner.assign('next', 'popular').worker).toBe(second);
+  });
+
+  test('spreads a key over as few workers as the skew allows', () => {
+    const assigner = new SyncerAssigner('task', 4);
+    const workers = new Set<number>();
+    for (let i = 0; i < 17; i++) {
+      workers.add(assigner.assign(`g${i}`, 'popular').worker);
+    }
+    expect(workers.size).toBe(4);
+    const loads = [0, 1, 2, 3].map(w => assigner.getWorkerLoad(w));
+    // Each worker the key reaches fills to the skew before the next is used.
+    expect(loads.toSorted((a, b) => b - a)).toEqual([5, 5, 5, 2]);
+  });
+
+  test('forgets a worker for a key once its last group there is released', () => {
+    const assigner = new SyncerAssigner('task', 3);
+    const {worker} = assigner.assign('first', 'popular');
+    const second = overflow(assigner, 'popular', worker);
+    const overflowed = `popular-${assigner.getWorkerLoad(worker) - 1}`;
+    assigner.release(overflowed, second);
+    expect(assigner.getWorkerLoad(second)).toBe(0);
+    // The two empty workers are tied, so either may be picked: only the
+    // anchor's worker is ruled out.
+    expect(assigner.assign('next', 'popular').worker).not.toBe(worker);
+  });
+
   test('destroy forgets every key', () => {
     const assigner = new SyncerAssigner('task', 2);
     const {worker} = assigner.assign('a', 'alice');
