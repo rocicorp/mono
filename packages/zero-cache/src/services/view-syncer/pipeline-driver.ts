@@ -96,8 +96,8 @@ import {checkClientSchema} from './client-schema.ts';
 import {CLIENT_LMID_QUERY_ID, CLIENT_MUTATION_RESULTS_QUERY_ID} from './cvr.ts';
 import type {DeferredWritesBudget} from './deferred-writes-budget.ts';
 import {
-  clientSchemaKey,
   copyPipelineState,
+  rowKeysKey,
   usesAggregates,
   type OutputRow,
   type PipelineDonors,
@@ -560,7 +560,6 @@ export class PipelineDriver {
   readonly #changedRowSetSignatures = new Set<string>();
 
   readonly #donors: PipelineDonors | undefined;
-  #clientSchemaKey: string | undefined;
   /** The operator storages created so far by the hydration in progress. */
   #hydratingOperators: Storage[] | undefined;
   #donorRows:
@@ -733,7 +732,6 @@ export class PipelineDriver {
   }
 
   #initAndResetCommon(clientSchema: ClientSchema) {
-    this.#clientSchemaKey = this.#donors && clientSchemaKey(clientSchema);
     const {db} = this.#snapshotter.current();
     const fullTables = new Map<string, LiteTableSpecWithReplicationStatus>();
     computeZqlSpecs(
@@ -1299,18 +1297,18 @@ export class PipelineDriver {
         push: change => this.#streamPushed(queryID, schema, change),
       });
 
-      const donor = this.#findDonor(
-        transformationHash,
-        queryID,
-        query,
-        resolvedQuery,
-      );
+      const donorKey =
+        this.#donors && this.#donorKey(transformationHash, query);
+      const donor =
+        donorKey === undefined
+          ? undefined
+          : this.#findDonor(donorKey, queryID, query, resolvedQuery);
       if (donor) {
         for (const change of this.#copyFrom(
           donor.source,
           donor.rows,
           queryID,
-          transformationHash,
+          must(donorKey),
           tables,
         )) {
           if (change !== 'yield') {
@@ -1426,6 +1424,7 @@ export class PipelineDriver {
       this.#offerAsDonor(
         queryID,
         transformationHash,
+        query,
         hydrationTimeMs,
         copied,
         resolvedQuery,
@@ -1507,20 +1506,17 @@ export class PipelineDriver {
     }
   }
 
+  /** Where the pipelines of a query are offered to other client groups. */
+  #donorKey(transformationHash: string, query: AST): string {
+    return `${rowKeysKey(query, must(this.#primaryKeys))}/${transformationHash}`;
+  }
+
   /** @returns A pipeline to copy the query being hydrated from, if any. */
-  #findDonor(
-    transformationHash: string,
-    queryID: string,
-    query: AST,
-    resolvedQuery: AST,
-  ) {
+  #findDonor(key: string, queryID: string, query: AST, resolvedQuery: AST) {
     if (!this.#donors?.copy) {
       return undefined;
     }
-    const donor = this.#donors.findDonor(
-      `${this.#clientSchemaKey}/${transformationHash}`,
-      this.currentVersion(),
-    );
+    const donor = this.#donors.findDonor(key, this.currentVersion());
     // The hash is of the query before its scalar subqueries were resolved, and a
     // pipeline with a different plan or shape can't use the state. Equal hashes
     // should mean none of this differs, but hydrating is always correct and a
@@ -1546,7 +1542,7 @@ export class PipelineDriver {
     donor: PipelineStateSource,
     rows: readonly OutputRow[],
     queryID: string,
-    transformationHash: string,
+    key: string,
     tables: Set<string>,
   ): Iterable<RowChange | 'yield'> {
     const start = performance.now();
@@ -1556,11 +1552,7 @@ export class PipelineDriver {
       this.#hydratingJoinIndexes,
       (source, target) => this.#storage.copyStorage(source, target),
     );
-    must(this.#donors).recordCopy(
-      `${this.#clientSchemaKey}/${transformationHash}`,
-      stateEntries,
-      performance.now() - start,
-    );
+    must(this.#donors).recordCopy(key, stateEntries, performance.now() - start);
 
     const streamer = must(this.#streamer);
     for (const {table, rowKey, count, row: aggregateRow} of rows) {
@@ -1647,6 +1639,7 @@ export class PipelineDriver {
   #offerAsDonor(
     queryID: string,
     transformationHash: string,
+    query: AST,
     hydrationTimeMs: number,
     copied: boolean,
     copyableQuery: AST,
@@ -1662,7 +1655,7 @@ export class PipelineDriver {
     ) {
       return;
     }
-    const key = `${this.#clientSchemaKey}/${transformationHash}`;
+    const key = this.#donorKey(transformationHash, query);
     const source: PipelineStateSource = {
       version: () => this.currentVersion(),
       busy: () =>
