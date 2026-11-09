@@ -99,6 +99,7 @@ import {
   copyPipelineState,
   rowKeysKey,
   usesAggregates,
+  type DonorSearch,
   type OutputRow,
   type PipelineDonors,
   type PipelineStateSource,
@@ -563,7 +564,7 @@ export class PipelineDriver {
   /** The operator storages created so far by the hydration in progress. */
   #hydratingOperators: Storage[] | undefined;
   #donorRows:
-    | ((queryID: string) => readonly OutputRow[] | undefined)
+    | ((queryID: string) => readonly OutputRow[] | 'pending' | undefined)
     | undefined;
   /** The join indexes created so far by the hydration in progress. */
   #hydratingJoinIndexes: JoinIndex[] = [];
@@ -684,11 +685,14 @@ export class PipelineDriver {
 
   /**
    * Provides the rows a query has output, which only the owner of the CVR knows,
-   * so that its pipelines can donate. It should return undefined if it can't say
-   * consistently with the pipeline at the moment. It is called once as soon as a
-   * pipeline can donate, so that it can get ready to answer.
+   * so that its pipelines can donate. It should return 'pending' if it can't say
+   * consistently with the pipeline at the moment but soon can, and undefined if
+   * it can't say. It is called once as soon as a pipeline can donate, so that
+   * it can get ready to answer.
    */
-  setDonorRows(rows: (queryID: string) => readonly OutputRow[] | undefined) {
+  setDonorRows(
+    rows: (queryID: string) => readonly OutputRow[] | 'pending' | undefined,
+  ) {
     this.#donorRows = rows;
   }
 
@@ -1211,6 +1215,10 @@ export class PipelineDriver {
     this.#hydratingOperators = this.#donors ? [] : undefined;
     this.#hydratingJoinIndexes = [];
     let copied = false;
+    // What the hydration a copy replaces took, for the copy to pass on.
+    let copiedHydrationTimeMs = 0;
+    // How long the hydration waited for a donor, whether or not it copied.
+    let waitedMs = 0;
     // Hydration has the driver to itself, so the rows read by all of its
     // tables in the meantime are the rows read by this hydration. Tables
     // added by the hydration start from zero, which this also accounts for.
@@ -1299,17 +1307,31 @@ export class PipelineDriver {
 
       const donorKey =
         this.#donors && this.#donorKey(transformationHash, query);
-      const donor =
+      const findDonor = () =>
         donorKey === undefined
           ? undefined
           : this.#findDonor(donorKey, queryID, query, resolvedQuery);
-      if (donor) {
+      let donor = findDonor();
+      if (donor && 'waitMs' in donor) {
+        const waitStart = performance.now();
+        // A donor that is advancing, or whose rows are being loaded or
+        // written, is usually ready within a few turns of the worker. Its
+        // turns come while this one yields.
+        const deadline = waitStart + donor.waitMs;
+        while (donor && 'waitMs' in donor && performance.now() < deadline) {
+          yield 'yield';
+          donor = findDonor();
+        }
+        waitedMs = performance.now() - waitStart;
+      }
+      if (donor && 'source' in donor) {
         for (const change of this.#copyFrom(
           donor.source,
           donor.rows,
           queryID,
           must(donorKey),
           tables,
+          waitedMs,
         )) {
           if (change !== 'yield') {
             hydrationRowCount++;
@@ -1317,6 +1339,7 @@ export class PipelineDriver {
           yield change;
         }
         copied = true;
+        copiedHydrationTimeMs = must(donor.source.copyable).hydrationTimeMs;
       }
 
       // The client runs scalar gates as plain EXISTS, so the companions are
@@ -1425,9 +1448,10 @@ export class PipelineDriver {
         queryID,
         transformationHash,
         query,
-        hydrationTimeMs,
+        copied ? copiedHydrationTimeMs : hydrationTimeMs,
         copied,
         resolvedQuery,
+        waitedMs,
       );
       this.#queryStats?.recordHydration(
         {queryName, shape},
@@ -1512,24 +1536,31 @@ export class PipelineDriver {
   }
 
   /** @returns A pipeline to copy the query being hydrated from, if any. */
-  #findDonor(key: string, queryID: string, query: AST, resolvedQuery: AST) {
+  #findDonor(
+    key: string,
+    queryID: string,
+    query: AST,
+    resolvedQuery: AST,
+  ): DonorSearch {
     if (!this.#donors?.copy) {
       return undefined;
     }
-    const donor = this.#donors.findDonor(key, this.currentVersion());
+    const aggregates = usesAggregates(query);
     // The hash is of the query before its scalar subqueries were resolved, and a
     // pipeline with a different plan or shape can't use the state. Equal hashes
     // should mean none of this differs, but hydrating is always correct and a
     // wrong copy is not.
-    return donor &&
-      deepEqual(donor.source.copyable?.query, resolvedQuery) &&
-      // Aggregate rows belong to tables named after the query ID.
-      (!usesAggregates(query) || donor.source.copyable?.queryID === queryID) &&
-      donor.source.operators.length === this.#hydratingOperators?.length &&
-      donor.source.copyable?.joinIndexes.length ===
-        this.#hydratingJoinIndexes.length
-      ? donor
-      : undefined;
+    return this.#donors.findDonor(
+      key,
+      this.currentVersion(),
+      source =>
+        deepEqual(source.copyable?.query, resolvedQuery) &&
+        // Aggregate rows belong to tables named after the query ID.
+        (!aggregates || source.copyable?.queryID === queryID) &&
+        source.operators.length === this.#hydratingOperators?.length &&
+        source.copyable?.joinIndexes.length ===
+          this.#hydratingJoinIndexes.length,
+    );
   }
 
   /**
@@ -1544,6 +1575,7 @@ export class PipelineDriver {
     queryID: string,
     key: string,
     tables: Set<string>,
+    waitedMs: number,
   ): Iterable<RowChange | 'yield'> {
     const start = performance.now();
     const stateEntries = copyPipelineState(
@@ -1552,7 +1584,12 @@ export class PipelineDriver {
       this.#hydratingJoinIndexes,
       (source, target) => this.#storage.copyStorage(source, target),
     );
-    must(this.#donors).recordCopy(key, stateEntries, performance.now() - start);
+    must(this.#donors).recordCopy(
+      key,
+      stateEntries,
+      performance.now() - start,
+      waitedMs,
+    );
 
     const streamer = must(this.#streamer);
     for (const {table, rowKey, count, row: aggregateRow} of rows) {
@@ -1595,10 +1632,12 @@ export class PipelineDriver {
    * signature. Otherwise they are not what the pipeline holds, and a copy of the
    * pipeline's state would disagree with them.
    */
-  #verifiedDonorRows(queryID: string): readonly OutputRow[] | undefined {
+  #verifiedDonorRows(
+    queryID: string,
+  ): readonly OutputRow[] | 'pending' | undefined {
     const rows = this.#donorRows?.(queryID);
-    if (!rows) {
-      return undefined;
+    if (!rows || rows === 'pending') {
+      return rows;
     }
     let signature = 0n;
     for (const {table, rowKey, count} of rows) {
@@ -1643,6 +1682,7 @@ export class PipelineDriver {
     hydrationTimeMs: number,
     copied: boolean,
     copyableQuery: AST,
+    waitedMs: number,
   ) {
     const shadow = this.#donors;
     const pipeline = this.#pipelines.get(queryID);
@@ -1668,6 +1708,7 @@ export class PipelineDriver {
               queryID,
               query: copyableQuery,
               joinIndexes: this.#hydratingJoinIndexes,
+              hydrationTimeMs,
               rows: () => this.#verifiedDonorRows(queryID),
             },
           }
@@ -1675,7 +1716,7 @@ export class PipelineDriver {
     };
     if (!copied) {
       try {
-        shadow.compare(key, source, hydrationTimeMs);
+        shadow.compare(key, source, hydrationTimeMs, waitedMs);
       } catch (e) {
         this.#lc.warn?.('hydration clone comparison failed', e);
       }

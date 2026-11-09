@@ -719,16 +719,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    * the lock is held: the pipelines may have moved on from the CVR by then, and
    * they are caught up with each other by the time it is released.
    */
-  #donorRows(queryID: string): readonly OutputRow[] | undefined {
+  #donorRows(queryID: string): readonly OutputRow[] | 'pending' {
     const records = this.#cvrStore.loadedRowRecords();
     if (!records) {
       // A group with no rows has never had a reason to load them, and it may be
       // the most valuable donor: a query that reads a lot and returns nothing.
       void this.#cvrStore.getRowRecords().catch(() => {});
-      return undefined;
+      return 'pending';
     }
     if (this.#lockHeld) {
-      return undefined;
+      return 'pending';
     }
     const rows: OutputRow[] = [];
     for (const {id, refCounts} of records.values()) {

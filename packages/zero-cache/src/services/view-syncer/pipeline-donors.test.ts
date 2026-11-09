@@ -157,9 +157,14 @@ describe('clone shadow', () => {
     return driver;
   }
 
-  function hydrate(driver: PipelineDriver, hash: string, ast: AST) {
+  function hydrate(
+    driver: PipelineDriver,
+    hash: string,
+    ast: AST,
+    t: Timer = timer,
+  ) {
     return must(trackedRows.get(driver)).apply(
-      driver.addQuery(hash, `q-${hash}`, ast, timer),
+      driver.addQuery(hash, `q-${hash}`, ast, t),
     );
   }
 
@@ -373,18 +378,148 @@ describe('clone shadow', () => {
       expect(rows.filter(c => c !== 'yield')).toHaveLength(5);
     });
 
-    test('hydrates normally while the donor is advancing', () => {
-      shadow = copying();
-      const donor = newDriver();
-      hydrate(donor, 'a', ALL);
-      commit(messages.insert('issues', {id: '5', rank: 50}));
-      const changes = donor.advance(timer).changes[Symbol.iterator]();
-      changes.next();
-      hydrate(newDriver(), 'a', ALL);
-      expect(results.at(-1)?.outcome).toBe('donor-busy');
-      while (!changes.next().done) {
-        // Finishes the advance.
+    describe('waiting for a donor', () => {
+      // A donor that took long enough to hydrate that waiting for it pays off.
+      const slow: Timer = {elapsedLap: () => 0, totalElapsed: () => 1000};
+
+      /** Hydrates, calling `onWait` the first time the hydration yields. */
+      function hydrateWaiting(
+        driver: PipelineDriver,
+        onWait: () => void,
+        ast = ALL,
+      ) {
+        let waited = false;
+        const changes: (RowChange | 'yield')[] = [];
+        for (const change of driver.addQuery('a', 'q-a', ast, timer)) {
+          if (change === 'yield' && !waited) {
+            waited = true;
+            onWait();
+          }
+          changes.push(change);
+        }
+        return {waited, changes: must(trackedRows.get(driver)).apply(changes)};
       }
+
+      function advancingDonor() {
+        const donor = newDriver();
+        hydrate(donor, 'a', ALL, slow);
+        commit(messages.insert('issues', {id: '5', rank: 50}));
+        const changes = donor.advance(timer).changes[Symbol.iterator]();
+        const seen = [changes.next()];
+        const finish = () => {
+          while (!seen.at(-1)?.done) {
+            seen.push(changes.next());
+          }
+          must(trackedRows.get(donor)).apply(
+            seen.filter(r => !r.done).map(r => r.value as RowChange),
+          );
+        };
+        return {donor, finish};
+      }
+
+      test('copies from a donor that finishes advancing', () => {
+        shadow = copying();
+        const {finish} = advancingDonor();
+        const {waited, changes} = hydrateWaiting(newDriver(), finish);
+        expect(waited).toBe(true);
+        expect(results.at(-1)?.outcome).toBe('copied');
+        expect(results.at(-1)?.waitedMs).toBeGreaterThanOrEqual(0);
+        expect(changes.filter(c => c !== 'yield')).toHaveLength(5);
+      });
+
+      test('hydrates normally if the donor is still advancing', () => {
+        shadow = copying();
+        const {finish} = advancingDonor();
+        const rows = hydrate(newDriver(), 'a', ALL);
+        expect(results.at(-1)?.outcome).toBe('donor-busy');
+        expect(rows.filter(c => c !== 'yield')).toHaveLength(5);
+        finish();
+      });
+
+      test('copies from a donor whose rows become available', () => {
+        shadow = copying();
+        const donor = newDriver();
+        hydrate(donor, 'a', ALL, slow);
+        const tracked = must(trackedRows.get(donor));
+        donor.setDonorRows(() => 'pending');
+        const {waited} = hydrateWaiting(newDriver(), () =>
+          donor.setDonorRows(() => tracked.rows()),
+        );
+        expect(waited).toBe(true);
+        expect(results.at(-1)?.outcome).toBe('copied');
+      });
+
+      test('hydrates normally if the rows stay pending', () => {
+        shadow = copying();
+        const donor = newDriver();
+        hydrate(donor, 'a', ALL, slow);
+        donor.setDonorRows(() => 'pending');
+        const rows = hydrate(newDriver(), 'a', ALL);
+        expect(results.at(-1)?.outcome).not.toBe('copied');
+        expect(results.at(-1)?.waitedMs).toBeGreaterThanOrEqual(250);
+        expect(rows.filter(c => c !== 'yield')).toHaveLength(4);
+      });
+
+      test('does not wait for a donor whose hydration was cheap', () => {
+        shadow = copying();
+        const donor = newDriver();
+        hydrate(donor, 'a', ALL);
+        donor.setDonorRows(() => 'pending');
+        const {waited} = hydrateWaiting(newDriver(), () => {});
+        expect(waited).toBe(false);
+        expect(results.at(-1)?.outcome).not.toBe('copied');
+      });
+
+      test('does not wait longer than the limit', () => {
+        shadow = new PipelineDonors({
+          lc,
+          copy: true,
+          maxWaitMs: 0,
+          onResult: r => results.push(r),
+        });
+        const donor = newDriver();
+        hydrate(donor, 'a', ALL, slow);
+        donor.setDonorRows(() => 'pending');
+        const {waited} = hydrateWaiting(newDriver(), () => {});
+        expect(waited).toBe(false);
+      });
+
+      test('does not wait for a donor of a different query', () => {
+        shadow = copying();
+        const donor = newDriver();
+        hydrate(donor, 'a', ALL, slow);
+        donor.setDonorRows(() => 'pending');
+        const {waited} = hydrateWaiting(newDriver(), () => {}, TOP_2);
+        expect(waited).toBe(false);
+      });
+
+      test('does not wait for a donor at another version', () => {
+        shadow = copying();
+        const donor = newDriver();
+        hydrate(donor, 'a', ALL, slow);
+        commit(messages.insert('issues', {id: '5', rank: 50}));
+        const {waited, changes} = hydrateWaiting(newDriver(), () => {});
+        expect(waited).toBe(false);
+        expect(results.at(-1)?.outcome).toBe('version-mismatch');
+        expect(changes.filter(c => c !== 'yield')).toHaveLength(5);
+      });
+
+      test('a copy passes on what the hydration it replaced took', () => {
+        shadow = copying();
+        const first = newDriver();
+        hydrate(first, 'a', ALL, slow);
+        const copy = newDriver();
+        hydrate(copy, 'a', ALL);
+        expect(results.at(-1)?.outcome).toBe('copied');
+        first.destroy();
+        const tracked = must(trackedRows.get(copy));
+        copy.setDonorRows(() => 'pending');
+        const {waited} = hydrateWaiting(newDriver(), () =>
+          copy.setDonorRows(() => tracked.rows()),
+        );
+        expect(waited).toBe(true);
+        expect(results.at(-1)?.outcome).toBe('copied');
+      });
     });
 
     describe('aggregates', () => {
