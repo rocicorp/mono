@@ -69,6 +69,17 @@ export type ZeroOptions<
   userID?: string | null | undefined;
 
   /**
+   * Which connections zero-cache should try to place together, so that they can
+   * reuse each other's work: a server-side render and the browser it renders for,
+   * for example. Defaults to `userID`, so set it only for logged-out clients or
+   * to group connections some other way.
+   *
+   * It only affects placement. Across zero-cache nodes, the load balancer must be
+   * configured to route on the `affinityKey` query parameter.
+   */
+  affinityKey?: string | undefined;
+
+  /**
    * Distinguishes the storage used by this Zero instance from that of other
    * instances with the same userID. Useful in the case where the app wants to
    * have multiple Zero instances for the same user for different parts of the

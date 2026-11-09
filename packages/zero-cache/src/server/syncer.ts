@@ -30,6 +30,7 @@ import {
 } from '../services/view-syncer/connection-context-manager.ts';
 import {DeferredWritesBudget} from '../services/view-syncer/deferred-writes-budget.ts';
 import type {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
+import {PipelineDonors} from '../services/view-syncer/pipeline-donors.ts';
 import {PipelineDriver} from '../services/view-syncer/pipeline-driver.ts';
 import {QueryStats} from '../services/view-syncer/query-stats.ts';
 import {SnapshotRowCache} from '../services/view-syncer/snapshot-row-cache.ts';
@@ -255,6 +256,13 @@ export default async function runWorker(
     }).addCallback(o => o.observe(batchPacer.multiplier));
   }
 
+  // Shared by all of the view-syncers on this worker, because pipelines can only
+  // be taken from other client groups in the same process.
+  const donors =
+    config.hydrationClone === 'off'
+      ? undefined
+      : new PipelineDonors({lc, copy: config.hydrationClone === 'on'});
+
   // Shared by all of the view-syncers on this worker, so that the work done
   // for each query shape is logged once per worker per interval.
   const queryStats =
@@ -331,6 +339,7 @@ export default async function runWorker(
         config,
         deferredWritesBudget,
         queryStats,
+        donors,
       ),
       sub,
       drainCoordinator,

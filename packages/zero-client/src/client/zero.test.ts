@@ -5490,3 +5490,72 @@ describe('Zero replicache refresh integration', () => {
     });
   });
 });
+
+test('hasPendingMutations is true from a mutator running until it is acknowledged', async () => {
+  const schema = createSchema({
+    tables: [
+      table('issue').columns({id: string(), value: number()}).primaryKey('id'),
+    ],
+  });
+  const mutators = defineMutatorsWithType<typeof schema>()({
+    issue: {
+      insert: defineMutatorWithType<typeof schema>()<{
+        id: string;
+        value: number;
+      }>(async ({tx, args}) => {
+        await tx.mutate.issue.insert(args);
+      }),
+    },
+  });
+  const z = zeroForTest({schema, mutators});
+  await z.triggerConnected();
+  expect(z.hasPendingMutations).toBe(false);
+
+  const {server} = z.mutate(mutators.issue.insert({id: 'a', value: 1}));
+  void server.catch(() => {});
+  expect(z.hasPendingMutations).toBe(true);
+
+  await z.close();
+});
+
+describe('affinityKey connect param', () => {
+  const schema = createSchema({
+    tables: [table('issue').columns({id: string()}).primaryKey('id')],
+  });
+
+  async function connectParam(options: {
+    userID?: string | null;
+    auth?: undefined;
+    affinityKey?: string;
+  }) {
+    const z = zeroForTest({schema, ...options});
+    const socket = await z.socket;
+    const value = new URL(socket.url).searchParams.get('affinityKey');
+    await z.close();
+    return value;
+  }
+
+  test('sends the explicit key', async () => {
+    expect(await connectParam({userID: 'alice', affinityKey: 'team'})).toBe(
+      'team',
+    );
+  });
+
+  test('falls back to the userID', async () => {
+    expect(await connectParam({userID: 'alice'})).toBe('alice');
+  });
+
+  test('sends a key for a logged-out client that sets one', async () => {
+    expect(
+      await connectParam({
+        userID: null,
+        auth: undefined,
+        affinityKey: 'public',
+      }),
+    ).toBe('public');
+  });
+
+  test('sends nothing for a logged-out client with no key', async () => {
+    expect(await connectParam({userID: null, auth: undefined})).toBeNull();
+  });
+});

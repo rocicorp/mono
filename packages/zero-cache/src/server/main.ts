@@ -226,6 +226,7 @@ export default async function runWorker(
         syncers,
         mutator,
         changeStreamer,
+        config.hydrationClone !== 'off',
       ),
     );
   } catch (err) {

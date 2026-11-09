@@ -1,5 +1,6 @@
 import {memo, Suspense, useState, type ReactNode} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
+import {renderToString} from 'react-dom/server';
 import {
   afterEach,
   beforeEach,
@@ -22,6 +23,7 @@ import type {TTL} from '../../zql/src/query/ttl.ts';
 import {queryInternalsTag, type QueryImpl} from './bindings.ts';
 import {
   getAllViewsSizeForTesting,
+  RENDER_LEASE_MS,
   useQuery,
   useSuspenseQuery,
   ViewStore,
@@ -149,6 +151,18 @@ function newMaterializedView(singular = false) {
   };
 }
 
+/** A view of `query1` that has been rendered but has no subscriber. */
+function newLeasedView() {
+  const viewStore = new ViewStore();
+  const zero = newMockZero('client1');
+  const view = getView(viewStore, {zero});
+  return {
+    viewStore,
+    view,
+    emit: (...args: unknown[]) => materializedView(zero).emit(...args),
+  };
+}
+
 /** Mounts a fresh React root for each test of the enclosing describe. */
 function setupRoot() {
   let element: HTMLDivElement;
@@ -260,6 +274,124 @@ describe('ViewStore', () => {
 
       vi.advanceTimersByTime(100);
       expect(getAllViewsSizeForTesting(viewStore)).toBe(0);
+    });
+
+    describe('views that never get a subscriber', () => {
+      test('are destroyed when the render lease lapses', () => {
+        const viewStore = new ViewStore();
+        const zero = newMockZero('client1');
+        getView(viewStore, {zero});
+
+        vi.advanceTimersByTime(RENDER_LEASE_MS - 1);
+        expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
+
+        vi.advanceTimersByTime(1);
+        expect(getAllViewsSizeForTesting(viewStore)).toBe(0);
+        expect(materializedView(zero).destroy).toHaveBeenCalledOnce();
+      });
+
+      test('are kept alive by being rendered again', () => {
+        const viewStore = new ViewStore();
+        const view = getView(viewStore);
+
+        vi.advanceTimersByTime(RENDER_LEASE_MS - 1);
+        expect(getView(viewStore)).toBe(view);
+
+        vi.advanceTimersByTime(RENDER_LEASE_MS - 1);
+        expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
+
+        vi.advanceTimersByTime(1);
+        expect(getAllViewsSizeForTesting(viewStore)).toBe(0);
+      });
+
+      test('stop being leased once subscribed', () => {
+        const viewStore = new ViewStore();
+        const cleanup = getView(viewStore).subscribeReactInternals(() => {});
+
+        vi.advanceTimersByTime(RENDER_LEASE_MS * 2);
+        expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
+
+        cleanup();
+        vi.advanceTimersByTime(100);
+        expect(getAllViewsSizeForTesting(viewStore)).toBe(0);
+      });
+
+      test('are not re-leased by a render while subscribed', () => {
+        const viewStore = new ViewStore();
+        getView(viewStore).subscribeReactInternals(() => {});
+        getView(viewStore);
+
+        vi.advanceTimersByTime(RENDER_LEASE_MS * 2);
+        expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
+      });
+
+      test('are released after a server render, which never subscribes', () => {
+        const zero = newMockZero('server-render-client');
+        function Component() {
+          useQuery(newMockQuery('server-render-query'));
+          return null;
+        }
+
+        renderToString(
+          <ZeroProvider zero={zero}>
+            <Component />
+          </ZeroProvider>,
+        );
+        expect(materializedView(zero).destroy).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(RENDER_LEASE_MS);
+        expect(materializedView(zero).destroy).toHaveBeenCalledOnce();
+      });
+
+      test('materialize again when React commits after the lease lapsed', () => {
+        const viewStore = new ViewStore();
+        const zero = newMockZero('client1');
+        const view = getView(viewStore, {zero});
+
+        vi.advanceTimersByTime(RENDER_LEASE_MS);
+        expect(zero.materialize).toHaveBeenCalledTimes(1);
+
+        view.subscribeReactInternals(() => {});
+        expect(zero.materialize).toHaveBeenCalledTimes(2);
+      });
+
+      test('survive the lease while a suspended render waits for them', () => {
+        const {view, viewStore, emit} = newLeasedView();
+        void view.waitForComplete();
+
+        vi.advanceTimersByTime(RENDER_LEASE_MS * 3);
+        expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
+
+        emit([], 'complete');
+        vi.advanceTimersByTime(RENDER_LEASE_MS);
+        expect(getAllViewsSizeForTesting(viewStore)).toBe(0);
+      });
+
+      test('are not kept for a wait that a closed Zero can never finish', () => {
+        const viewStore = new ViewStore();
+        const zero = newMockZero('client1');
+        const view = getView(viewStore, {zero});
+        void view.waitForComplete();
+
+        vi.advanceTimersByTime(RENDER_LEASE_MS);
+        expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
+
+        (zero as unknown as {closed: boolean}).closed = true;
+        vi.advanceTimersByTime(RENDER_LEASE_MS);
+        expect(getAllViewsSizeForTesting(viewStore)).toBe(0);
+      });
+
+      test('are released when the wait for rows is satisfied without completing', () => {
+        const {view, viewStore, emit} = newLeasedView();
+        void view.waitForNonEmpty();
+
+        vi.advanceTimersByTime(RENDER_LEASE_MS * 3);
+        expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
+
+        emit([{id: '1'}], 'unknown');
+        vi.advanceTimersByTime(RENDER_LEASE_MS);
+        expect(getAllViewsSizeForTesting(viewStore)).toBe(0);
+      });
     });
 
     test('view destruction is delayed via setTimeout', () => {

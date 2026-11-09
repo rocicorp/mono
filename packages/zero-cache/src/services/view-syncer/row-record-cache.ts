@@ -92,6 +92,7 @@ export class RowRecordCache {
   // (i.e. cvr.instances). It may contain information that has not yet
   // been flushed to cvr.rows.
   #cache: Promise<CustomKeyMap<RowID, RowRecord>> | undefined;
+  #loaded: CustomKeyMap<RowID, RowRecord> | undefined;
   readonly #lc: LogContext;
   readonly #db: PostgresDB;
   readonly #schema: string;
@@ -204,6 +205,9 @@ export class RowRecordCache {
       this.#lc.info?.(
         `Loaded ${cache.size} row records in ${Date.now() - start} ms`,
       );
+      if (this.#cache === r.promise) {
+        this.#loaded = cache;
+      }
       r.resolve(cache);
       return this.#cache;
     } catch (e) {
@@ -214,6 +218,11 @@ export class RowRecordCache {
 
   getRowRecords(): Promise<ReadonlyMap<RowID, RowRecord>> {
     return this.#ensureLoaded();
+  }
+
+  /** The row records, for a caller that can't wait for them to be loaded. */
+  loadedRowRecords(): ReadonlyMap<RowID, RowRecord> | undefined {
+    return this.#loaded;
   }
 
   /**
@@ -332,6 +341,7 @@ export class RowRecordCache {
   }
 
   clear() {
+    this.#loaded = undefined;
     // Note: Only the #cache is cleared. #pending updates, on the other hand,
     // comprise canonical (i.e. already flushed) data and must be flushed
     // even if the snapshot of the present state (the #cache) is cleared.

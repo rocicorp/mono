@@ -1304,6 +1304,14 @@ export class Zero<
   }
 
   /**
+   * Whether a mutator has run on this client without the server having
+   * acknowledged it yet.
+   */
+  get hasPendingMutations(): boolean {
+    return this.#mutationTracker.size > 0;
+  }
+
+  /**
    * Closes this Zero instance.
    *
    * Once a Zero instance has been closed it no longer syncs, you can no
@@ -1801,6 +1809,8 @@ export class Zero<
       return;
     }
 
+    const affinityKey = this.#options.affinityKey ?? this.userID;
+
     assert(this.#server, 'No server provided');
     const socketOrigin = toWSString(this.#server);
 
@@ -1866,7 +1876,9 @@ export class Zero<
       this.#options.mutateHeaders,
       this.#options.queryURL ?? this.#options.getQueriesURL,
       this.#options.queryHeaders,
-      additionalConnectParams,
+      affinityKey === undefined
+        ? additionalConnectParams
+        : {affinityKey, ...additionalConnectParams},
       activeClientsManager,
       this.#options.maxHeaderLength,
       event => this.#addConnectEvent(lc, attempt, event),

@@ -9,22 +9,19 @@ import {
 import {newArray} from '../../../../shared/src/arrays.ts';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
-import {h64} from '../../../../shared/src/hash.ts';
 import {getOrInsertComputed} from '../../../../shared/src/map.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
 import {resolver} from '../../../../shared/src/resolver.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../../zero-protocol/src/change-desired-queries.ts';
-import {
-  normalizeClientSchema,
-  type ClientSchema,
-} from '../../../../zero-protocol/src/client-schema.ts';
+import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {
   InitConnectionBody,
   InitConnectionMessage,
 } from '../../../../zero-protocol/src/connect.ts';
 import type {ErroredQuery} from '../../../../zero-protocol/src/custom-queries.ts';
+import type {Row as ZeroRow} from '../../../../zero-protocol/src/data.ts';
 import type {DeleteClientsMessage} from '../../../../zero-protocol/src/delete-clients.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
@@ -105,6 +102,7 @@ import {E2EServingLagTracker} from './e2e-serving-lag.ts';
 import {HydrationBudget, type MonotonicClock} from './hydration-budget.ts';
 import {HydrationCircuitBreaker} from './hydration-circuit-breaker.ts';
 import {handleInspect} from './inspect-handler.ts';
+import {clientSchemaKey, type OutputRow} from './pipeline-donors.ts';
 import type {
   AbandonedQuery,
   CostBasedAdvance,
@@ -363,6 +361,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   // (1) storage or database-dependent operations
   // (2) updating member variables.
   readonly #lock = new Lock();
+  #lockHeld = false;
   readonly #cvrStore: CVRStore;
   readonly #stopped = resolver();
 
@@ -686,6 +685,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#shard = shard;
     this.#lc = lc;
     this.#pipelines = pipelineDriver;
+    this.#pipelines.setDonorRows(queryID => this.#donorRows(queryID));
     this.#stateChanges = versionChanges;
     this.#drainCoordinator = drainCoordinator;
     this.#keepaliveMs = keepaliveMs;
@@ -714,13 +714,50 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.keepalive();
   }
 
+  /**
+   * The rows a query's pipeline has output, from the CVR's row records. Not while
+   * the lock is held: the pipelines may have moved on from the CVR by then, and
+   * they are caught up with each other by the time it is released.
+   */
+  #donorRows(queryID: string): readonly OutputRow[] | 'pending' {
+    const records = this.#cvrStore.loadedRowRecords();
+    if (!records) {
+      // A group with no rows has never had a reason to load them, and it may be
+      // the most valuable donor: a query that reads a lot and returns nothing.
+      void this.#cvrStore.getRowRecords().catch(() => {});
+      return 'pending';
+    }
+    if (this.#lockHeld) {
+      return 'pending';
+    }
+    const rows: OutputRow[] = [];
+    for (const {id, refCounts} of records.values()) {
+      const count = refCounts?.[queryID] ?? 0;
+      if (count > 0) {
+        rows.push({table: id.table, rowKey: id.rowKey as ZeroRow, count});
+      }
+    }
+    return rows;
+  }
+
+  #withLock(fn: () => Promise<void>): Promise<void> {
+    return this.#lock.withLock(async () => {
+      this.#lockHeld = true;
+      try {
+        await fn();
+      } finally {
+        this.#lockHeld = false;
+      }
+    });
+  }
+
   #runInLockWithCVR(
     fn: (lc: LogContext, cvr: CVRSnapshot) => Promise<void> | void,
   ): Promise<void> {
     const rid = randomID();
     this.#lc.debug?.('about to acquire lock for cvr ', rid);
     const lockWaitStart = performance.now();
-    return this.#lock.withLock(async () => {
+    return this.#withLock(async () => {
       this.#lockWaitTime.recordMs(performance.now() - lockWaitStart);
       this.#lc.debug?.('acquired lock in #runInLockWithCVR ', rid);
       const lc = this.#lc.withContext('lock', rid);
@@ -1183,7 +1220,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     if (this.#clientSchemaKeyCache?.schema !== schema) {
       this.#clientSchemaKeyCache = {
         schema,
-        key: h64(JSON.stringify(normalizeClientSchema(schema))).toString(36),
+        key: clientSchemaKey(schema),
       };
     }
     return this.#clientSchemaKeyCache.key;

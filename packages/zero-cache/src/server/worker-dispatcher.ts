@@ -26,6 +26,9 @@ export class WorkerDispatcher implements Service {
     syncers: Worker[],
     mutator: Worker | undefined,
     changeStreamer: Worker | undefined,
+    // Groups only reuse each other's work when hydrations can be copied.
+    // Otherwise placing them together costs balance and gains nothing.
+    placeByAffinity = false,
   ) {
     this.#lc = lc;
 
@@ -99,10 +102,13 @@ export class WorkerDispatcher implements Service {
     const handleSync = (req: IncomingMessageSubset) => {
       assert(syncers.length, 'Received a sync request with no sync workers.');
       const params = connectParams(req);
-      const {clientGroupID, protocolVersion} = params;
+      const {clientGroupID, protocolVersion, affinityKey} = params;
       maxProtocolVersion = Math.max(maxProtocolVersion, protocolVersion);
 
-      const {worker: syncer, generation} = assigner.assign(clientGroupID);
+      const {worker: syncer, generation} = assigner.assign(
+        clientGroupID,
+        placeByAffinity ? affinityKey : undefined,
+      );
       workerDispatchesCounter.add(1, {worker: String(syncer)});
 
       lc.debug?.(`connecting ${clientGroupID} to syncer ${syncer}`);

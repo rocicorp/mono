@@ -672,6 +672,22 @@ export const zeroOptions = {
     ],
   },
 
+  hydrationClone: {
+    type: v.literalUnion('off', 'shadow', 'on').optional(() => 'off'),
+    desc: [
+      `Whether a client group can take a query's hydration from another group on`,
+      `its sync worker that already has that query live at the same version.`,
+      ``,
+      `{bold shadow} still hydrates, and compares the result with what could have`,
+      `been copied. {bold on} copies when it can. The outcomes are reported in the`,
+      `{bold sync.hydration-clone} metric.`,
+      ``,
+      `Both read the operator state of the pipelines involved, holding up the worker`,
+      `for large queries.`,
+    ],
+    hidden: true,
+  },
+
   deferIvmWrites: {
     type: v.boolean().optional(() => true),
     desc: [
