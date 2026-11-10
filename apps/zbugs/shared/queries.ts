@@ -19,6 +19,22 @@ export function applyIssuePermissions<TQuery extends IssueQuery>(
   return role === 'crew' ? q : (q.where('visibility', 'public') as TQuery);
 }
 
+/**
+ * Narrows a comment query to comments whose issue `role` may see. Comments and
+ * emoji are fetched by id, so each of those queries has to apply the issue's
+ * visibility itself.
+ */
+function applyCommentPermissions<TQuery extends CommentQuery>(
+  q: TQuery,
+  role: Role | undefined,
+): TQuery {
+  return role === 'crew'
+    ? q
+    : (q.whereExists('issue', issue =>
+        applyIssuePermissions(issue, role),
+      ) as TQuery);
+}
+
 const idValidator = z.string();
 const keyValidator = idValidator;
 
@@ -184,12 +200,15 @@ export const queries = defineQueries({
       dir: z.union([z.literal('forward'), z.literal('backward')]),
       inclusive: z.boolean(),
     }),
-    ({args: {issueID, limit, start, dir, inclusive}}) => {
+    ({ctx: auth, args: {issueID, limit, start, dir, inclusive}}) => {
       const orderDir = dir === 'forward' ? 'asc' : 'desc';
-      let q = builder.comment
-        .related('creator')
-        .related('emoji', emoji => emoji.related('creator'))
-        .where('issueID', issueID)
+      let q = applyCommentPermissions(
+        builder.comment
+          .related('creator')
+          .related('emoji', emoji => emoji.related('creator'))
+          .where('issueID', issueID),
+        auth?.role,
+      )
         .orderBy('created', orderDir)
         .orderBy('id', orderDir);
       if (start) {
@@ -201,12 +220,14 @@ export const queries = defineQueries({
 
   // Single-comment lookup for comment permalinks (the comments virtualizer
   // pages in the window around it).
-  comment: defineQuery(idValidator, ({args: id}) =>
-    builder.comment
-      .related('creator')
-      .related('emoji', emoji => emoji.related('creator'))
-      .where('id', id)
-      .one(),
+  comment: defineQuery(idValidator, ({ctx: auth, args: id}) =>
+    applyCommentPermissions(
+      builder.comment
+        .related('creator')
+        .related('emoji', emoji => emoji.related('creator'))
+        .where('id', id),
+      auth?.role,
+    ).one(),
   ),
 
   issueDetail: defineQuery(
@@ -286,11 +307,20 @@ export const queries = defineQueries({
         .one(),
   ),
 
-  emojiChange: defineQuery(idValidator, ({args: subjectID}) =>
-    builder.emoji
-      .where('subjectID', subjectID)
-      .related('creator', creator => creator.one()),
-  ),
+  emojiChange: defineQuery(idValidator, ({ctx: auth, args: subjectID}) => {
+    const role = auth?.role;
+    let q = builder.emoji.where('subjectID', subjectID);
+    if (role !== 'crew') {
+      // The subject is an issue or a comment.
+      q = q.where(({exists, or}) =>
+        or(
+          exists('issue', issue => applyIssuePermissions(issue, role)),
+          exists('comment', comment => applyCommentPermissions(comment, role)),
+        ),
+      );
+    }
+    return q.related('creator', creator => creator.one());
+  }),
 
   // TODO(arv): Remove
 
@@ -390,6 +420,8 @@ export type ListQueryArgs = {
 // TReturn must be any or the `.one()` case does not match
 // oxlint-disable-next-line no-explicit-any
 type IssueQuery = Query<'issue', DefaultSchema, any>;
+// oxlint-disable-next-line no-explicit-any
+type CommentQuery = Query<'comment', DefaultSchema, any>;
 
 function alwaysFalse<
   TTable extends keyof TSchema['tables'] & string,

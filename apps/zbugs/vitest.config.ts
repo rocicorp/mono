@@ -47,7 +47,19 @@ export function configForVersion(version: number, url: string) {
 
 export function configForNoPg(url: string) {
   const name = nameFromURL(url);
+  const rootDir = dirname(fileURLToPath(url));
+  const packagesDir = resolve(rootDir, '../../packages');
+
   return mergeConfig(config, {
+    resolve: {
+      // Resolve Zero to its source so tests don't need a build.
+      alias: [
+        {
+          find: /^@rocicorp\/zero$/,
+          replacement: resolve(packagesDir, 'zero/src/zero.ts'),
+        },
+      ],
+    },
     test: {
       name: `${name}/no-pg`,
       browser: {enabled: false},
