@@ -155,7 +155,7 @@ export class Database implements Disposable {
     } finally {
       const elapsed = performance.now() - start;
       if (elapsed >= this.#threshold) {
-        logSlow(this.#lc.withContext('method', method), elapsed, {method});
+        logSlow(this.#lc.withContext('method', method), elapsed, {sql, method});
       }
     }
   }
