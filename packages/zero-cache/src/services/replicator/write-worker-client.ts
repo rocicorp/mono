@@ -212,6 +212,9 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
 
   #call<M extends Method>(method: M, args: ArgsMap[M]): Promise<ResultMap[M]> {
     assert(this.#pending === null, `concurrent call: ${method}`);
+    if (this.#terminated) {
+      return Promise.reject(new Error(`Worker exited before ${method}`));
+    }
     const r = resolver<ResultMap[M]>();
     this.#pending = r as Resolver<unknown, Error>;
     this.#worker.postMessage({method, args} satisfies Request);
@@ -245,8 +248,8 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
   }
 
   async stop(): Promise<void> {
-    await this.#call('stop', []);
     if (!this.#terminated) {
+      await this.#call('stop', []);
       await this.#worker.terminate();
     }
   }
