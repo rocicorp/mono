@@ -21,6 +21,7 @@ import {must} from '../../../packages/shared/src/must.ts';
 import {dbProvider, sql} from '../server/db.ts';
 import {registerMachineRoutes} from '../server/machine-routes.ts';
 import {createServerMutators} from '../server/server-mutators.ts';
+import {verifyUnsubscribeToken} from '../server/unsubscribe-token.ts';
 import {jwtDataSchema, type JWTData} from '../shared/auth.ts';
 import {queries} from '../shared/queries.ts';
 import {schema} from '../shared/schema.ts';
@@ -250,7 +251,7 @@ fastify.post<{
 });
 
 fastify.get<{
-  Querystring: {id: string; email: string};
+  Querystring: {id: string; email: string; token?: string | undefined};
 }>('/api/unsubscribe', async (request, reply) => {
   if (!request.query.email) {
     reply.status(400).send('Email is required');
@@ -262,6 +263,21 @@ fastify.get<{
 
   if (isNaN(shortID)) {
     reply.status(400).send('Invalid issue ID');
+    return;
+  }
+
+  // The token is only in the link we emailed to this address, so knowing
+  // someone's email is not enough to unsubscribe them.
+  const {token} = request.query;
+  if (
+    typeof token !== 'string' ||
+    !verifyUnsubscribeToken(token, request.query.email, shortID)
+  ) {
+    reply
+      .status(403)
+      .send(
+        'This unsubscribe link is not valid. Use the link in a more recent email, or unsubscribe on the issue page.',
+      );
     return;
   }
 

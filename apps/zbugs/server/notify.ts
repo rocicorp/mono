@@ -5,6 +5,7 @@ import {builder, type schema, ZERO_PROJECT_NAME} from '../shared/schema.ts';
 import {postToDiscord} from './discord.ts';
 import {sendEmail} from './email.ts';
 import type {PostCommitTask} from './server-mutators.ts';
+import {signUnsubscribeToken} from './unsubscribe-token.ts';
 
 type CreateIssueNotification = {
   kind: 'create-issue';
@@ -95,7 +96,8 @@ export async function notify(
     excludeActor,
   );
 
-  if (!issue.shortID) {
+  const {shortID} = issue;
+  if (!shortID) {
     throw new MutationError(
       `Issue short ID not found`,
       MutationErrorCode.NOTIFICATION_FAILED,
@@ -120,7 +122,8 @@ export async function notify(
     const resolvedLink = link ?? baseIssueLink;
 
     for (const email of recipientEmails) {
-      const unsubscribeLink = `https://bugs.rocicorp.dev/api/unsubscribe?id=${issue.shortID}&email=${encodeURIComponent(email)}`;
+      const token = signUnsubscribeToken(email, shortID);
+      const unsubscribeLink = `https://bugs.rocicorp.dev/api/unsubscribe?id=${shortID}&email=${encodeURIComponent(email)}&token=${token}`;
 
       postCommitTasks.push(async () => {
         await sendEmail({
