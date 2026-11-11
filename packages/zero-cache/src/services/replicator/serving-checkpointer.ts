@@ -75,7 +75,8 @@ export class ServingCheckpointer implements Service {
         await this.#state.sleep(this.#intervalMs);
       }
     } finally {
-      this.#db.close();
+      // The replica's statistics are maintained by the replicator.
+      this.#db.close({optimize: false});
     }
   }
 

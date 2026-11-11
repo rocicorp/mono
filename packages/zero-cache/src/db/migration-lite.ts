@@ -155,25 +155,12 @@ export async function runSchemaMigrations(
           });
         }
       }
-
-      // Note: This used to be ANALYZE but that takes a long time for large
-      // dbs. The SQLite docs generally recommend optimize instead.
-      //
-      // https://sqlite.org/pragma.html#pragma_analysis_limit
-      //
-      // Beginning with SQLite version 3.46.0 (2024-05-23), the recommended
-      // way of running ANALYZE is with the PRAGMA optimize command.
-      // The PRAGMA optimize will automatically set a reasonable, temporary
-      // analysis limit that ensures that the PRAGMA optimize command will
-      // finish quickly even on enormous databases. Applications that use
-      // the PRAGMA optimize instead of running ANALYZE directly do not need
-      // to set an analysis limit.
-      const start = performance.now();
-      db.pragma('optimize');
-      const elapsed = performance.now() - start;
-      log.info?.(`OPTIMIZE completed (${elapsed.toFixed(2)}ms)`);
     }
 
+    // The replica's statistics are maintained by the replicator, under its
+    // configured analysis limit, so neither the migration nor closing its
+    // connection runs ANALYZE or `PRAGMA optimize`.
+    //
     // Do not run `quick_check` here. It scans the full database and can
     // dominate startup time for large replicas or slower disks.
     db.pragma('synchronous = NORMAL');
@@ -202,7 +189,7 @@ export async function runSchemaMigrations(
     }
     throw e;
   } finally {
-    db.close();
+    db.close({optimize: false});
     void log.flush(); // Flush the logs but do not block server progress on it.
   }
 }
