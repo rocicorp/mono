@@ -125,8 +125,7 @@ export default async function runWorker(
 
   // In high-availability mode (RMv2), the change log is kept in SQLite rather
   // than in Postgres (i.e. the change DB), to which no connection is made.
-  const sqliteChangeLogEnabled =
-    upstream.pgHighAvailabilityReplication ?? false;
+  const sqliteChangeLogEnabled = upstream.pgHighAvailabilityReplication;
   const pgChangeLogEnabled = !sqliteChangeLogEnabled;
   const changeDB = pgChangeLogEnabled
     ? await connectChangeDB(lc, change.db, shard)

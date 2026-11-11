@@ -113,7 +113,13 @@ export function assertNormalized(
       config.litestream.executableV5 ||
       !(config.litestream.restoreUsingV5 || config.litestream.backupUsingV5),
     '--litestream-restore-using-v5 and --litestream-backup-using-v5 ' +
-      'require --litestream-executable-v5 to be specified',
+      'require --litestream-executable-v5 to be specified' +
+      (config.upstream.pgHighAvailabilityReplication
+        ? '. Both are implied by ZERO_UPSTREAM_PG_HIGH_AVAILABILITY_REPLICATION, ' +
+          'which is on by default. Set ZERO_LITESTREAM_EXECUTABLE_V5 (included ' +
+          'in the rocicorp/zero Docker image), or set ' +
+          'ZERO_UPSTREAM_PG_HIGH_AVAILABILITY_REPLICATION=false to opt out.'
+        : ''),
   );
   assert(config.change.db, 'missing --change-db');
   assert(config.cvr.db, 'missing --cvr-db');
@@ -207,8 +213,10 @@ export function normalizeZeroConfig(
     assert(
       config.changeStreamer.mode !== 'discover',
       'Change streamer "discover" mode is deprecated and not supported with ' +
-        'ZERO_UPSTREAM_PG_HIGH_AVAILABILITY_REPLICATION. ' +
-        'Set ZERO_CHANGE_STREAMER_URI on view-syncers instead.',
+        'ZERO_UPSTREAM_PG_HIGH_AVAILABILITY_REPLICATION, which is on by default. ' +
+        'Set ZERO_CHANGE_STREAMER_URI on view-syncers instead, or set ' +
+        'ZERO_UPSTREAM_PG_HIGH_AVAILABILITY_REPLICATION=false to keep using ' +
+        '"discover" mode until it is removed.',
     );
   }
 

@@ -431,21 +431,26 @@ export const zeroOptions = {
     },
 
     pgHighAvailabilityReplication: {
-      type: v.boolean().optional(),
+      type: v.boolean().optional(() => true),
       desc: [
         `Runs replication-managers in high-availability mode, allowing multiple tasks to`,
         `run concurrently, each using their own replication slot and maintaining a local`,
         `change-log in sqlite.`,
         ``,
-        `In this configuration, the PG change-streamer db is not used or maintained. Consequently`,
-        `after running servers in high-availability mode, rolling back to a legacy singleton-mode task`,
-        `will trigger a resync in order to re-intialize the PG change-streamer db.`,
-        // Note: This flag also enables the implementation flags it requires:
-        //   ZERO_UPSTREAM_PG_REPLICATION_SLOT_PER_REPLICA = true
-        //   ZERO_LITESTREAM_RESTORE_USING_V5 = true
-        //   ZERO_LITESTREAM_BACKUP_USING_V5 = true
+        `In this configuration, the PG change-streamer db is not used or maintained.`,
+        `To roll back to a legacy singleton-mode task after running in high-availability mode,`,
+        `set this option to false along with {bold ZERO_UPSTREAM_PG_REPLICATION_SLOT_PER_REPLICA=true},`,
+        `which re-initializes the PG change-streamer db from the latest backup. Otherwise, a`,
+        `resync will be triggered to initialize the change-streamer db.`,
+        ``,
+        `Note that this option depends on, and automatically enables, the following options:`,
+        ` * {bold ZERO_UPSTREAM_PG_REPLICATION_SLOT_PER_REPLICA}`,
+        ` * {bold ZERO_LITESTREAM_RESTORE_USING_V5}`,
+        ` * {bold ZERO_LITESTREAM_BACKUP_USING_V5}`,
+        ``,
+        `In a future release, high-availability mode will be the only implementation,`,
+        `and the option to disable it will be removed.`,
       ],
-      hidden: true, // TODO: Expose / roll out.
     },
 
     pgResumeOrphanedSlotGracePeriodMs: {
@@ -1039,9 +1044,9 @@ export const zeroOptions = {
       deprecated: [
         `Set the {bold ZERO_CHANGE_STREAMER_URI} on view-syncers instead.`,
         ``,
-        `When {bold ZERO_UPSTREAM_PG_HIGH_AVAILABILITY_REPLICATION} (i.e. "RMv2") is enabled`,
-        `the zero-cache will no longer support automatic change-streamer discovery,`,
-        `and setting this flag to "discover" will result in an error.`,
+        `When {bold ZERO_UPSTREAM_PG_HIGH_AVAILABILITY_REPLICATION} (i.e. "RMv2") is enabled,`,
+        `which is the default, the zero-cache does not support automatic change-streamer`,
+        `discovery, and setting this flag to "discover" results in an error.`,
       ],
     },
 
