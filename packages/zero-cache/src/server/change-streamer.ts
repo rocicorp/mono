@@ -87,11 +87,6 @@ export default async function runWorker(
       flowControlConsensusTimeoutProportion,
       flowControlSlowSubscriberGracePeriodSeconds,
       maxConcurrentSwitchoverRestores,
-      pgChangeLogEnabled,
-      sqliteChangeLogMode,
-      sqliteChangeLogReadPercent,
-      sqliteChangeLogColdReadPercent,
-      sqliteChangeLogComparePercent,
       sqliteChangeLogRetentionMs,
       sqliteChangeLogReadBatchRows,
       sqliteChangeLogPurgeBatchRows,
@@ -128,8 +123,11 @@ export default async function runWorker(
 
   const shard = getShardConfig(config);
 
-  // The change DB is only used by the PG change log. When it is disabled
-  // (RMv2), no connection to the change DB is made.
+  // In high-availability mode (RMv2), the change log is kept in SQLite rather
+  // than in Postgres (i.e. the change DB), to which no connection is made.
+  const sqliteChangeLogEnabled =
+    upstream.pgHighAvailabilityReplication ?? false;
+  const pgChangeLogEnabled = !sqliteChangeLogEnabled;
   const changeDB = pgChangeLogEnabled
     ? await connectChangeDB(lc, change.db, shard)
     : null;
@@ -140,10 +138,6 @@ export default async function runWorker(
   let backupURL: string | undefined;
 
   const context = getServerContext(config);
-  const sqliteChangeLogEnabled = sqliteChangeLogMode !== 'off';
-  // The modes are cumulative, so `serve` implies `compare`.
-  const sqliteChangeLogComparing =
-    sqliteChangeLogMode === 'compare' || sqliteChangeLogMode === 'serve';
   if (sqliteChangeLogEnabled) {
     const changeLogFile = changeLogFileName(replica.file);
     registerSQLiteCorruptionDiagnosticTarget(
@@ -306,56 +300,32 @@ export default async function runWorker(
               : 0) + DEFAULT_READINESS_GRACE_PERIOD_MS,
           statementTimeoutMs: change.statementTimeoutMs,
           changeLogBatchSize: change.logBatchSize,
-          sqliteCatchup: {
-            changeLogFile: changeLogFileName(replica.file),
-            readBatchRows: sqliteChangeLogReadBatchRows,
-            barrierTimeoutMs: sqliteChangeLogBarrierTimeoutMs,
-          },
-          // The presence of these options is the writer's gate. This process
-          // performs the restore and the initial sync, so the replica's
-          // identity is in hand at the moment the log is opened.
-          sqliteChangeLogWriter: sqliteChangeLogEnabled
+          // The SQLite change log, which this process writes from its own
+          // stream loop. It performs the restore and the initial sync, so the
+          // replica's identity is in hand at the moment the log is opened.
+          ...(sqliteChangeLogEnabled
             ? {
-                replicaFile: replica.file,
-                identity: {
-                  // RMv2 supplies the epoch; until then the generation and the
-                  // replica ID are the whole of the identity.
-                  epoch: null,
-                  generation: subscriptionState.replicaVersion,
-                  replicaID,
+                sqliteChangeLogWriter: {
+                  replicaFile: replica.file,
+                  identity: {
+                    // RMv2 supplies the epoch; until then the generation and
+                    // the replica ID are the whole of the identity.
+                    epoch: null,
+                    generation: subscriptionState.replicaVersion,
+                    replicaID,
+                  },
+                },
+                sqliteChangeLogPurge: {
+                  retentionMs: sqliteChangeLogRetentionMs,
+                  batchRows: sqliteChangeLogPurgeBatchRows,
+                },
+                sqliteCatchup: {
+                  changeLogFile: changeLogFileName(replica.file),
+                  readBatchRows: sqliteChangeLogReadBatchRows,
+                  barrierTimeoutMs: sqliteChangeLogBarrierTimeoutMs,
                 },
               }
-            : undefined,
-          // The purge scheduler shares the writer's gate -- mode, not the
-          // read path -- because `write` mode, with no read selector at all,
-          // is the configuration it ships in.
-          sqliteChangeLogPurge: sqliteChangeLogEnabled
-            ? {
-                retentionMs: sqliteChangeLogRetentionMs,
-                batchRows: sqliteChangeLogPurgeBatchRows,
-              }
-            : undefined,
-          // Compare mode runs both advisory checks. Postgres remains authoritative.
-          sqliteChangeLogCompare:
-            pgChangeLogEnabled && sqliteChangeLogComparing
-              ? {
-                  replicaFile: replica.file,
-                  comparePercent: sqliteChangeLogComparePercent,
-                  retentionMs: sqliteChangeLogRetentionMs,
-                  readBatchRows: sqliteChangeLogReadBatchRows,
-                }
-              : undefined,
-          // Slice 11 lands dark by default: serve mode constructs the stable
-          // router, while readPercent=0 keeps every catchup on PG and emits
-          // eligibility metrics before any canary traffic is enabled.
-          sqliteChangeLogServe:
-            sqliteChangeLogMode === 'serve'
-              ? {
-                  readPercent: sqliteChangeLogReadPercent,
-                  coldReadPercent: sqliteChangeLogColdReadPercent,
-                  retentionMs: sqliteChangeLogRetentionMs,
-                }
-              : undefined,
+            : {}),
           backupMonitor,
         },
         setTimeout,

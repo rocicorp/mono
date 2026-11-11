@@ -341,10 +341,11 @@ export async function handleStatzRequest(
   const statsFns: Record<string, () => Promise<StatsObject> | StatsObject> = {
     upstream: () => upstreamStats(lc, config),
     cvr: () => cvrStats(lc, config),
-    // The PG change log (and thus the change DB) is not used when disabled.
-    ...(config.changeStreamer.pgChangeLogEnabled
-      ? {changeLog: () => changeLogStats(lc, config)}
-      : {}),
+    // The PG change log (and thus the change DB) is not used in
+    // high-availability mode.
+    ...(config.upstream.pgHighAvailabilityReplication
+      ? {}
+      : {changeLog: () => changeLogStats(lc, config)}),
     replica: () => replicaStats(lc, config),
     replication: () => replicationStats(lc, config),
     os: () => osStats(),

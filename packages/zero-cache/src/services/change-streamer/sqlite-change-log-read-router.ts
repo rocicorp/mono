@@ -1,15 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
 import {Database} from '../../../../zqlite/src/db.ts';
-import type {ShardID} from '../../types/shards.ts';
 import {
   CHANGE_LOG_DB_SCHEMA_VERSION,
   readChangeLogBounds,
   readChangeLogMeta,
   type ChangeLogIdentity,
 } from '../replicator/change-log-db.ts';
-import {isSampledForShard} from './shard-sampling.ts';
-
-export type ChangeLogReadSource = 'pg' | 'sqlite';
 
 export type SQLiteChangeLogCoverage = {
   readonly seededAtMs: number;
@@ -18,37 +14,25 @@ export type SQLiteChangeLogCoverage = {
   readonly headWatermark: string;
 };
 
-type ChangeLogReadRouteReason =
-  | 'selected'
-  // Selected while the log was still inside its warm-up window. Kept
-  // distinct from 'selected' so bootstrap serving is separable in metrics
-  // from steady-state serving.
-  | 'selected-cold'
-  | 'percentage'
-  | 'cold-log'
-  | 'log-unavailable'
-  | 'breaker-open'
-  // Pinned to SQLite, then demoted because the log could not cover the
-  // backup the reservation is restoring from. See {@link
-  // SQLiteChangeLogReadRouter.demote}.
-  | 'backup-uncovered';
-
-export type ChangeLogReadRoute = {
-  readonly source: ChangeLogReadSource;
-  readonly reason: ChangeLogReadRouteReason;
-  readonly pinned?: boolean | undefined;
-  readonly coverage?: SQLiteChangeLogCoverage | undefined;
-};
+export type ChangeLogReadRoute =
+  | {
+      readonly available: true;
+      // 'selected-cold' is a log still inside its warm-up window, i.e. one
+      // seeded less than a retention window ago. It is kept distinct from
+      // 'selected' so that bootstrap serving is separable in metrics from
+      // steady-state serving.
+      readonly reason: 'selected' | 'selected-cold';
+      readonly coverage: SQLiteChangeLogCoverage;
+      readonly pinned?: boolean | undefined;
+    }
+  | {
+      readonly available: false;
+      readonly reason: 'log-unavailable' | 'breaker-open';
+      readonly pinned?: boolean | undefined;
+    };
 
 export type SQLiteChangeLogReadRouterOptions = {
-  readonly shard: ShardID;
-  readonly readPercent: number;
-  /**
-   * Percentage of eligible tasks served from a log that has not yet aged
-   * through {@link retentionMs}. Defaults to zero, which keeps every such
-   * task on PG.
-   */
-  readonly coldReadPercent?: number | undefined;
+  /** The warm-up window that a reseeded log ages through. */
   readonly retentionMs: number;
   readonly inspect: () => SQLiteChangeLogCoverage | undefined;
   readonly failureCooldownMs?: number | undefined;
@@ -58,19 +42,19 @@ export type SQLiteChangeLogReadRouterOptions = {
 const DEFAULT_FAILURE_COOLDOWN_MS = 30_000;
 
 /**
- * Selects and pins the catchup source shared by `/snapshot` and `/changes`.
+ * Determines, and pins, whether the SQLite change log can serve the catchup
+ * shared by `/snapshot` and `/changes`. Pinning keeps the bounds a snapshot
+ * reservation advertises in agreement with the coverage that its task's
+ * subsequent `/changes` request is served from.
  *
  * A post-registration SQLite failure opens a process-local breaker. Requests
- * use PG during the cooldown; the first request after it expires is the
+ * are declined during the cooldown; the first request after it expires is the
  * bounded probe. A successful readiness inspection closes the breaker, while
  * another unavailable result rearms it. A writer failure opens it permanently
  * because the writer remains disabled and its file stays absent for the life
  * of the process.
  */
 export class SQLiteChangeLogReadRouter {
-  readonly #shard: ShardID;
-  readonly #readPercent: number;
-  readonly #coldReadPercent: number;
   readonly #retentionMs: number;
   readonly #inspect: () => SQLiteChangeLogCoverage | undefined;
   readonly #failureCooldownMs: number;
@@ -81,9 +65,6 @@ export class SQLiteChangeLogReadRouter {
   #permanentlyDisabled = false;
 
   constructor(opts: SQLiteChangeLogReadRouterOptions) {
-    this.#shard = opts.shard;
-    this.#readPercent = opts.readPercent;
-    this.#coldReadPercent = opts.coldReadPercent ?? 0;
     this.#retentionMs = opts.retentionMs;
     this.#inspect = opts.inspect;
     this.#failureCooldownMs =
@@ -91,24 +72,24 @@ export class SQLiteChangeLogReadRouter {
     this.#now = opts.now ?? Date.now;
   }
 
-  /** Chooses and pins a source for a snapshot reservation. */
+  /** Determines and pins the route for a snapshot reservation. */
   pin(taskID: string): ChangeLogReadRoute {
-    const route = this.#choose(taskID);
+    const route = this.#choose();
     this.#pins.set(taskID, route);
     return route;
   }
 
-  /** Returns the source pinned by an active snapshot reservation. */
+  /** Returns the route pinned by an active snapshot reservation. */
   peek(taskID: string): ChangeLogReadRoute | undefined {
     const route = this.#pins.get(taskID);
     return route && this.#asPinned(route);
   }
 
-  /** Consumes a snapshot pin, or makes the stable choice for a direct retry. */
+  /** Consumes a snapshot pin, or determines the route for a direct retry. */
   consume(taskID: string): ChangeLogReadRoute {
     const route = this.#pins.get(taskID);
     if (route === undefined) {
-      return this.#choose(taskID);
+      return this.#choose();
     }
     this.#pins.delete(taskID);
     return this.#asPinned(route);
@@ -117,28 +98,6 @@ export class SQLiteChangeLogReadRouter {
   /** Releases a pin whose snapshot reservation ended before subscribing. */
   release(taskID: string): void {
     this.#pins.delete(taskID);
-  }
-
-  /**
-   * Replaces a pinned SQLite route with PG, for a reservation whose backup
-   * the log cannot cover -- most often a log seeded after that backup.
-   *
-   * The pin moves, not just the reservation's advertised bounds. Confirming
-   * with PG bounds while the task's `/changes` request still resolves to
-   * SQLite is exactly the mismatch the reservation path exists to prevent,
-   * so the two have to change together.
-   *
-   * A task with no pin is left alone: `consume` makes it a fresh choice.
-   */
-  demote(taskID: string): ChangeLogReadRoute {
-    const route: ChangeLogReadRoute = {
-      source: 'pg',
-      reason: 'backup-uncovered',
-    };
-    if (this.#pins.has(taskID)) {
-      this.#pins.set(taskID, route);
-    }
-    return route;
   }
 
   /** Opens the post-registration failure breaker. */
@@ -153,18 +112,15 @@ export class SQLiteChangeLogReadRouter {
     }
   }
 
-  #choose(taskID: string): ChangeLogReadRoute {
+  #choose(): ChangeLogReadRoute {
     const now = this.#now();
     if (
       this.#permanentlyDisabled ||
       (this.#breakerUntilMs !== undefined && now < this.#breakerUntilMs)
     ) {
-      return {source: 'pg', reason: 'breaker-open'};
+      return {available: false, reason: 'breaker-open'};
     }
 
-    // Inspect eligibility even at readPercent=0. Slice 11 starts its rollout
-    // at zero specifically so warm/cold/unavailable rates are visible before
-    // any subscriber is routed to SQLite.
     let coverage: SQLiteChangeLogCoverage | undefined;
     try {
       coverage = this.#inspect();
@@ -177,33 +133,13 @@ export class SQLiteChangeLogReadRouter {
       if (this.#breakerUntilMs !== undefined) {
         this.#breakerUntilMs = now + this.#failureCooldownMs;
       }
-      return {source: 'pg', reason: 'log-unavailable'};
+      return {available: false, reason: 'log-unavailable'};
     }
-    // A successful probe restores eligibility. This happens before the gates
-    // below so that declining a task -- for a cold log or for the percentage
-    // -- does not leave the cooldown armed against the next ordinary
-    // unavailability.
+    // A successful probe restores eligibility.
     this.#breakerUntilMs = undefined;
-    // A log seeded less than a retention window ago holds less history than
-    // the purger promises to keep, so it is the case that most often cannot
-    // cover a follower. It is also the only path that has no PG to fall back
-    // to once PG is retired, which is the argument for exercising it now
-    // rather than meeting it at the cutover: `coldReadPercent` is that dial.
     const cold = now - coverage.seededAtMs < this.#retentionMs;
-    if (
-      cold &&
-      !isSampledForShard(this.#shard, taskID, this.#coldReadPercent)
-    ) {
-      return {source: 'pg', reason: 'cold-log', coverage};
-    }
-
-    // Keeping the percentage decision after readiness makes zero-percent
-    // rollouts emit eligibility metrics without serving reads.
-    if (!isSampledForShard(this.#shard, taskID, this.#readPercent)) {
-      return {source: 'pg', reason: 'percentage', coverage};
-    }
     return {
-      source: 'sqlite',
+      available: true,
       reason: cold ? 'selected-cold' : 'selected',
       coverage,
     };

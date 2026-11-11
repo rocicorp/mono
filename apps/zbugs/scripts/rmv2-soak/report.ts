@@ -10,8 +10,9 @@ import {purgeStreaks, type ResourceSample} from './resources.ts';
 /**
  * Plan sections 7.5 (tripwires), 7.6 (coverage) and 8 (measured quantities).
  *
- * A soak that quietly routes everything to PG passes the oracle and the
- * tripwires while proving nothing, so coverage is a *positive* requirement.
+ * A soak that quietly serves nothing from the SQLite change log passes the
+ * oracle and the tripwires while proving nothing, so coverage is a *positive*
+ * requirement.
  * Only routes exercised by the selected chaos actions are required; this
  * keeps smoke runs useful without weakening the full soak's gate.
  */
@@ -40,7 +41,6 @@ export type RouteCoverage = {
 export function requiredRouteCoverage(
   census: Readonly<Record<string, number>>,
   selectedChaos: readonly string[],
-  coldReadPercent = 100,
 ): RouteCoverage[] {
   const selected = new Set(selectedChaos);
   const coverage = REQUIRED_ROUTES.filter(({chaos}) =>
@@ -50,30 +50,13 @@ export function requiredRouteCoverage(
     count: census[route] ?? 0,
     triggeredBy,
   }));
-  if (!COLD_LOG_CHAOS.some(id => selected.has(id))) {
-    return coverage;
-  }
-  if (coldReadPercent === 0) {
-    coverage.push({
-      route: 'pg/cold-log',
-      count: census['pg/cold-log'] ?? 0,
-      triggeredBy: 'C6 or C13 after a reseed with cold reads disabled',
-    });
-    return coverage;
-  }
-  if (coldReadPercent === 100) {
+  if (COLD_LOG_CHAOS.some(id => selected.has(id))) {
     coverage.push({
       route: 'sqlite/selected-cold',
       count: census['sqlite/selected-cold'] ?? 0,
       triggeredBy: 'C6 or C13 after a change-log reseed',
     });
-    return coverage;
   }
-  coverage.push({
-    route: 'sqlite/selected-cold or pg/cold-log',
-    count: (census['sqlite/selected-cold'] ?? 0) + (census['pg/cold-log'] ?? 0),
-    triggeredBy: 'C6 or C13 with partial cold-read sampling',
-  });
   return coverage;
 }
 
@@ -171,11 +154,7 @@ export function buildReport(args: {
     'source',
     'reason',
   );
-  const coverage = requiredRouteCoverage(
-    census,
-    config.chaos,
-    config.changeLog.coldReadPercent,
-  );
+  const coverage = requiredRouteCoverage(census, config.chaos);
 
   const backupLags = log.events
     .filter(e => e.kind === 'backup-watermark')
@@ -211,18 +190,7 @@ export function buildReport(args: {
     reservationConfirmDelays: metrics.total(
       'sqlite_change_log.reservation_confirm_delays',
     ),
-    reservationDemotions: metrics.total(
-      'sqlite_change_log.reservation_demotions',
-    ),
     barrierTimeouts: metrics.total('sqlite_change_log.barrier_timeouts'),
-    compareResults: metrics.byAttribute(
-      'sqlite_change_log.compare_result',
-      'outcome',
-    ),
-    initCompareResults: metrics.byAttribute(
-      'sqlite_change_log.init_compare_result',
-      'result',
-    ),
     floorProbes: metrics.byAttribute(
       'sqlite_change_log.purge_floor_probe',
       'outcome',

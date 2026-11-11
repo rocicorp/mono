@@ -52,11 +52,12 @@ export type SQLiteChangeLogCatchupOptions = {
 
 export type SQLiteChangeLogCatchupRequest = {
   /**
-   * Whether the routing warm-up gate classified the log as warm *for this
-   * subscriber*. The coordinator is opened once and reused, so this cannot be
-   * a property of it: `coldReadPercent` serves some subscribers from a log
-   * that is still inside its warm-up window, and the catchup metrics have to
-   * separate those from steady-state serving.
+   * Whether the router classified the log as warm *for this subscriber*, i.e.
+   * whether the log had aged through its warm-up window when the subscriber
+   * was routed. The coordinator is opened once and reused, so this cannot be a
+   * property of it: a reseeded log serves subscribers both before and after it
+   * warms up, and the catchup metrics have to separate those from
+   * steady-state serving.
    */
   readonly logWarm?: boolean | undefined;
 };

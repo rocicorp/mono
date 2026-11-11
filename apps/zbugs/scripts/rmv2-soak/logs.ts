@@ -27,14 +27,13 @@ export type SoakEventKind =
   | 'change-log-reseed'
   | 'purge-pass'
   | 'floor-probe-violation'
-  | 'compare-mismatch'
   | 'reservation-opened'
   | 'reservation-confirmed'
   | 'reservation-delayed'
-  | 'reservation-demoted'
   | 'backup-watermark'
   | 'served-from-sqlite'
-  | 'served-from-pg'
+  // A subscriber below the SQLite change log's minimum, which must restore.
+  | 'subscriber-too-old'
   | 'subscriber-rejected'
   | 'restore-started'
   | 'restore-finished'
@@ -66,35 +65,16 @@ type Waiter<T> = {
   timer: NodeJS.Timeout;
 };
 
-const DEMOTION =
-  /^demoting (\S+) to PG catchup: SQLite change-log minimum (\S+) is later than backupWatermark (\S+)/;
 const RESERVATION_OPENED = /^created snasphot reservation for (\S+)$/;
 const RESERVATION_CONFIRMED =
   /^reserving change-log entries since (\S+) for (\S+)$/;
 const RESERVATION_DELAYED =
-  /^pg change-log minWatermark (\S+) is later than backupWatermark (\S+)/;
+  /^(?:pg|sqlite) change-log minWatermark (\S+) is later than backupWatermark (\S+)/;
 const SERVED_FROM_SQLITE = /^serving (\S+) from SQLite catchup$/;
-const SERVED_FROM_PG = /^serving (\S+) from PG catchup: (.*)$/;
-const SQLITE_ROUTE = /^SQLite route (\S+)/;
-
-/**
- * The reasons `serving ... from PG catchup` is emitted with, mapped back onto
- * `ChangeLogReadRouteReason`. The route counter in OTel is the census of
- * record; this is what gives each one a timestamp and a subscriber.
- */
-function pgRouteReason(rest: string): string {
-  if (rest.startsWith('SQLite change log is still warming')) {
-    return 'cold-log';
-  }
-  if (rest.includes('is below the SQLite change-log minimum')) {
-    return 'watermark-uncovered';
-  }
-  if (rest.startsWith('SQLite catchup registration failed')) {
-    return 'registration-failed';
-  }
-  const routed = SQLITE_ROUTE.exec(rest);
-  return routed ? routed[1] : 'unknown';
-}
+const TOO_OLD =
+  /^(?:rejecting subscription for (\S+): earliest supported watermark|rejecting subscriber at watermark (\S+): the SQLite change log starts at)/;
+const REGISTRATION_FAILED =
+  /^ending subscription for (\S+) to retry SQLite catchup: registration failed/;
 
 export class SoakLog {
   readonly events: SoakEvent[] = [];
@@ -305,16 +285,6 @@ export class SoakLog {
       return;
     }
 
-    if (message === 'SQLite change-log catchup output diverged from Postgres') {
-      const detail = (fields.sqliteChangeLogCompare ?? {}) as Record<
-        string,
-        unknown
-      >;
-      this.#emit('compare-mismatch', record, {...detail});
-      this.#trip('compare-mismatch', record, {...detail});
-      return;
-    }
-
     if (message === 'received backup watermark') {
       const backedUp = (fields.backedUp ?? {}) as {
         watermark?: string;
@@ -332,17 +302,7 @@ export class SoakLog {
       return;
     }
 
-    let m = DEMOTION.exec(message);
-    if (m) {
-      this.#emit('reservation-demoted', record, {
-        taskID: m[1],
-        minWatermark: m[2],
-        backupWatermark: m[3],
-      });
-      return;
-    }
-
-    m = RESERVATION_OPENED.exec(message);
+    let m = RESERVATION_OPENED.exec(message);
     if (m) {
       this.#emit('reservation-opened', record, {taskID: m[1]});
       return;
@@ -375,18 +335,19 @@ export class SoakLog {
       return;
     }
 
-    m = SERVED_FROM_PG.exec(message);
+    m = TOO_OLD.exec(message);
     if (m) {
-      const reason = pgRouteReason(m[2]);
-      this.#emit('served-from-pg', record, {
+      this.#emit('subscriber-too-old', record, {
         subscriber: m[1],
-        reason,
-        coverage: fields.sqliteChangeLogCoverage,
+        watermark: m[2],
       });
-      if (reason === 'registration-failed') {
-        this.#emit('registration-failed', record, {subscriber: m[1]});
-        this.#trip('sqlite-registration-failed', record, {subscriber: m[1]});
-      }
+      return;
+    }
+
+    m = REGISTRATION_FAILED.exec(message);
+    if (m) {
+      this.#emit('registration-failed', record, {subscriber: m[1]});
+      this.#trip('sqlite-registration-failed', record, {subscriber: m[1]});
       return;
     }
 

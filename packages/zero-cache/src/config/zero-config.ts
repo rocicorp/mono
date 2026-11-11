@@ -440,14 +440,10 @@ export const zeroOptions = {
         `In this configuration, the PG change-streamer db is not used or maintained. Consequently`,
         `after running servers in high-availability mode, rolling back to a legacy singleton-mode task`,
         `will trigger a resync in order to re-intialize the PG change-streamer db.`,
-        // Note: This is a feature flag that automatically enables the necessary
-        //       implementation flags:
+        // Note: This flag also enables the implementation flags it requires:
         //   ZERO_UPSTREAM_PG_REPLICATION_SLOT_PER_REPLICA = true
-        //   ZERO_LITESTREAM_BACKUP_USING_V5 = true,
-        //   ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_MODE = serve
-        //   ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_READ_PERCENT = 100
-        //   ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_COLD_READ_PERCENT = 100
-        //   ZERO_CHANGE_STREAMER_PG_CHANGE_LOG_ENABLED = false
+        //   ZERO_LITESTREAM_RESTORE_USING_V5 = true
+        //   ZERO_LITESTREAM_BACKUP_USING_V5 = true
       ],
       hidden: true, // TODO: Expose / roll out.
     },
@@ -859,7 +855,7 @@ export const zeroOptions = {
         `to sync multiple view-syncers without requiring multiple replication slots on`,
         `the upstream database. If unspecified, the {bold upstream-db} will be used.`,
         ``,
-        `Not used when the PG change log is disabled (e.g. in high-availability mode).`,
+        `Not used in high-availability mode, which keeps its change log in SQLite.`,
       ],
     },
 
@@ -1101,58 +1097,6 @@ export const zeroOptions = {
         `is received during this interval, the delay will be canceled and the takeover will happen`,
         `immediately, since the incoming request indicates that the task is registered as a target.`,
       ],
-    },
-
-    sqliteChangeLogMode: {
-      type: v
-        .literalUnion('off', 'write', 'compare', 'serve')
-        .optional(() => 'off'),
-      desc: [
-        `Controls the staged SQLite change-log rollout. Modes are cumulative:`,
-        `{bold off}, {bold write}, {bold compare}, and {bold serve}.`,
-      ],
-      hidden: true,
-    },
-
-    pgChangeLogEnabled: {
-      type: v.boolean().optional(() => true),
-      desc: [
-        `Whether the legacy Postgres change log remains authoritative for`,
-        `stream initialization, persistence, catchup, and upstream ACKs.`,
-        `Disabling it requires SQLite serve mode at 100 percent and a v5 backup.`,
-        `When disabled, the change-streamer does not connect to the {bold change-db}.`,
-      ],
-      hidden: true,
-    },
-
-    sqliteChangeLogReadPercent: {
-      type: v.number().optional(() => 0),
-      desc: [
-        `The stable percentage of eligible catchup subscriptions served from SQLite.`,
-      ],
-      hidden: true,
-    },
-
-    sqliteChangeLogColdReadPercent: {
-      type: v.number().optional(() => 0),
-      desc: [
-        `The stable percentage of eligible catchup subscriptions served from a`,
-        `SQLite change log that is younger than its retention window, i.e. one`,
-        `seeded less than {bold --change-streamer-sqlite-change-log-retention-ms}`,
-        `ago. Selection uses the same hash as`,
-        `{bold --change-streamer-sqlite-change-log-read-percent}, so a task that`,
-        `serves cold is always one that would serve warm.`,
-      ],
-      hidden: true,
-    },
-
-    sqliteChangeLogComparePercent: {
-      type: v.number().optional(() => 1),
-      desc: [
-        `The stable percentage of committed transactions whose catchup output is`,
-        `compared between the Postgres and SQLite change logs in {bold compare} mode.`,
-      ],
-      hidden: true,
     },
 
     sqliteChangeLogRetentionMs: {

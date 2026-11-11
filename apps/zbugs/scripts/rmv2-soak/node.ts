@@ -87,16 +87,12 @@ export type NodeOptions = {
  * `.env` the ordinary dev flow uses. Every variable this harness cares about
  * is set explicitly in {@link NodeOptions.env}, and dotenvx does not override
  * a variable that is already present -- but it does inject one that is
- * absent, which is why the view-syncer environment says
- * `SQLITE_CHANGE_LOG_MODE=off` rather than omitting it.
+ * absent, which is why the change-log settings are always set explicitly.
  */
 export class SoakNode {
   readonly name: string;
   readonly replicaFile: string;
-  /**
-   * Mutable: the change-log mode is a startup option, so the rollback drills
-   * (C10-C12) rewrite it between restarts.
-   */
+  /** Mutable: rebuilt by the cluster before each start. */
   env: NodeJS.ProcessEnv;
   readonly #opts: NodeOptions;
   #child: ChildProcess | undefined;

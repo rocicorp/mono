@@ -5,7 +5,6 @@ import {
   type DataOrSchemaChange,
 } from '../change-source/protocol/current/data.ts';
 import {extractChangeSubstring} from '../change-streamer/change-log-codec.ts';
-import {ChangeLogTransactionHasher} from '../change-streamer/change-log-transaction-hash.ts';
 import {ChangeLogCookieWriter, type CookieOpTag} from './change-log-cookies.ts';
 import {
   CHANGE_LOG_STREAM_TABLE,
@@ -15,8 +14,6 @@ import {
 export type ChangeLogStreamTransactionStats = {
   readonly rows: number;
   readonly estimatedBytes: number;
-  /** Present only for transactions selected for shadow-write validation. */
-  readonly hash?: string | undefined;
   /**
    * The cookie mutations this transaction's schema changes folded in, in stream
    * order. Empty for the overwhelming majority of transactions.
@@ -61,7 +58,6 @@ export class ChangeLogStreamWriter {
   #watermark: string | undefined;
   #pos = 0;
   #estimatedBytes = 0;
-  #hasher: ChangeLogTransactionHasher | undefined;
   #cookieMutations: CookieOpTag[] = [];
 
   constructor(db: StatementRunner) {
@@ -84,7 +80,6 @@ export class ChangeLogStreamWriter {
     watermark: string,
     json: string,
     storedChange = extractChangeSubstring(json, 'begin'),
-    hash = true,
   ): void {
     assertInvariant(
       this.#watermark === undefined,
@@ -109,16 +104,6 @@ export class ChangeLogStreamWriter {
       estimatedBytes,
       change,
     );
-    if (hash) {
-      this.#hasher = new ChangeLogTransactionHasher();
-      this.#hasher.add({
-        watermark,
-        pos: this.#pos,
-        tag: 'begin',
-        change,
-        precommit: null,
-      });
-    }
     this.#estimatedBytes = estimatedBytes;
   }
 
@@ -146,13 +131,6 @@ export class ChangeLogStreamWriter {
       stored,
     );
     this.#insertChange.run(watermark, ++this.#pos, tag, estimatedBytes, stored);
-    this.#hasher?.add({
-      watermark,
-      pos: this.#pos,
-      tag,
-      change: stored,
-      precommit: null,
-    });
     this.#estimatedBytes += estimatedBytes;
 
     if (isSchemaChange(change)) {
@@ -189,18 +167,9 @@ export class ChangeLogStreamWriter {
       precommit,
       writeTimeMs,
     );
-    const hasher = this.#hasher;
-    hasher?.add({
-      watermark,
-      pos: this.#pos,
-      tag: 'commit',
-      change,
-      precommit,
-    });
     const stats = {
       rows: this.#pos + 1,
       estimatedBytes: this.#estimatedBytes + estimatedBytes,
-      hash: hasher?.digest(),
       cookieMutations: this.#cookieMutations,
     };
     // The log is durable at `watermark` from here on, and nothing that can
@@ -229,7 +198,6 @@ export class ChangeLogStreamWriter {
     this.#watermark = undefined;
     this.#pos = 0;
     this.#estimatedBytes = 0;
-    this.#hasher = undefined;
     // A fresh array rather than a truncation: the committed stats hold a
     // reference to the previous one.
     this.#cookieMutations = [];

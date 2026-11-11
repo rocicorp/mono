@@ -62,15 +62,14 @@ import {
   type ReplicaSubscriptionState,
 } from './schema/tables.ts';
 import type {SnapshotMessage} from './snapshot-message.ts';
-import {SnapshotReservations} from './snapshot-reservations.ts';
+import {
+  SnapshotReservations,
+  type ChangeLogSource,
+} from './snapshot-reservations.ts';
 import {
   SQLiteChangeLogCatchup,
   type SQLiteChangeLogCleanupGuard,
 } from './sqlite-change-log-catchup.ts';
-import {
-  SQLiteChangeLogComparator,
-  type SQLiteChangeLogCompareOptions,
-} from './sqlite-change-log-comparator.ts';
 import {
   SQLiteChangeLogPurgeScheduler,
   type PurgeContinuation,
@@ -79,7 +78,6 @@ import {
 import {
   inspectSQLiteChangeLog,
   SQLiteChangeLogReadRouter,
-  type ChangeLogReadRoute,
   type SQLiteChangeLogCoverage,
 } from './sqlite-change-log-read-router.ts';
 import {SQLiteChangeLogReader} from './sqlite-change-log-reader.ts';
@@ -117,12 +115,12 @@ export type SQLiteCatchupOptions = {
    * the barrier. Defaults to the catchup coordinator's interval.
    */
   barrierPollIntervalMs?: number | undefined;
-  /**
-   * Optional policy hook used by focused tests. Production canary selection is
-   * supplied by `sqliteChangeLogServe` and is stable by shard plus task ID.
-   * Backup subscribers are rejected before either selector is invoked.
-   */
-  shouldUse?: ((ctx: SubscriberContext) => boolean) | undefined;
+  /** The read router's breaker cooldown. Injectable for tests. */
+  failureCooldownMs?: number | undefined;
+  /** The read router's clock. Injectable for tests. */
+  now?: (() => number) | undefined;
+  /** The read router's readiness inspection. Injectable for tests. */
+  inspect?: (() => SQLiteChangeLogCoverage | undefined) | undefined;
   /**
    * Overrides the purge scheduler's guard, for tests. When absent, the
    * service supplies the scheduler's real writer-serialized guard, or the
@@ -135,27 +133,6 @@ export type SQLiteCatchupOptions = {
    * {@link DEFAULT_CHANGE_LOG_UNAVAILABLE_WARN_THRESHOLD_MS}.
    */
   notReadyWarnThresholdMs?: number | undefined;
-};
-
-type SQLiteChangeLogServeOptions = {
-  /** Stable percentage of eligible serving tasks routed to SQLite. */
-  readPercent: number;
-  /**
-   * Stable percentage of eligible serving tasks routed to a log that has not
-   * yet aged through {@link retentionMs}. Zero keeps a reseeded log on PG for
-   * that whole window; above zero it serves that share of tasks, and a
-   * reservation it cannot cover is demoted rather than held pending.
-   * Defaults to zero.
-   */
-  coldReadPercent?: number | undefined;
-  /** The warm-up window a reseeded log ages through. */
-  retentionMs: number;
-  /** Injectable for deterministic breaker tests. */
-  failureCooldownMs?: number | undefined;
-  /** Injectable for deterministic warm-up and breaker tests. */
-  now?: (() => number) | undefined;
-  /** Injectable readiness inspection for service-level tests. */
-  inspect?: (() => SQLiteChangeLogCoverage | undefined) | undefined;
 };
 
 export type TuningOptions = StorerOptions & {
@@ -186,38 +163,21 @@ export type TuningOptions = StorerOptions & {
    * it to start serving (see {@link RestoreAdmission}).
    */
   switchoverRestoreReadinessGracePeriodMs?: number | undefined;
-  sqliteCatchup?: SQLiteCatchupOptions | undefined;
   /**
-   * Supplied when `sqliteChangeLogMode != off`, i.e. this is the gate on the
-   * change-log writer. Absent, nothing writes the log.
+   * The SQLite change log, which is used if and only if the PG change log is
+   * disabled (i.e. in high-availability mode), in which case all three of
+   * these options are required. The writer maintains the log from the stream
+   * loop, the purge scheduler (which runs on the writer's connection) trims
+   * it, and catchup serves subscribers from it.
    */
+  sqliteCatchup?: SQLiteCatchupOptions | undefined;
   sqliteChangeLogWriter?:
     | Omit<
         SQLiteChangeLogWriterOptions,
         'onCommit' | 'onDisabled' | 'onRebuilt'
       >
     | undefined;
-  /**
-   * Also supplied when `sqliteChangeLogMode != off`, and deliberately not
-   * gated on the read path: in `write` mode no reader ever opens, and this is
-   * the configuration the purge scheduler actually ships in. The scheduler
-   * runs on the writer's own connection, so with the writer absent (mode
-   * `off`) it is never constructed, and a leftover file on disk is left to
-   * the replicator's cleanup.
-   */
   sqliteChangeLogPurge?: SQLiteChangeLogPurgeSchedulerOptions | undefined;
-  /**
-   * Supplied in `compare` mode and later modes.
-   * `replicaFile` enables the initialization comparison.
-   * The other fields configure sampled catchup comparisons.
-   * Both checks are advisory, and Postgres remains authoritative.
-   * The comparator also requires the writer and catchup options.
-   */
-  sqliteChangeLogCompare?:
-    | (SQLiteChangeLogCompareOptions & {replicaFile: string})
-    | undefined;
-  /** Supplied only in `serve` mode. A zero percentage keeps every read on PG. */
-  sqliteChangeLogServe?: SQLiteChangeLogServeOptions | undefined;
   /**
    * The source of backed-up watermarks (i.e. the `BackupMonitor`), which the
    * change-streamer tracks from construction, and from which it requests
@@ -315,8 +275,8 @@ const REPLICATION_STATUS_ERROR_DELAY_THRESHOLD_MS = 5000;
 // stops looking like normal startup ordering. Subscriptions can arrive before
 // the stream loop's first reconcile has created and seeded the log, so early
 // declines are expected. Still declining a minute later means the log is not
-// being written at all -- `sqliteChangeLogMode=off`, a writer that has failed
-// soft, or a path mismatch -- which is worth surfacing.
+// being written at all -- a writer that has failed soft, or a path mismatch --
+// which is worth surfacing.
 const DEFAULT_CHANGE_LOG_UNAVAILABLE_WARN_THRESHOLD_MS = 60_000;
 
 /**
@@ -475,7 +435,6 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   readonly #sqliteCatchupOptions: SQLiteCatchupOptions | undefined;
   readonly #changeLogWriter: SQLiteChangeLogWriter | undefined;
   readonly #purgeScheduler: SQLiteChangeLogPurgeScheduler | undefined;
-  readonly #comparator: SQLiteChangeLogComparator | undefined;
   readonly #acker: UpstreamAcker;
   readonly #backupMonitor: BackupSource | undefined;
   readonly #initializer: ChangeLogInitializer;
@@ -521,20 +480,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     'sqlite_change_log.catchup_routes',
     'Catchup subscriptions by selected source and low-cardinality reason.',
   );
-  readonly #reservationDemotions = getOrCreateCounter(
-    'replication',
-    'sqlite_change_log.reservation_demotions',
-    'Snapshot reservations demoted from SQLite to PG because the change ' +
-      'log could not cover the backup being restored. With PG retired ' +
-      'these followers have no fallback, so this is the rate at which one ' +
-      'would instead have to wait for a later backup.',
-  );
   readonly #reservationConfirmDelays = getOrCreateCounter(
     'replication',
     'sqlite_change_log.reservation_confirm_delays',
     'Snapshot reservations whose confirmation was deferred because the ' +
-      "selected source's change-log minimum was later than the backup " +
-      'watermark. Counted once per reservation, by that source.',
+      "change log's minimum was later than the backup watermark. Counted " +
+      'once per reservation.',
   );
 
   #latestLagReportCommitTimeMs = 0;
@@ -554,8 +505,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   #loggedBehindWatermark: string | undefined;
   #sqlitePurgeContinuation: PurgeContinuation | undefined;
   #purgeLock: PurgeLock | null;
-  // PG and SQLite intentionally own separate level-triggered loops. Neither
-  // waits for, advances, or retries the other.
+  // Level-triggered purge loops of the PG and SQLite change logs, of which only
+  // the one of the enabled change log is ever scheduled.
   #pgPurgeScheduled = false;
   #pgPurgeRunning = false;
   #sqlitePurgeScheduled = false;
@@ -608,18 +559,21 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           opts,
         )
       : null;
-    if (!this.#pgChangeLogEnabled) {
+    // Exactly one change log is used: the PG change log, or (when it is
+    // disabled) the SQLite change log.
+    if (this.#pgChangeLogEnabled) {
+      assert(
+        !opts.sqliteChangeLogWriter &&
+          !opts.sqliteChangeLogPurge &&
+          !opts.sqliteCatchup,
+        'the SQLite change log is only used when the PG change log is disabled',
+      );
+    } else {
       assert(
         opts.sqliteChangeLogWriter &&
           opts.sqliteChangeLogPurge &&
-          opts.sqliteCatchup &&
-          opts.sqliteChangeLogServe?.readPercent === 100 &&
-          opts.sqliteChangeLogServe.coldReadPercent === 100,
-        'disabling the PG change log requires SQLite serving at 100 percent and a v5 backup',
-      );
-      assert(
-        opts.sqliteChangeLogCompare === undefined,
-        'SQLite change-log comparison requires the PG change log',
+          opts.sqliteCatchup,
+        'disabling the PG change log requires the SQLite change log',
       );
     }
     // Without a restored replica, a change log that is behind the slot cannot
@@ -640,20 +594,17 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       flowControlSlowSubscriberGracePeriodMs:
         opts.flowControlSlowSubscriberGracePeriodMs,
     });
-    const serveOptions = opts.sqliteChangeLogServe;
     const writerOptions = opts.sqliteChangeLogWriter;
+    const purgeOptions = opts.sqliteChangeLogPurge;
     const catchupOptions = opts.sqliteCatchup;
     this.#readRouter =
-      serveOptions && writerOptions && catchupOptions
+      writerOptions && purgeOptions && catchupOptions
         ? new SQLiteChangeLogReadRouter({
-            shard,
-            readPercent: serveOptions.readPercent,
-            coldReadPercent: serveOptions.coldReadPercent,
-            retentionMs: serveOptions.retentionMs,
-            failureCooldownMs: serveOptions.failureCooldownMs,
-            now: serveOptions.now,
+            retentionMs: purgeOptions.retentionMs,
+            failureCooldownMs: catchupOptions.failureCooldownMs,
+            now: catchupOptions.now,
             inspect:
-              serveOptions.inspect ??
+              catchupOptions.inspect ??
               (() =>
                 inspectSQLiteChangeLog(
                   lc,
@@ -700,17 +651,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
             // breaker never expires.
             this.#readRouter?.trip(true);
             this.#closeSQLiteCatchup();
-            this.#comparator?.stop();
           },
-          onRebuilt: () => {
-            this.#closeSQLiteCatchup();
-            // Invalidate cycles that can still read the replaced file.
-            this.#comparator?.invalidate();
-          },
+          onRebuilt: () => this.#closeSQLiteCatchup(),
         })
       : undefined;
-    // The purge scheduler runs on the writer's own connection, which is also
-    // its gate: no writer (mode `off`) means no scheduler, and a writer that
+    // The purge scheduler runs on the writer's own connection. A writer that
     // has not created the file yet -- or failed soft and deleted it -- makes
     // cycles skip rather than fail, so a late-appearing file is picked up
     // without a restart.
@@ -732,11 +677,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         ? backupConfig.litestreamVersion === 'v5'
         : !this.#pgChangeLogEnabled,
     });
+    // The replica seeds a new SQLite change log, and supplies the resume point
+    // if the writer is unavailable.
     const replicaFileForInitialization =
-      opts.sqliteChangeLogCompare?.replicaFile ??
-      (!this.#pgChangeLogEnabled
-        ? opts.sqliteChangeLogWriter?.replicaFile
-        : undefined);
+      opts.sqliteChangeLogWriter?.replicaFile;
     // A Postgres change log whose head is behind the replication slot may be
     // missing transactions that the slot will not stream (e.g. after running
     // in high-availability mode), in which case it is re-initialized from the
@@ -750,32 +694,17 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     const replicaSource = replicaFile
       ? replicaInitializationSource(lc, replicaFile)
       : undefined;
-    this.#initializer = new ChangeLogInitializer(
-      lc,
-      {
-        initFromPgChangeLog: this.#pgChangeLogEnabled,
-        initFromReplica: replicaFileForInitialization !== undefined,
-      },
-      {
-        // Only reached when `initFromPgChangeLog` is set, i.e. when the PG
-        // change log is enabled.
-        pgChangeLog: () =>
-          must(this.#storer).getStartStreamInitializationParameters(),
-        // Only reached when `initFromReplica` is set, i.e. when the option
-        // that supplies the file is present.
-        replica: () => must(replicaSource)(),
-        // Use the Postgres resume point when it is present. Otherwise, let the
-        // SQLite change log supply its own resume point.
-        reconcileChangeLog: (resumeFrom, seed) =>
-          resumeFrom
-            ? this.#changeLogWriter?.reconcile(resumeFrom)
-            : this.#changeLogWriter?.reconcileFromLog(seed),
-        changeLog: () => this.#changeLogWriter?.connection,
-        reinitializePgChangeLog: replicaFileForReinitialization
-          ? params => must(this.#storer).reinitializeFromReplica(params)
-          : undefined,
-      },
-    );
+    this.#initializer = new ChangeLogInitializer(lc, this.#pgChangeLogEnabled, {
+      // Only reached when the PG change log is enabled.
+      pgChangeLog: () =>
+        must(this.#storer).getStartStreamInitializationParameters(),
+      // Reached when the PG change log is disabled, or to re-initialize it.
+      replica: () => must(replicaSource)(),
+      reconcileChangeLog: seed => this.#changeLogWriter?.reconcileFromLog(seed),
+      reinitializePgChangeLog: replicaFileForReinitialization
+        ? params => must(this.#storer).reinitializeFromReplica(params)
+        : undefined,
+    });
     this.#sqliteCatchupOptions = opts.sqliteCatchup
       ? {
           ...opts.sqliteCatchup,
@@ -786,21 +715,6 @@ class ChangeStreamerImpl implements ChangeStreamerService {
             this.#purgeScheduler?.cleanupGuard,
         }
       : undefined;
-    // Compare mode requires the writer and catchup configuration.
-    this.#comparator =
-      this.#storer &&
-      opts.sqliteChangeLogCompare &&
-      opts.sqliteChangeLogWriter &&
-      opts.sqliteCatchup
-        ? new SQLiteChangeLogComparator(
-            lc,
-            shard,
-            opts.sqliteCatchup.changeLogFile,
-            opts.sqliteChangeLogWriter.identity,
-            this.#storer,
-            {setTimeoutFn, ...opts.sqliteChangeLogCompare},
-          )
-        : undefined;
     this.#purgeLock = initialPurgeLock;
     this.#autoReset = autoReset;
     this.#state = new RunningState(this.id, undefined, setTimeoutFn);
@@ -1254,9 +1168,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   }
 
   /**
-   * Routes the catchup of an accepted `subscriber` to the SQLite or PG change
-   * log (or rejects it), and returns the function that removes the subscriber
-   * from wherever it was registered. If routing fails partway, any partial
+   * Starts the catchup of an accepted `subscriber` from the change log in use
+   * (or rejects it), and returns the function that removes the subscriber from
+   * wherever it was registered. If this fails partway, any partial
    * registration is removed before the error is rethrown.
    */
   async #startCatchup(
@@ -1264,31 +1178,22 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     ctx: SubscriberContext,
     subscriber: Subscriber,
   ): Promise<() => void> {
-    const removeFromForwarder = () => {
-      lc.info?.(`removing subscriber ${subscriber.id}`);
-      this.#forwarder.remove(subscriber);
-    };
-    const catchupFromPG = () => {
-      const storer = must(
-        this.#storer,
-        'cannot catch up from a disabled PG change log',
-      );
-      // Keep the existing PG registration/catchup lockstep unchanged when
-      // SQLite was not selected before Forwarder.add().
+    if (this.#storer) {
+      const removeFromForwarder = () => {
+        lc.info?.(`removing subscriber ${subscriber.id}`);
+        this.#forwarder.remove(subscriber);
+      };
       try {
         this.#forwarder.add(subscriber);
-        storer.catchup(subscriber, ctx.mode);
+        this.#storer.catchup(subscriber, ctx.mode);
       } catch (e) {
         removeFromForwarder();
         throw e;
       }
       return removeFromForwarder;
-    };
+    }
 
     const sqliteDecision = this.#selectSQLiteCatchup(lc, ctx);
-    if (!sqliteDecision) {
-      return catchupFromPG();
-    }
     if (sqliteDecision.kind === 'rejected') {
       lc.warn?.(
         `${
@@ -1318,59 +1223,37 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     }
     switch (registration.kind) {
       case 'registered':
-        lc.debug?.(
-          `serving ${ctx.id} from SQLite catchup`,
-          ...(coverage ? [{sqliteChangeLogCoverage: coverage}] : []),
-        );
+        lc.debug?.(`serving ${ctx.id} from SQLite catchup`, {
+          sqliteChangeLogCoverage: coverage,
+        });
         this.#recordCatchupRoute('sqlite', reason);
         return removeFromSQLite;
-      case 'uncovered':
-        if (this.#pgChangeLogEnabled) {
-          lc.info?.(
-            `serving ${ctx.id} from PG catchup: subscriber watermark ` +
-              `${ctx.watermark} is below the SQLite change-log minimum ` +
-              registration.minWatermark,
-          );
-          this.#recordCatchupRoute('pg', 'watermark-uncovered');
-          return catchupFromPG();
-        } else {
-          const message =
-            `earliest supported watermark is ` +
-            `${registration.minWatermark} (requested ${ctx.watermark})`;
-          lc.warn?.(
-            `rejecting subscriber at watermark ${ctx.watermark}: ` +
-              `the SQLite change log starts at ` +
-              `${registration.minWatermark} and the PG change log is disabled`,
-          );
-          this.#recordCatchupRoute('none', 'watermark-uncovered');
-          subscriber.close(ErrorType.WatermarkTooOld, message);
-          return removeFromSQLite;
-        }
+      case 'uncovered': {
+        const message =
+          `earliest supported watermark is ` +
+          `${registration.minWatermark} (requested ${ctx.watermark})`;
+        lc.warn?.(
+          `rejecting subscriber at watermark ${ctx.watermark}: ` +
+            `the SQLite change log starts at ${registration.minWatermark}`,
+        );
+        this.#recordCatchupRoute('none', 'watermark-uncovered');
+        subscriber.close(ErrorType.WatermarkTooOld, message);
+        return removeFromSQLite;
+      }
       case 'declined':
-        // Registration failed before the subscriber was committed to
-        // SQLite. Use PG when enabled; otherwise end this subscription so
-        // it retries. The coordinator has already tripped the breaker,
-        // which keeps the retry off SQLite for the cooldown; it is
-        // deliberately not closed here, since closing it would abort the
-        // catchups of every other subscriber it is serving.
-        if (this.#pgChangeLogEnabled) {
-          lc.error?.(
-            `serving ${ctx.id} from PG catchup: SQLite catchup ` +
-              `registration failed`,
-            registration.error,
-          );
-          this.#recordCatchupRoute('pg', 'registration-failed');
-          return catchupFromPG();
-        } else {
-          lc.error?.(
-            `ending subscription for ${ctx.id} to retry SQLite catchup: ` +
-              `registration failed and the PG change log is disabled`,
-            registration.error,
-          );
-          this.#recordCatchupRoute('none', 'registration-failed');
-          subscriber.fail(registration.error);
-          return removeFromSQLite;
-        }
+        // Registration failed before the subscriber was committed to SQLite.
+        // End this subscription so that it retries. The coordinator has
+        // already tripped the breaker, which keeps the retry off SQLite for
+        // the cooldown; it is deliberately not closed here, since closing it
+        // would abort the catchups of every other subscriber it is serving.
+        lc.error?.(
+          `ending subscription for ${ctx.id} to retry SQLite catchup: ` +
+            `registration failed`,
+          registration.error,
+        );
+        this.#recordCatchupRoute('none', 'registration-failed');
+        subscriber.fail(registration.error);
+        return removeFromSQLite;
       case 'handled':
         // The coordinator closed or failed the subscriber itself, so
         // there is nothing left to route. Still counted, so that the
@@ -1463,101 +1346,87 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       return;
     }
 
-    // Resolve PG bounds, when enabled, before touching any pin. Everything
-    // below runs to completion without awaiting, which keeps a reservation's
-    // advertised bounds and its pin in agreement: a concurrent /snapshot
-    // retry for the same task replaces the reservation and re-pins it, and
-    // confirming that replacement with the previous pin's bounds is exactly
-    // the mismatch pinning exists to prevent.
-    const pgState = this.#pgChangeLogEnabled
-      ? await this.#getChangeLogState()
-      : undefined;
+    if (this.#storer) {
+      const {minWatermark} = await this.#getChangeLogState();
+      for (const taskID of reservations.unconfirmedTaskIDs()) {
+        this.#confirmReservation(
+          reservations,
+          taskID,
+          'pg',
+          minWatermark,
+          backupWatermark,
+        );
+      }
+      return;
+    }
+
+    // Everything below runs to completion without awaiting, which keeps a
+    // reservation's advertised bounds and its pin in agreement: a concurrent
+    // /snapshot retry for the same task replaces the reservation and re-pins
+    // it, and confirming that replacement with the previous pin's bounds is
+    // exactly the mismatch pinning exists to prevent.
+    const router = must(this.#readRouter);
     for (const taskID of reservations.unconfirmedTaskIDs()) {
-      let route = this.#readRouter?.peek(taskID);
+      let route = router.peek(taskID);
       // startSnapshotReservation pins only after an in-flight purge has
       // completed. A task with no pin yet is confirmed by that path instead.
-      if (this.#readRouter && route === undefined) {
+      if (route === undefined) {
         continue;
       }
-
-      // A transiently unavailable or broken SQLite log normally pins the
-      // reservation to PG. With PG disabled, re-evaluate that choice on each
-      // backup notification and keep the reservation pending until SQLite can
-      // supply bounds.
-      if (!this.#pgChangeLogEnabled && route?.source === 'pg') {
-        this.#readRouter?.release(taskID);
-        route = this.#readRouter?.pin(taskID);
-        if (route?.source === 'pg') {
+      // A transiently unavailable or broken SQLite log cannot supply bounds.
+      // Re-evaluate on each backup notification and keep the reservation
+      // pending until it can.
+      if (!route.available) {
+        router.release(taskID);
+        route = router.pin(taskID);
+        if (!route.available) {
           if (reservations.noteConfirmationDelayed(taskID)) {
             this.#reservationConfirmDelays.add(1);
           }
           this.#lc.warn?.(
             `delaying snapshot reservation for ${taskID}: SQLite change log ` +
-              `is unavailable and the PG change log is disabled`,
+              `is unavailable`,
           );
           continue;
         }
       }
+      this.#confirmReservation(
+        reservations,
+        taskID,
+        'sqlite',
+        route.coverage.minWatermark,
+        backupWatermark,
+      );
+    }
+  }
 
-      if (route?.source === 'sqlite') {
-        const coverage = must(
-          route.coverage,
-          'a pinned SQLite route must carry its covered range',
-        );
-        if (
-          this.#pgChangeLogEnabled &&
-          coverage.minWatermark > backupWatermark
-        ) {
-          // A log seeded after this backup, most often. Holding the
-          // reservation until a backup reaches the log's minimum would stall
-          // a follower that PG can serve now, so move it -- pin included.
-          this.#lc.info?.(
-            `demoting ${taskID} to PG catchup: SQLite change-log minimum ` +
-              `${coverage.minWatermark} is later than backupWatermark ` +
-              backupWatermark,
-          );
-          this.#reservationDemotions.add(1);
-          route = must(this.#readRouter).demote(taskID);
-        }
+  #confirmReservation(
+    reservations: SnapshotReservations,
+    taskID: string,
+    source: ChangeLogSource,
+    minWatermark: string,
+    backupWatermark: string,
+  ) {
+    if (minWatermark <= backupWatermark) {
+      reservations.confirmFor(
+        taskID,
+        this.#replicaVersion,
+        backupWatermark,
+        source,
+      );
+      this.#restoreAdmission?.reservationConfirmed(taskID, backupWatermark);
+    } else {
+      // The change log cannot catch a restored replica up from this backup
+      // yet. Keep the reservation pending until a later backup moves the
+      // durable watermark into its covered range.
+      if (reservations.noteConfirmationDelayed(taskID)) {
+        this.#reservationConfirmDelays.add(1);
       }
-
-      const source = route?.source ?? 'pg';
-      let minWatermark: string;
-      if (route?.source === 'sqlite') {
-        // Demotion above already moved every SQLite route the backup is
-        // outside of, so this one covers it and confirms below.
-        minWatermark = must(
-          route.coverage,
-          'a pinned SQLite route must carry its covered range',
-        ).minWatermark;
-      } else {
-        minWatermark = must(
-          pgState,
-          'a PG reservation route requires the PG change log',
-        ).minWatermark;
-      }
-
-      if (minWatermark <= backupWatermark) {
-        reservations.confirmFor(
-          taskID,
-          this.#replicaVersion,
-          backupWatermark,
-          source,
-        );
-        this.#restoreAdmission?.reservationConfirmed(taskID, backupWatermark);
-      } else {
-        // PG cannot catch a restored replica up from this backup yet. Keep
-        // the reservation pending until a later backup moves the durable
-        // watermark into its covered range.
-        if (reservations.noteConfirmationDelayed(taskID)) {
-          this.#reservationConfirmDelays.add(1);
-        }
-        this.#lc.error?.(
-          `${source} change-log minWatermark ${minWatermark} is later than ` +
-            `backupWatermark ${backupWatermark}. Delaying confirmation of ` +
-            `snapshot reservation until next backup.`,
-        );
-      }
+      this.#lc.error?.(
+        `${source} change-log minWatermark ${minWatermark} is later than ` +
+          `backupWatermark ${backupWatermark}. Delaying confirmation of ` +
+          `snapshot reservation until next backup.`,
+      );
     }
   }
 
@@ -1747,7 +1616,6 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#lagReports.resolve({request: () => {}});
     this.#stream?.changes.cancel();
     this.#purgeScheduler?.stop();
-    this.#comparator?.stop();
     this.#sqliteCatchup?.close();
     this.#changeLogWriter?.close();
     await Promise.allSettled([this.#storer?.stop(), this.#source.stop()]);
@@ -1822,121 +1690,72 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   #selectSQLiteCatchup(
     lc: LogContext,
     ctx: SubscriberContext,
-  ): SQLiteCatchupDecision | undefined {
-    const opts = this.#sqliteCatchupOptions;
-    if (this.#lastForwardedCommitWatermark === undefined || !opts) {
-      return this.#fallbackOrReject(
+  ): SQLiteCatchupDecision {
+    const opts = must(this.#sqliteCatchupOptions);
+    if (this.#lastForwardedCommitWatermark === undefined) {
+      return this.#rejectSQLiteCatchup(
         'not-ready',
-        'SQLite catchup is not ready and the PG change log is disabled',
-      );
-    }
-    // While the PG change log is available, backup subscribers retain its
-    // existing recovery policy and cannot be moved by a canary selector.
-    // Once PG is disabled, the backup replicator must use SQLite catchup: it
-    // advances the canonical replica that Litestream backs up.
-    if (ctx.mode === 'backup' && this.#pgChangeLogEnabled) {
-      lc.info?.(`not serving backup subscriber ${ctx.id} from SQLite catchup`);
-      return this.#fallbackOrReject(
-        'ineligible-mode',
-        'backup subscribers retain the PG change-log recovery policy',
+        'SQLite catchup is not ready',
       );
     }
 
-    let route: ChangeLogReadRoute | undefined;
-    if (this.#readRouter) {
-      route = this.#readRouter.consume(ctx.taskID);
-      if (route.source === 'pg') {
-        if (route.reason === 'cold-log') {
-          lc.info?.(
-            `serving ${ctx.id} from PG catchup: SQLite change log is still warming`,
-            {sqliteChangeLogCoverage: route.coverage},
-          );
-        } else if (route.reason === 'log-unavailable') {
-          this.#declineSQLiteCatchup(
-            lc,
-            ctx,
-            opts,
-            `${opts.changeLogFile} is unavailable or incompatible`,
-          );
-        } else {
-          lc.debug?.(
-            `serving ${ctx.id} from PG catchup: SQLite route ${route.reason}`,
-            ...(route.coverage
-              ? [{sqliteChangeLogCoverage: route.coverage}]
-              : []),
-          );
-        }
-        return this.#fallbackOrReject(
-          route.reason,
-          `SQLite catchup route ${route.reason} is unavailable and the PG ` +
-            `change log is disabled`,
+    const route = must(this.#readRouter).consume(ctx.taskID);
+    if (!route.available) {
+      if (route.reason === 'log-unavailable') {
+        this.#declineSQLiteCatchup(
+          lc,
+          ctx,
+          opts,
+          `${opts.changeLogFile} is unavailable or incompatible`,
         );
       }
-      const coverage = route.coverage;
-      assert(coverage, 'a SQLite route must carry its covered range');
-      if (ctx.watermark < coverage.minWatermark) {
-        lc.info?.(
-          `serving ${ctx.id} from PG catchup: subscriber watermark ` +
-            `${ctx.watermark} is below the SQLite change-log minimum ` +
-            coverage.minWatermark,
-          {sqliteChangeLogCoverage: coverage},
-        );
-        return this.#fallbackOrReject(
-          'watermark-uncovered',
-          `earliest supported watermark is ${coverage.minWatermark} ` +
-            `(requested ${ctx.watermark})`,
-          true,
-        );
-      }
-    }
-
-    // `shouldUse` remains as a test hook and an optional extra policy gate.
-    // Production selection comes from #readRouter.
-    if (!this.#readRouter && !opts.shouldUse?.(ctx)) {
-      return this.#fallbackOrReject(
-        'selector',
-        'SQLite catchup was not selected and the PG change log is disabled',
+      return this.#rejectSQLiteCatchup(
+        route.reason,
+        `SQLite catchup is unavailable (${route.reason})`,
       );
     }
-    if (this.#readRouter && opts.shouldUse && !opts.shouldUse(ctx)) {
-      return this.#fallbackOrReject(
-        'selector',
-        'SQLite catchup was not selected and the PG change log is disabled',
+    const {coverage} = route;
+    if (ctx.watermark < coverage.minWatermark) {
+      lc.info?.(
+        `subscriber watermark ${ctx.watermark} is below the SQLite ` +
+          `change-log minimum ${coverage.minWatermark}`,
+        {sqliteChangeLogCoverage: coverage},
+      );
+      return this.#rejectSQLiteCatchup(
+        'watermark-uncovered',
+        `earliest supported watermark is ${coverage.minWatermark} ` +
+          `(requested ${ctx.watermark})`,
+        true,
       );
     }
 
     const catchup =
       this.#sqliteCatchup ?? this.#openSQLiteCatchup(lc, opts, ctx);
-    if (catchup) {
-      return {
-        kind: 'selected',
-        catchup,
-        reason: route?.reason ?? 'selector',
-        coverage: route?.coverage,
-        // Legacy focused-test selection has no warm classification.
-        logWarm:
-          route === undefined ? undefined : route.reason !== 'selected-cold',
-      };
-    } else {
-      return this.#fallbackOrReject(
+    if (!catchup) {
+      return this.#rejectSQLiteCatchup(
         'log-unavailable',
-        'SQLite change log is unavailable and the PG change log is disabled',
+        'SQLite change log is unavailable',
       );
     }
+    return {
+      kind: 'selected',
+      catchup,
+      reason: route.reason,
+      coverage,
+      logWarm: route.reason !== 'selected-cold',
+    };
   }
 
-  #fallbackOrReject(
+  #rejectSQLiteCatchup(
     reason: string,
     message: string,
     terminal = false,
-  ): SQLiteCatchupRejection | undefined {
-    this.#recordCatchupRoute(this.#pgChangeLogEnabled ? 'pg' : 'none', reason);
-    return this.#pgChangeLogEnabled
-      ? undefined
-      : {kind: 'rejected', message, terminal};
+  ): SQLiteCatchupRejection {
+    this.#recordCatchupRoute('none', reason);
+    return {kind: 'rejected', message, terminal};
   }
 
-  #recordCatchupRoute(source: 'pg' | 'sqlite' | 'none', reason: string): void {
+  #recordCatchupRoute(source: 'sqlite' | 'none', reason: string): void {
     this.#catchupRoutes.add(1, {source, reason});
   }
 
@@ -1946,13 +1765,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
    *
    * The log may not exist yet -- the writer creates it at the stream loop's
    * first reconcile, and deletes it when it fails soft -- or may exist without
-   * content, or may be unreadable. None of those can be allowed to fail a
-   * subscription:
-   * this is the last point at which PG catchup can be selected when it is
-   * enabled -- past `Forwarder.add()` the subscriber is committed to SQLite --
-   * so each declines here instead. With PG disabled, the caller ends the
-   * subscription so that it retries. Neither the failure nor the reader is
-   * retained, so a later subscription retries from scratch.
+   * content, or may be unreadable. Each declines here -- before `Forwarder.add()`
+   * commits the subscriber to SQLite -- and the caller ends the subscription
+   * so that it retries. Neither the failure nor the reader is retained, so a
+   * later subscription retries from scratch.
    */
   #openSQLiteCatchup(
     lc: LogContext,
@@ -2016,7 +1832,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   }
 
   /**
-   * Reports falling back to PG catchup, tracking how long the log has been
+   * Reports declining SQLite catchup, tracking how long the log has been
    * unavailable so that a subscription that merely arrived before the writer's
    * first reconcile does not look like an incident.
    */
@@ -2034,10 +1850,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       opts.notReadyWarnThresholdMs ??
       DEFAULT_CHANGE_LOG_UNAVAILABLE_WARN_THRESHOLD_MS;
     lc[unavailableMs >= threshold ? 'warn' : 'debug']?.(
-      (this.#pgChangeLogEnabled
-        ? `serving ${ctx.id} from PG catchup: `
-        : `cannot serve ${ctx.id} from SQLite catchup: `) +
-        `${reason} ` +
+      `cannot serve ${ctx.id} from SQLite catchup: ${reason} ` +
         `(unavailable for ${unavailableMs} ms)`,
       ...(error === undefined ? [] : [error]),
     );
@@ -2052,12 +1865,9 @@ type SQLiteCatchupSelection = {
   readonly kind: 'selected';
   readonly catchup: SQLiteChangeLogCatchup;
   readonly reason: string;
-  readonly coverage: SQLiteChangeLogCoverage | undefined;
-  /**
-   * Whether the router classified the log as warm for this subscriber, or
-   * undefined when selection did not run through the router (focused tests).
-   */
-  readonly logWarm: boolean | undefined;
+  readonly coverage: SQLiteChangeLogCoverage;
+  /** Whether the router classified the log as warm for this subscriber. */
+  readonly logWarm: boolean;
 };
 
 type SQLiteCatchupRejection = {

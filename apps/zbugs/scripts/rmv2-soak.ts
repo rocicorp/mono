@@ -37,18 +37,14 @@ import {
 import {ResourceSampler} from './rmv2-soak/resources.ts';
 import {mixedPhase, workloadPhases} from './rmv2-soak/workload.ts';
 
-/** Slice L10: the rollback drills, which must run after everything else. */
-const ROLLBACK_DRILLS = new Set(['C10', 'C11', 'C12']);
-
 /**
- * Everything except C9 (a five-minute minio outage) and the rollback drills,
- * which leave the change log rolled back to `off`. `--chaos all` adds them.
+ * Everything except C9 (a five-minute minio outage). `--chaos all` adds it.
  */
 const DEFAULT_CHAOS = 'C1,C2,C3,C4,C5,C6,C7,C8,C13,C14';
 
 const USAGE = `
-A local, reproducible end-to-end exercise of the SQLite change log in serve
-mode against a real litestream v5 backup (minio/S3), with real view-syncer
+A local, reproducible end-to-end exercise of the SQLite change log (i.e.
+high-availability replication) against a real litestream v5 backup (minio/S3), with real view-syncer
 restores, disconnects and reconnects.
 
 Usage:
@@ -61,20 +57,14 @@ Prerequisites:
 
 Options:
   --view-syncers <n>        Number of view-syncers. Default: 3
-  --mode <mode>             off | write | compare | serve. Default: serve
-  --read-percent <n>        Default: 100
-  --cold-read-percent <n>   Default: 100 (zeroes the warm-up wait; the
-                            residual wait is a reseed window, not a restore
-                            window)
-  --compare-percent <n>     Default: 100
   --retention-ms <n>        Default: 60000. Must be > 0; it is the purger's
                             retention floor, not a routing knob.
   --scale <f>               Multiplies every phase duration. Default: 1
   --chaos <list>            Comma-separated action ids, or "none", or "all".
                             Default: C1-C8, C13 and C14. "all" adds C9 (a
-                            long minio outage) and the C10-C12 rollback
-                            drills, which run last and leave the log off.
-  --baseline                Also run the mode=off A/B control pass first
+                            long minio outage).
+  --baseline                Also run the legacy PG change log A/B control
+                            pass first
   --backup-interval-seconds <n>  incremental backup (sync request) interval.
                             Default: 2
   --startup-delay-ms <n>    change-streamer startup delay. Default: 1000
@@ -100,10 +90,6 @@ function parseConfig(): SoakConfig {
   const {values} = parseArgs({
     options: {
       'view-syncers': {type: 'string'},
-      'mode': {type: 'string'},
-      'read-percent': {type: 'string'},
-      'cold-read-percent': {type: 'string'},
-      'compare-percent': {type: 'string'},
       'retention-ms': {type: 'string'},
       'scale': {type: 'string'},
       'chaos': {type: 'string'},
@@ -124,20 +110,6 @@ function parseConfig(): SoakConfig {
     process.exit(0);
   }
 
-  const mode = (values.mode ?? 'serve') as SoakConfig['changeLog']['mode'];
-  if (!['off', 'write', 'compare', 'serve'].includes(mode)) {
-    throw new Error(`--mode must be off | write | compare | serve`);
-  }
-  const readPercent = numOpt(
-    'read-percent',
-    values['read-percent'],
-    mode === 'serve' ? 100 : 0,
-  );
-  const coldReadPercent = numOpt(
-    'cold-read-percent',
-    values['cold-read-percent'],
-    mode === 'serve' ? 100 : 0,
-  );
   const retentionMs = numOpt('retention-ms', values['retention-ms'], 60_000);
   if (retentionMs <= 0) {
     // `sqlite-change-log-purge-scheduler.ts` asserts retentionMs > 0. It is
@@ -187,17 +159,7 @@ function parseConfig(): SoakConfig {
     s3Region: 'us-east-1',
     accessKeyID: 'minioadmin',
     secretAccessKey: 'minioadmin',
-    changeLog: {
-      mode,
-      readPercent,
-      coldReadPercent,
-      comparePercent: numOpt(
-        'compare-percent',
-        values['compare-percent'],
-        mode === 'off' || mode === 'write' ? 0 : 100,
-      ),
-      retentionMs,
-    },
+    changeLog: {highAvailability: true, retentionMs},
     backupIntervalSeconds: numOpt(
       'backup-interval-seconds',
       values['backup-interval-seconds'],
@@ -414,7 +376,7 @@ async function main(): Promise<void> {
     // Phase 0 (slice L9): the A/B control for failure class 6. Without it a
     // replication-path regression is indistinguishable from the workload.
     if (config.baseline) {
-      say('phase 0: baseline with the change log off');
+      say('phase 0: baseline with the legacy PG change log');
       await resetBackup(config);
       const baselineLogsDir = join(config.logsDir, 'baseline');
       mkdirSync(baselineLogsDir, {recursive: true});
@@ -423,10 +385,7 @@ async function main(): Promise<void> {
           ...config,
           logsDir: baselineLogsDir,
           changeLog: {
-            mode: 'off',
-            readPercent: 0,
-            coldReadPercent: 0,
-            comparePercent: 0,
+            highAvailability: false,
             retentionMs: config.changeLog.retentionMs,
           },
         },
@@ -553,14 +512,7 @@ async function main(): Promise<void> {
         sampler,
         note: say,
       };
-      // The rollback drills leave the change log in `write` and then `off`,
-      // which is not a state the rest of the run can continue from, so they
-      // always go last regardless of the order they were requested in.
-      const ordered = config.chaos.toSorted(
-        (a, b) =>
-          Number(ROLLBACK_DRILLS.has(a)) - Number(ROLLBACK_DRILLS.has(b)),
-      );
-      for (const id of ordered) {
+      for (const id of config.chaos) {
         const action = CHAOS_ACTIONS.find(a => a.id === id);
         if (!action) {
           continue;

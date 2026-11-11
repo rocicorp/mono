@@ -561,8 +561,8 @@ export type ReseedReason =
  * unlinking and reseeding this disposable cache rather than deleting an
  * arbitrarily large suffix in place.
  */
-export const MAX_RECONCILE_TRUNCATE_ROWS = 10_000;
-export const MAX_RECONCILE_TRUNCATE_BYTES = 16 * 1024 * 1024;
+const MAX_RECONCILE_TRUNCATE_ROWS = 10_000;
+const MAX_RECONCILE_TRUNCATE_BYTES = 16 * 1024 * 1024;
 
 export class ChangeLogRebuildRequired extends Error {
   override readonly name = 'ChangeLogRebuildRequired';

@@ -7,7 +7,7 @@ import {getOrInsertComputed} from '../../../../packages/shared/src/map.ts';
  *
  * zero-cache already exports every counter, histogram and gauge this soak
  * needs -- the route census (`sqlite_change_log.catchup_routes`), the purge
- * probe outcomes, compare results, log file bytes, backup lag -- through
+ * probe outcomes, log file bytes, backup lag -- through
  * OpenTelemetry. Pointing each task at its own path on this server is a far
  * more faithful source than scraping prose out of log lines, and it needs no
  * collector: `OTEL_EXPORTER_OTLP_PROTOCOL=http/json` posts plain JSON.

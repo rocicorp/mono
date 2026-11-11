@@ -39,7 +39,8 @@ export function replicaFileName(replicaFile: string, mode: ReplicaFileMode) {
 
 /**
  * Whether a replicator worker deletes the change-log file beside its replica at
- * startup.
+ * startup, i.e. whether the SQLite change log is disabled because the
+ * replication-manager is not running in high-availability mode.
  *
  * The change log belongs to the change-streamer, so this only ever cleans up a
  * file that nothing is writing. The predicate is deliberately the config flag
@@ -54,23 +55,23 @@ export function replicaFileName(replicaFile: string, mode: ReplicaFileMode) {
  * reseeds at the resume watermark.
  */
 export function replicatorDeletesStaleChangeLog(
-  sqliteChangeLogMode: string,
+  highAvailabilityReplication: boolean,
 ): boolean {
-  return sqliteChangeLogMode === 'off';
+  return !highAvailabilityReplication;
 }
 
 /**
- * The `mode=off` cleanup itself: deletes the change-log file beside `dbPath`
+ * The cleanup itself: deletes the change-log file beside `dbPath`
  * when {@link replicatorDeletesStaleChangeLog} says nothing writes it, and
  * reports whether it did. The decision and the delete live in one function so
  * that the guard test covers the call the replicator actually makes, not just
  * the predicate.
  */
 export function deleteStaleChangeLog(
-  sqliteChangeLogMode: string,
+  highAvailabilityReplication: boolean,
   dbPath: string,
 ): boolean {
-  if (!replicatorDeletesStaleChangeLog(sqliteChangeLogMode)) {
+  if (!replicatorDeletesStaleChangeLog(highAvailabilityReplication)) {
     return false;
   }
   deleteChangeLogDB(dbPath);

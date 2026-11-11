@@ -62,13 +62,13 @@ export type SQLiteChangeLogWriterOptions = {
   /** Overridable for tests. */
   now?: (() => number) | undefined;
   /**
-   * Percentage of transactions that retain the rollout-only per-message
-   * timing and source-vs-stored hash validation. Defaults to 1.
+   * Percentage of transactions whose per-message processing time is measured.
+   * Defaults to 1.
    */
-  shadowValidationPercent?: number | undefined;
+  timingSamplePercent?: number | undefined;
 };
 
-const DEFAULT_SHADOW_VALIDATION_PERCENT = 1;
+const DEFAULT_TIMING_SAMPLE_PERCENT = 1;
 
 /**
  * Appends the canonical change stream to the SQLite change log, from the
@@ -104,25 +104,25 @@ export class SQLiteChangeLogWriter {
   readonly #lc: LogContext;
   readonly #opts: SQLiteChangeLogWriterOptions;
   readonly #now: () => number;
-  readonly #shadowValidationPercent: number;
+  readonly #timingSamplePercent: number;
 
   #db: Database | undefined;
   #writer: ChangeLogStreamWriter | undefined;
   #observer: SQLiteChangeLogObserver | undefined;
   #disabled = false;
-  #validateTransaction = false;
+  #timeTransaction = false;
 
   constructor(lc: LogContext, opts: SQLiteChangeLogWriterOptions) {
     this.#lc = lc.withContext('component', 'sqlite-change-log-writer');
     this.#opts = opts;
     this.#now = opts.now ?? Date.now;
-    this.#shadowValidationPercent =
-      opts.shadowValidationPercent ?? DEFAULT_SHADOW_VALIDATION_PERCENT;
+    this.#timingSamplePercent =
+      opts.timingSamplePercent ?? DEFAULT_TIMING_SAMPLE_PERCENT;
     assert(
-      Number.isInteger(this.#shadowValidationPercent) &&
-        this.#shadowValidationPercent >= 0 &&
-        this.#shadowValidationPercent <= 100,
-      'SQLite change-log shadow validation percentage must be an integer between 0 and 100',
+      Number.isInteger(this.#timingSamplePercent) &&
+        this.#timingSamplePercent >= 0 &&
+        this.#timingSamplePercent <= 100,
+      'SQLite change-log timing sample percentage must be an integer between 0 and 100',
     );
   }
 
@@ -149,30 +149,12 @@ export class SQLiteChangeLogWriter {
   }
 
   /**
-   * Opens the log if necessary and reconciles it with the Postgres resume
-   * point. Returns the resume point stored in the log.
+   * Opens the log if necessary and reconciles it. A valid log uses its own
+   * head and cookies. A new or invalid log uses the replica values returned by
+   * `seed`. Returns the resume point stored in the log.
    *
    * Returns `undefined` when the writer is disabled. The caller must then use
    * another source.
-   *
-   * This runs for every connection because Postgres supplies a new resume point
-   * after each reconnect. The log can contain transactions above that point.
-   * Reconciliation removes them before Postgres sends them again.
-   *
-   * `resumeFrom` includes cookies because the cookies must match the resume
-   * watermark.
-   */
-  reconcile(
-    resumeFrom: ChangeLogResumePoint,
-  ): ChangeLogResumePoint | undefined {
-    return this.#reconcile(() => resumeFrom);
-  }
-
-  /**
-   * Reconciles the log without a Postgres resume point.
-   *
-   * A valid log uses its own head and cookies. A new or invalid log uses the
-   * replica values returned by `seed`.
    */
   reconcileFromLog(
     seed: () => ChangeLogResumePoint,
@@ -301,24 +283,18 @@ export class SQLiteChangeLogWriter {
     }
     const [type, msg] = change;
     if (type === 'begin') {
-      this.#validateTransaction = this.#isSelectedForShadowValidation(
+      this.#timeTransaction = this.#isSelectedForTiming(
         change[2].commitWatermark,
       );
     }
-    const validateTransaction = this.#validateTransaction;
     const observer = this.#observer;
-    observer?.messageReceived(change, json, validateTransaction, storedChange);
-    const startedAt = validateTransaction ? performance.now() : undefined;
+    observer?.messageReceived(change);
+    const startedAt = this.#timeTransaction ? performance.now() : undefined;
     try {
       let commit: ChangeLogCommit | null = null;
       switch (type) {
         case 'begin':
-          writer.begin(
-            change[2].commitWatermark,
-            json,
-            storedChange,
-            validateTransaction,
-          );
+          writer.begin(change[2].commitWatermark, json, storedChange);
           break;
         case 'commit': {
           const {watermark} = change[2];
@@ -364,7 +340,7 @@ export class SQLiteChangeLogWriter {
         this.#opts.onCommit?.(commit.watermark);
       }
       if (type === 'commit' || type === 'rollback') {
-        this.#validateTransaction = false;
+        this.#timeTransaction = false;
       }
     } catch (e) {
       observer?.messageFailed(
@@ -372,7 +348,7 @@ export class SQLiteChangeLogWriter {
         e,
         startedAt === undefined ? undefined : performance.now() - startedAt,
       );
-      this.#validateTransaction = false;
+      this.#timeTransaction = false;
       if (isConstraintViolation(e)) {
         // Reconciliation should have truncated whatever this collided with.
         // Report it as an invariant failure before failing soft, so that a
@@ -387,8 +363,8 @@ export class SQLiteChangeLogWriter {
     }
   }
 
-  #isSelectedForShadowValidation(watermark: string): boolean {
-    const percent = this.#shadowValidationPercent;
+  #isSelectedForTiming(watermark: string): boolean {
+    const percent = this.#timingSamplePercent;
     return (
       percent >= 100 ||
       (percent > 0 &&
@@ -406,7 +382,7 @@ export class SQLiteChangeLogWriter {
    */
   abort(): void {
     const writer = this.#writer;
-    this.#validateTransaction = false;
+    this.#timeTransaction = false;
     if (this.#disabled || writer === undefined) {
       return;
     }
@@ -420,7 +396,7 @@ export class SQLiteChangeLogWriter {
 
   close(): void {
     this.#disabled = true;
-    this.#validateTransaction = false;
+    this.#timeTransaction = false;
     this.#writer = undefined;
     this.#observer = undefined;
     const db = this.#db;
@@ -435,8 +411,8 @@ export class SQLiteChangeLogWriter {
   /**
    * Logs, disables the writer, deletes the file, and closes the reader, leaving
    * replication running. Disabling is for the life of the process: a log that
-   * failed a write is not re-opened until the task restarts, so the behavior a
-   * subscriber sees is the same as `sqliteChangeLogMode=off`.
+   * failed a write is not re-opened until the task restarts, and subscribers
+   * are declined SQLite catchup (and thus retry) in the meantime.
    */
   #failSoft(what: string, e: unknown): void {
     const file = changeLogFileName(this.#opts.replicaFile);

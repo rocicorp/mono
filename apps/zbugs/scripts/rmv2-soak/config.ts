@@ -20,17 +20,13 @@ const LITESTREAM_CONFIG_V5 = join(
 export const BIN_DIR = join(APP_ROOT, '.litestream/bin');
 export const DOCKER_DIR = join(APP_ROOT, 'docker');
 
-/**
- * The change-log mode ladder. `serve` is the subject of the soak; the others
- * are the rollback rungs that chaos actions C10-C12 walk back down.
- */
-type ChangeLogMode = 'off' | 'write' | 'compare' | 'serve';
-
-export type ChangeLogSettings = {
-  readonly mode: ChangeLogMode;
-  readonly readPercent: number;
-  readonly coldReadPercent: number;
-  readonly comparePercent: number;
+type ChangeLogSettings = {
+  /**
+   * High-availability replication (RMv2), i.e. the SQLite change log, which is
+   * the subject of the soak. Off is the legacy PG change log, which the
+   * baseline (phase 0) runs as its A/B control.
+   */
+  readonly highAvailability: boolean;
   readonly retentionMs: number;
 };
 
@@ -64,7 +60,7 @@ export type SoakConfig = {
 
   /** Chaos actions to run, e.g. ['C1','C3','C6']. */
   readonly chaos: readonly string[];
-  /** Run the mode=off A/B control pass before the real run (phase 0). */
+  /** Run the legacy PG change log A/B control pass first (phase 0). */
   readonly baseline: boolean;
   /** Scales every phase duration; 0.25 makes a smoke run out of a soak. */
   readonly scale: number;
@@ -152,15 +148,8 @@ function commonEnv(config: SoakConfig, node: string): NodeJS.ProcessEnv {
 
 function changeLogEnv(settings: ChangeLogSettings): NodeJS.ProcessEnv {
   return {
-    ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_MODE: settings.mode,
-    ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_READ_PERCENT: String(
-      settings.readPercent,
-    ),
-    ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_COLD_READ_PERCENT: String(
-      settings.coldReadPercent,
-    ),
-    ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_COMPARE_PERCENT: String(
-      settings.comparePercent,
+    ZERO_UPSTREAM_PG_HIGH_AVAILABILITY_REPLICATION: String(
+      settings.highAvailability,
     ),
     ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_RETENTION_MS: String(
       settings.retentionMs,
@@ -168,10 +157,7 @@ function changeLogEnv(settings: ChangeLogSettings): NodeJS.ProcessEnv {
   };
 }
 
-export function replicationManagerEnv(
-  config: SoakConfig,
-  overrides: Partial<ChangeLogSettings> = {},
-): NodeJS.ProcessEnv {
+export function replicationManagerEnv(config: SoakConfig): NodeJS.ProcessEnv {
   const node = taskIDFor('rm');
   return {
     ...commonEnv(config, node),
@@ -187,7 +173,7 @@ export function replicationManagerEnv(
     ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS: String(
       config.snapshotBackupIntervalHours,
     ),
-    ...changeLogEnv({...config.changeLog, ...overrides}),
+    ...changeLogEnv(config.changeLog),
   };
 }
 
@@ -209,17 +195,10 @@ export function viewSyncerEnv(
     // own. `undefined` clears whatever the parent process inherited; Node
     // drops undefined entries when it builds the child's environment.
     ZERO_LITESTREAM_BACKUP_URL: undefined,
-    // REQUIRED. `apps/zbugs/.env` sets the change-log mode, dotenvx injects
-    // any variable the child does not already have, and a view-syncer that
-    // inherits a writing mode logs a warning and runs no log at all. Say
-    // `off` rather than relying on omission.
-    ...changeLogEnv({
-      mode: 'off',
-      readPercent: 0,
-      coldReadPercent: 0,
-      comparePercent: 0,
-      retentionMs: config.changeLog.retentionMs,
-    }),
+    // Explicit, as dotenvx injects any variable the child does not already
+    // have from `apps/zbugs/.env`. The view-syncers are configured from the
+    // same environment as the replication-manager, as in a deployment.
+    ...changeLogEnv(config.changeLog),
   };
 }
 

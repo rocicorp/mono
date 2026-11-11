@@ -4,7 +4,6 @@ import {
   replicationManagerEnv,
   taskIDFor,
   viewSyncerEnv,
-  type ChangeLogSettings,
   type SoakConfig,
 } from './config.ts';
 import type {SoakLog} from './logs.ts';
@@ -24,14 +23,13 @@ export function guardNodeExits<T>(
  * directory, its own task ID, and its own `litestream restore`.
  *
  * Three view-syncers rather than one, because the route census needs
- * concurrent tasks so that a demotion of one is visibly *not* a demotion of
- * the others, and so the purge floor has more than one ack to be held by.
+ * concurrent tasks so that a delayed reservation of one is visibly *not* one
+ * of the others, and so the purge floor has more than one ack to be held by.
  */
 export class SoakCluster {
   readonly rm: SoakNode;
   readonly viewSyncers: readonly SoakNode[];
   readonly #config: SoakConfig;
-  #rmSettings: Partial<ChangeLogSettings> = {};
 
   constructor(config: SoakConfig, log: SoakLog) {
     this.#config = config;
@@ -63,11 +61,6 @@ export class SoakCluster {
     return changeLogFile(this.#config, this.rm.name);
   }
 
-  /** The change-log settings the replication-manager is currently running. */
-  get rmSettings(): ChangeLogSettings {
-    return {...this.#config.changeLog, ...this.#rmSettings};
-  }
-
   node(name: string): SoakNode {
     const node = this.nodes.find(n => n.name === name);
     if (!node) {
@@ -85,16 +78,8 @@ export class SoakCluster {
     return guardNodeExits(operation, this.nodes);
   }
 
-  async startReplicationManager(
-    overrides?: Partial<ChangeLogSettings>,
-  ): Promise<void> {
-    if (overrides) {
-      this.#rmSettings = overrides;
-    }
-    // The change-log mode is a startup option, so both the flip and the
-    // rollback are restarts. Rebuild the environment on every start rather
-    // than caching it.
-    this.rm.env = replicationManagerEnv(this.#config, this.#rmSettings);
+  async startReplicationManager(): Promise<void> {
+    this.rm.env = replicationManagerEnv(this.#config);
     await this.rm.start();
   }
 

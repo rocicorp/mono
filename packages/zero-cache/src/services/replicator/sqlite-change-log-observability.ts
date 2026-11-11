@@ -22,8 +22,6 @@ import {
 } from '../../observability/metrics.ts';
 import {versionFromLexi} from '../../types/lexi-version.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
-import {extractChangeSubstring} from '../change-streamer/change-log-codec.ts';
-import {ChangeLogTransactionHasher} from '../change-streamer/change-log-transaction-hash.ts';
 import {
   readCookieRowCounts,
   type CookieOpTag,
@@ -222,9 +220,6 @@ export type SQLiteChangeLogObservabilityState = {
   readonly cookieMutations: number;
   readonly rollbacks: number;
   readonly invariantFailures: number;
-  readonly hashMatches: number;
-  readonly hashMismatches: number;
-  readonly hashUnpaired: number;
 };
 
 const TRANSACTION_ROW_BUCKETS = [2, 3, 5, 10, 25, 50, 100, 250, 1000, 5000];
@@ -273,16 +268,6 @@ export class SQLiteChangeLogObserver {
     'sqlite_change_log.invariant_failures',
     'Detected SQLite change-log writer invariant failures.',
   );
-  readonly #hashComparisonCounter = getOrCreateCounter(
-    'replica',
-    'sqlite_change_log.hash_comparisons',
-    'Sampled ephemeral transaction hash comparisons between the received change stream and SQLite change-log writes.',
-  );
-  readonly #hashUnpairedCounter = getOrCreateCounter(
-    'replica',
-    'sqlite_change_log.hash_unpaired',
-    'Committed change-log transactions without both ephemeral hashes available for comparison.',
-  );
   // Near zero at steady state: cookie state only moves on schema changes.
   readonly #cookieMutationCounter = getOrCreateCounter(
     'replica',
@@ -297,14 +282,8 @@ export class SQLiteChangeLogObserver {
   #cookieRows: CookieRowCounts;
   #cookieMutations = 0;
   #transactionWatermark: string | undefined;
-  #sourceHasher: ChangeLogTransactionHasher | undefined;
-  #sourcePos = 0;
-  #sourceCommitHash: string | undefined;
   #rollbacks = 0;
   #invariantFailures = 0;
-  #hashMatches = 0;
-  #hashMismatches = 0;
-  #hashUnpaired = 0;
 
   constructor(lc: LogContext, info: SQLiteChangeLogInfo) {
     this.#lc = lc.withContext('component', 'sqlite-change-log-observer');
@@ -361,74 +340,12 @@ export class SQLiteChangeLogObserver {
   }
 
   /**
-   * Called as each message arrives, before it is written. For a sampled
-   * transaction, hashes the *received* stream and compares it with the hash the
-   * writer computes over what it *stored*.
+   * Called as each message arrives, before it is written, so that the head
+   * lag includes a transaction that is in flight.
    */
-  messageReceived(
-    data: ChangeStreamData,
-    json: string,
-    validateHash = true,
-    storedChange = extractChangeSubstring(json, data[1].tag),
-  ): void {
-    const tag = data[1].tag;
-    if (data[0] === 'begin') {
-      if (this.#sourceHasher !== undefined) {
-        this.#invariantFailure(
-          'Received change-log begin while a source hash is already open',
-          {receivedWatermark: data[2].commitWatermark},
-        );
-      }
-      const watermark = data[2].commitWatermark;
-      this.#sourceHasher = validateHash
-        ? new ChangeLogTransactionHasher()
-        : undefined;
-      this.#sourcePos = 0;
-      this.#sourceCommitHash = undefined;
-      this.#sourceHasher?.add({
-        watermark,
-        pos: this.#sourcePos,
-        tag,
-        change: storedChange,
-        precommit: null,
-      });
-      return;
-    }
-
-    if (tag === 'rollback') {
-      this.#resetSourceHash();
-      return;
-    }
-
+  messageReceived(data: ChangeStreamData): void {
     if (data[0] === 'commit') {
       this.#receivedHead = data[2].watermark;
-    }
-
-    if (!validateHash) {
-      return;
-    }
-
-    const watermark = this.#transactionWatermark;
-    if (this.#sourceHasher === undefined || watermark === undefined) {
-      this.#invariantFailure(
-        'Received change-log message without an observed transaction',
-        {tag},
-      );
-      return;
-    }
-
-    const commitWatermark =
-      data[0] === 'commit' ? data[2].watermark : watermark;
-    this.#sourceHasher.add({
-      watermark: commitWatermark,
-      pos: ++this.#sourcePos,
-      tag,
-      change: storedChange,
-      precommit: data[0] === 'commit' ? watermark : null,
-    });
-    if (data[0] === 'commit') {
-      this.#sourceCommitHash = this.#sourceHasher.digest();
-      this.#sourceHasher = undefined;
     }
   }
 
@@ -457,7 +374,6 @@ export class SQLiteChangeLogObserver {
     if (tag === 'rollback') {
       this.#recordRollback('upstream');
       this.#transactionWatermark = undefined;
-      this.#resetSourceHash();
       return;
     }
 
@@ -480,7 +396,6 @@ export class SQLiteChangeLogObserver {
         'SQLite change-log commit result is missing writer statistics',
         {commitWatermark: watermark},
       );
-      this.#recordUnpaired(watermark, 'missing-sqlite-hash');
     } else {
       if (commit.watermark !== watermark) {
         this.#invariantFailure(
@@ -491,16 +406,6 @@ export class SQLiteChangeLogObserver {
       this.#rows += commit.stats.rows;
       this.#estimatedBytes += commit.stats.estimatedBytes;
       this.#transactionRows.record(commit.stats.rows);
-      if (
-        this.#sourceCommitHash !== undefined ||
-        commit.stats.hash !== undefined
-      ) {
-        this.#compareHashes(
-          watermark,
-          this.#sourceCommitHash,
-          commit.stats.hash,
-        );
-      }
     }
     if (watermark < this.#sqliteHead) {
       this.#invariantFailure('SQLite change-log head regressed', {
@@ -510,7 +415,6 @@ export class SQLiteChangeLogObserver {
     }
     this.#sqliteHead = watermark;
     this.#transactionWatermark = undefined;
-    this.#resetSourceHash();
   }
 
   messageFailed(
@@ -522,12 +426,6 @@ export class SQLiteChangeLogObserver {
     if (durationMs !== undefined) {
       this.#messageProcessing.recordMs(durationMs, {tag, outcome: 'error'});
     }
-    if (data[0] === 'commit' && this.#sourceCommitHash !== undefined) {
-      // No commit duration here: a failed commit produces no statistics, so
-      // there is nothing to attribute. The attempt is timed by
-      // `message_processing_duration{tag="commit",outcome="error"}` above.
-      this.#recordUnpaired(data[2].watermark, 'sqlite-commit-failed');
-    }
     if (
       error instanceof Error &&
       error.name === 'ChangeLogStreamInvariantError'
@@ -538,7 +436,6 @@ export class SQLiteChangeLogObserver {
       this.#recordRollback('processing-error');
     }
     this.#transactionWatermark = undefined;
-    this.#resetSourceHash();
   }
 
   /**
@@ -570,7 +467,6 @@ export class SQLiteChangeLogObserver {
       this.#recordRollback('source-interruption');
       this.#transactionWatermark = undefined;
     }
-    this.#resetSourceHash();
   }
 
   /** Reconciliation moved the head, so the observer's totals are restated. */
@@ -581,7 +477,6 @@ export class SQLiteChangeLogObserver {
     this.#estimatedBytes = info.estimatedBytes;
     this.#cookieRows = info.cookieRows;
     this.#transactionWatermark = undefined;
-    this.#resetSourceHash();
   }
 
   state(): SQLiteChangeLogObservabilityState {
@@ -595,9 +490,6 @@ export class SQLiteChangeLogObserver {
       cookieMutations: this.#cookieMutations,
       rollbacks: this.#rollbacks,
       invariantFailures: this.#invariantFailures,
-      hashMatches: this.#hashMatches,
-      hashMismatches: this.#hashMismatches,
-      hashUnpaired: this.#hashUnpaired,
     };
   }
 
@@ -612,55 +504,6 @@ export class SQLiteChangeLogObserver {
     this.#invariantFailures++;
     this.#invariantFailureCounter.add(1);
     this.#lc.error?.(message, details);
-  }
-
-  #compareHashes(
-    watermark: string,
-    sourceHash: string | undefined,
-    sqliteHash: string | undefined,
-  ): void {
-    if (sourceHash === undefined) {
-      this.#recordUnpaired(watermark, 'missing-source-hash');
-      return;
-    }
-    if (sqliteHash === undefined) {
-      this.#recordUnpaired(watermark, 'missing-sqlite-hash');
-      return;
-    }
-    if (sourceHash === sqliteHash) {
-      this.#hashMatches++;
-      this.#hashComparisonCounter.add(1, {outcome: 'match'});
-      return;
-    }
-    this.#hashMismatches++;
-    this.#hashComparisonCounter.add(1, {outcome: 'mismatch'});
-    this.#lc.error?.('SQLite change-log transaction hash mismatch', {
-      sqliteChangeLogHashComparison: {
-        watermark,
-        sourceHash: sourceHash.slice(0, 16),
-        sqliteHash: sqliteHash.slice(0, 16),
-      },
-    });
-  }
-
-  #recordUnpaired(
-    watermark: string,
-    reason:
-      | 'missing-source-hash'
-      | 'missing-sqlite-hash'
-      | 'sqlite-commit-failed',
-  ): void {
-    this.#hashUnpaired++;
-    this.#hashUnpairedCounter.add(1, {reason});
-    this.#lc.warn?.('SQLite change-log transaction hash was not compared', {
-      sqliteChangeLogHashComparison: {watermark, reason},
-    });
-  }
-
-  #resetSourceHash(): void {
-    this.#sourceHasher = undefined;
-    this.#sourcePos = 0;
-    this.#sourceCommitHash = undefined;
   }
 }
 

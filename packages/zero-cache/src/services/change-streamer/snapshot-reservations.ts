@@ -9,7 +9,9 @@ import {
 } from '../litestream/metrics.ts';
 import type {BackupConfig} from './change-streamer-service.ts';
 import type {SnapshotMessage} from './snapshot-message.ts';
-import type {ChangeLogReadSource} from './sqlite-change-log-read-router.ts';
+
+/** The change log whose bounds confirmed a reservation. */
+export type ChangeLogSource = 'pg' | 'sqlite';
 
 export type ReservationCallbacks = {
   /**
@@ -119,12 +121,12 @@ export class SnapshotReservations {
       .map(([taskID]) => taskID);
   }
 
-  /** Confirms one reservation with the bounds of its pinned read source. */
+  /** Confirms one reservation with the bounds of the change log. */
   confirmFor(
     taskID: string,
     replicaVersion: string,
     minWatermark: string,
-    source: ChangeLogReadSource,
+    source: ChangeLogSource,
   ): void {
     const res = this.#reservations.get(taskID);
     if (res && !res.confirmed()) {

@@ -128,23 +128,6 @@ export default async function runWorker(
 
   const {taskID, litestream} = config;
   const runChangeStreamer = runsChangeStreamer(config);
-  const sqliteChangeLogEnabled =
-    config.changeStreamer.sqliteChangeLogMode !== 'off';
-  if (sqliteChangeLogEnabled && !runChangeStreamer) {
-    // A multi-node deployment configures every task from one environment, so
-    // the change log's options reach the view-syncers too. The log lives in
-    // the change-streamer, and a task that connects to one simply never writes
-    // a log. Warning rather than refusing to start is what makes the
-    // fleet-wide environment -- often the only knob an operator has -- able to
-    // express the rollout at all.
-    lc.warn?.(
-      `ignoring --change-streamer-sqlite-change-log-mode=` +
-        `${config.changeStreamer.sqliteChangeLogMode}: this task connects to ` +
-        `a change-streamer rather than running one, and the SQLite change log ` +
-        `lives in the change-streamer`,
-    );
-  }
-
   let changeStreamer: Worker | undefined;
 
   if (runChangeStreamer) {

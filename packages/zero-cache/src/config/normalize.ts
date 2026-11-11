@@ -76,75 +76,16 @@ export function assertNormalized(
   assert(config.changeStreamer.address, 'missing --change-streamer-address');
   const {pgReplicationSlotPerReplica} = config.upstream;
   const {
-    pgChangeLogEnabled,
-    sqliteChangeLogMode,
-    sqliteChangeLogReadPercent,
-    sqliteChangeLogColdReadPercent,
-    sqliteChangeLogComparePercent,
     sqliteChangeLogRetentionMs,
     sqliteChangeLogReadBatchRows,
     sqliteChangeLogPurgeBatchRows,
     sqliteChangeLogBarrierTimeoutMs,
   } = config.changeStreamer;
-  assert(
-    Number.isSafeInteger(sqliteChangeLogReadPercent) &&
-      sqliteChangeLogReadPercent >= 0 &&
-      sqliteChangeLogReadPercent <= 100,
-    '--change-streamer-sqlite-change-log-read-percent must be an integer between 0 and 100',
-  );
-  assert(
-    Number.isSafeInteger(sqliteChangeLogColdReadPercent) &&
-      sqliteChangeLogColdReadPercent >= 0 &&
-      sqliteChangeLogColdReadPercent <= 100,
-    '--change-streamer-sqlite-change-log-cold-read-percent must be an integer between 0 and 100',
-  );
-  // This setting has no mode restriction. Comparison starts in `compare` mode.
-  assert(
-    Number.isSafeInteger(sqliteChangeLogComparePercent) &&
-      sqliteChangeLogComparePercent >= 0 &&
-      sqliteChangeLogComparePercent <= 100,
-    '--change-streamer-sqlite-change-log-compare-percent must be an integer between 0 and 100',
-  );
-  assert(
-    sqliteChangeLogMode === 'serve' || sqliteChangeLogReadPercent === 0,
-    '--change-streamer-sqlite-change-log-read-percent must be 0 unless --change-streamer-sqlite-change-log-mode=serve',
-  );
-  assert(
-    sqliteChangeLogMode === 'serve' || sqliteChangeLogColdReadPercent === 0,
-    '--change-streamer-sqlite-change-log-cold-read-percent must be 0 unless --change-streamer-sqlite-change-log-mode=serve',
-  );
-  // The cold gate only admits a task to the read gate; it never serves one on
-  // its own. A nonzero cold percentage with a zero read percentage is a
-  // silent no-op, which is the shape of a rollout that looks enabled and
-  // serves nothing.
-  assert(
-    sqliteChangeLogReadPercent > 0 || sqliteChangeLogColdReadPercent === 0,
-    '--change-streamer-sqlite-change-log-cold-read-percent must be 0 when --change-streamer-sqlite-change-log-read-percent is 0',
-  );
   if (pgReplicationSlotPerReplica) {
     assert(
       // Only require backupUsingV5 if a backupURL is set (e.g. replication-manager).
       config.litestream.backupUsingV5 || !config.litestream.backupURL,
       '--upstream-pg-replication-slot-per-replica requires a litestream v5 backup',
-    );
-  }
-  if (!pgChangeLogEnabled) {
-    assert(
-      sqliteChangeLogMode === 'serve',
-      '--change-streamer-pg-change-log-enabled=false requires --change-streamer-sqlite-change-log-mode=serve',
-    );
-    assert(
-      sqliteChangeLogReadPercent === 100,
-      '--change-streamer-pg-change-log-enabled=false requires --change-streamer-sqlite-change-log-read-percent=100',
-    );
-    assert(
-      sqliteChangeLogColdReadPercent === 100,
-      '--change-streamer-pg-change-log-enabled=false requires --change-streamer-sqlite-change-log-cold-read-percent=100',
-    );
-    assert(
-      // Only require backupUsingV5 if a backupURL is set (e.g. replication-manager).
-      config.litestream.backupUsingV5 || !config.litestream.backupURL,
-      '--change-streamer-pg-change-log-enabled=false requires a litestream v5 backup',
     );
   }
   for (const [flag, value] of [
@@ -263,24 +204,10 @@ export function normalizeZeroConfig(
     env['ZERO_LITESTREAM_RESTORE_USING_V5'] = 'true';
     env['ZERO_LITESTREAM_BACKUP_USING_V5'] = 'true';
 
-    config.changeStreamer.sqliteChangeLogMode = 'serve';
-    env['ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_MODE'] = 'serve';
-
-    config.changeStreamer.sqliteChangeLogReadPercent = 100;
-    config.changeStreamer.sqliteChangeLogColdReadPercent = 100;
-    env['ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_READ_PERCENT'] = '100';
-    env['ZERO_CHANGE_STREAMER_SQLITE_CHANGE_LOG_COLD_READ_PERCENT'] = '100';
-
-    config.changeStreamer.pgChangeLogEnabled = false;
-    env['ZERO_CHANGE_STREAMER_PG_CHANGE_LOG_ENABLED'] = 'false';
-  }
-
-  if (!config.changeStreamer.pgChangeLogEnabled) {
     assert(
       config.changeStreamer.mode !== 'discover',
-      'Change streamer "discover" mode is deprecated and not supported when ' +
-        'the PG change log is disabled (e.g. with ' +
-        'ZERO_UPSTREAM_PG_HIGH_AVAILABILITY_REPLICATION). ' +
+      'Change streamer "discover" mode is deprecated and not supported with ' +
+        'ZERO_UPSTREAM_PG_HIGH_AVAILABILITY_REPLICATION. ' +
         'Set ZERO_CHANGE_STREAMER_URI on view-syncers instead.',
     );
   }

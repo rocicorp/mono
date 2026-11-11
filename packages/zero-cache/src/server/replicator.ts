@@ -161,7 +161,10 @@ export default async function runWorker(
   // A file left behind by a run with the writer enabled would otherwise hold
   // local disk indefinitely. See `replicatorDeletesStaleChangeLog` for why
   // this is keyed on the config flag and nothing else.
-  deleteStaleChangeLog(config.changeStreamer.sqliteChangeLogMode, dbPath);
+  deleteStaleChangeLog(
+    config.upstream.pgHighAvailabilityReplication ?? false,
+    dbPath,
+  );
 
   setupMetrics(lc, dbPath, walMode, pageSize);
 

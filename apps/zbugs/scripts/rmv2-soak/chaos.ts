@@ -1,4 +1,3 @@
-import {stat} from 'node:fs/promises';
 import type postgres from 'postgres';
 import type {TrafficDriver} from '../change-log-traffic.ts';
 import type {SoakCluster} from './cluster.ts';
@@ -131,14 +130,6 @@ function str(value: unknown, dflt = 'unknown'): string {
   }
 }
 
-async function fileSize(path: string): Promise<number> {
-  try {
-    return (await stat(path)).size;
-  } catch {
-    return 0;
-  }
-}
-
 function census(metrics: MetricStore): Record<string, number> {
   return metrics.byAttributes(CENSUS_METRIC, 'source', 'reason');
 }
@@ -161,11 +152,11 @@ function censusDelta(
  * The most recent `seedWatermark` the replication-manager reported before
  * `beforeMs`, from the startup line or from any coverage payload.
  *
- * Plan section 1.5: `#confirmReservations` demotes on
+ * Plan section 1.5: `#confirmReservations` delays confirmation on
  * `coverage.minWatermark > backupWatermark`, but `minWatermark` conflates
  * "history was purged away" with "nothing has been written since the seed".
  * The exact condition is `seedWatermark <= backupWatermark`, so every
- * demotion and every delayed confirmation is reported with both, and a
+ * delayed confirmation is reported with both, and a
  * population where the exact condition consistently held is the evidence that
  * the check can be tightened.
  */
@@ -200,16 +191,14 @@ function latestSeedWatermark(
   return seed;
 }
 
-/** Annotates each demotion / delayed confirmation with the section 1.5 test. */
+/** Annotates each delayed confirmation with the section 1.5 test. */
 function recordConfirmationEvidence(
   log: SoakLog,
   sinceMs: number,
   out: MutableOutcome,
 ): void {
   const relevant = log.events.filter(
-    e =>
-      e.tsMs >= sinceMs &&
-      (e.kind === 'reservation-demoted' || e.kind === 'reservation-delayed'),
+    e => e.tsMs >= sinceMs && e.kind === 'reservation-delayed',
   );
   let coveredBySeed = 0;
   for (const event of relevant) {
@@ -236,30 +225,31 @@ function recordConfirmationEvidence(
 }
 
 /**
- * Asserts that no follower was demoted to PG in this window.
+ * Asserts that no follower's reservation was delayed in this window.
  *
  * A warm restart leaves the local LTX chain in place, so litestream re-uploads
  * it into the freshly minted generation one file per transaction. While that
  * runs the backup genuinely trails the replica, and `BackupMonitor` holds
  * `firstBackupReceived` until a watermark actually covers it. If that gate
  * regresses to releasing on the first watermark of any value, the RM serves
- * against a backup that does not cover it and demotes the follower.
+ * against a backup that the change log does not cover, and the follower's
+ * reservation is held until a later backup does.
  */
-function expectNoDemotions(
+function expectNoDelayedReservations(
   ctx: ChaosContext,
   sinceMs: number,
   id: string,
   out: MutableOutcome,
 ): void {
-  const demotions = ctx.log.events.filter(
-    e => e.tsMs >= sinceMs && e.kind === 'reservation-demoted',
+  const delayed = ctx.log.events.filter(
+    e => e.tsMs >= sinceMs && e.kind === 'reservation-delayed',
   );
-  out.measurements['demotions'] = demotions.length;
-  if (demotions.length > 0) {
+  out.measurements['delayedReservations'] = delayed.length;
+  if (delayed.length > 0) {
     out.findings.push(
-      `${id} demoted ${demotions.length} follower(s) to PG while the new ` +
-        'backup generation was still backfilling; the initial-backup gate ' +
-        'released before the backup covered the replica',
+      `${id} delayed ${delayed.length} follower reservation(s) while the ` +
+        'new backup generation was still backfilling; the initial-backup ' +
+        'gate released before the backup covered the replica',
     );
   }
 }
@@ -329,8 +319,8 @@ function measureReservationHold(
 }
 
 /**
- * The matrix names three view-syncers so that a demotion of one is visibly
- * *not* a demotion of the others, but a smaller cluster is a legitimate way
+ * The matrix names three view-syncers so that a delayed reservation of one is
+ * visibly *not* one of the others, but a smaller cluster is a legitimate way
  * to run it; the index wraps rather than reaching past the end.
  */
 function viewSyncerAt(ctx: ChaosContext, index: number) {
@@ -418,7 +408,7 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
   {
     id: 'C3',
     title: 'Kill a view-syncer, delete its replica, restart',
-    expected: 'litestream restore, then sqlite -- and no demotion',
+    expected: 'litestream restore, then sqlite -- and no delayed reservation',
     async run(ctx, out) {
       const since = Date.now();
       await restartViewSyncer(ctx, 2, 'SIGQUIT', out, {deleteReplica: true});
@@ -426,19 +416,16 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
       out.measurements['restoreObserved'] = restored ? 'yes' : 'no';
       // Invariant 14: the purge floor is capped at the backup watermark, so a
       // log that held the history covers any backup a follower can restore
-      // from. A `backup-uncovered` demotion here, with no recent reseed, is a
-      // finding rather than an expected outcome.
+      // from. A delayed reservation here, with no recent reseed, is a finding
+      // rather than an expected outcome.
       const target = viewSyncerAt(ctx, 2);
-      const demoted = ctx.log.events.filter(
-        e =>
-          e.tsMs >= since &&
-          e.kind === 'reservation-demoted' &&
-          e.detail.taskID === target.name,
+      const delayed = ctx.log.events.filter(
+        e => e.tsMs >= since && e.kind === 'reservation-delayed',
       );
       const reseeded = firstAfter(ctx.log, since - 60_000, 'change-log-reseed');
-      if (demoted.length > 0 && !reseeded) {
+      if (delayed.length > 0 && !reseeded) {
         out.findings.push(
-          `C3 demoted ${target.name} to PG without a ` +
+          `C3 delayed the reservation of ${target.name} without a ` +
             `recent reseed: invariant 14 (minWatermark <= backupWatermark) ` +
             `did not hold`,
         );
@@ -501,17 +488,14 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
         ? 'stale-replica-discarded-and-restored'
         : 'replica-still-covered';
       const uncovered = ctx.log.events.some(
-        e =>
-          e.tsMs >= since &&
-          e.kind === 'served-from-pg' &&
-          e.detail.reason === 'watermark-uncovered',
+        e => e.tsMs >= since && e.kind === 'subscriber-too-old',
       );
       out.measurements['longGapWatermarkUncovered'] = uncovered ? 'yes' : 'no';
       if (uncovered) {
         out.findings.push(
-          'C4 routed a restarting follower through pg/watermark-uncovered; ' +
-            'the snapshot gate should discard and restore a stale replica ' +
-            'before it subscribes',
+          'C4 rejected a restarting follower as too old for the SQLite ' +
+            'change log; the snapshot gate should discard and restore a ' +
+            'stale replica before it subscribes',
         );
       }
     },
@@ -564,10 +548,10 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
       }
       // The RM reseeded at the replica head while the newest backup may still
       // sit behind it. The readiness gate must absorb that window so the
-      // follower is never offered an uncovering backup and demoted to PG.
+      // follower is never offered an uncovering backup.
       const backSince = Date.now();
       await restartViewSyncer(ctx, 2, 'SIGQUIT', out, {deleteReplica: true});
-      expectNoDemotions(ctx, backSince, 'C6', out);
+      expectNoDelayedReservations(ctx, backSince, 'C6', out);
     },
   },
   {
@@ -590,7 +574,7 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
   {
     id: 'C8',
     title: 'SIGKILL the replication-manager mid-burst, restart',
-    expected: 'reconcile by truncation, not by reseed',
+    expected: 'the log resumes from its own head, not by reseed',
     async run(ctx, out) {
       const burst = ctx.traffic.runStage({
         rate: 250,
@@ -618,7 +602,7 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
         out.findings.push(
           `C8: a hard crash reseeded the log (reason=${str(
             reconcile?.detail.reason,
-          )}) rather than truncating a bounded suffix`,
+          )}) rather than resuming from its own head`,
         );
       }
       recordConfirmationEvidence(ctx.log, since, out);
@@ -703,106 +687,6 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
     },
   },
   {
-    id: 'C10',
-    title: 'Roll the read percentage back from 100 to 0 and restart the RM',
-    expected: 'every route becomes pg / percentage',
-    async run(ctx, out) {
-      const before = census(ctx.metrics);
-      await ctx.cluster.rm.stop('SIGTERM');
-      await ctx.cluster.startReplicationManager({
-        readPercent: 0,
-        coldReadPercent: 0,
-      });
-      // Force every view-syncer to re-register so the new routing is
-      // exercised rather than assumed.
-      for (const vs of ctx.cluster.viewSyncers) {
-        await vs.stop('SIGTERM');
-        await vs.start();
-      }
-      await sleep(ctx.config.metricExportIntervalMs * 3);
-      const delta = censusDelta(before, census(ctx.metrics));
-      out.measurements['routesAfterRollback'] = JSON.stringify(delta);
-      const servedFromSQLite = Object.entries(delta)
-        .filter(([key]) => key.startsWith('sqlite/'))
-        .reduce((acc, [, value]) => acc + value, 0);
-      if (servedFromSQLite > 0) {
-        out.findings.push(
-          `C10: ${servedFromSQLite} catchup(s) still routed to SQLite after ` +
-            `the read percentage was rolled back to 0`,
-        );
-      }
-    },
-  },
-  {
-    id: 'C11',
-    title: 'Walk the mode ladder back: serve -> compare -> write',
-    expected: 'the writer stays, reads stop, then comparison stops',
-    async run(ctx, out) {
-      for (const mode of ['compare', 'write'] as const) {
-        const since = Date.now();
-        await ctx.cluster.rm.stop('SIGTERM');
-        await ctx.cluster.startReplicationManager({
-          mode,
-          readPercent: 0,
-          coldReadPercent: 0,
-          comparePercent: mode === 'compare' ? 100 : 0,
-        });
-        await sleep(ctx.config.metricExportIntervalMs * 3);
-        const startup = firstAfter(ctx.log, since, 'change-log-startup');
-        out.notes.push(
-          `mode=${mode}: change log ${startup ? 'still open' : 'not opened'}`,
-        );
-        out.measurements[`headAfter.${mode}`] = str(
-          startup?.detail.headWatermark,
-        );
-        if (!startup) {
-          out.findings.push(
-            `C11: no change-log startup line after rolling back to ${mode}; ` +
-              `the writer should still be running`,
-          );
-        }
-      }
-    },
-  },
-  {
-    id: 'C12',
-    title: 'Turn the change log off and confirm the file is reclaimed',
-    expected: 'replicatorDeletesStaleChangeLog removes the file',
-    async run(ctx, out) {
-      const before = await fileSize(ctx.cluster.changeLogFile);
-      await ctx.cluster.rm.stop('SIGTERM');
-      await ctx.cluster.startReplicationManager({
-        mode: 'off',
-        readPercent: 0,
-        coldReadPercent: 0,
-        comparePercent: 0,
-      });
-      // The delete happens in a replicator worker at startup. The
-      // replication-manager runs none (NUM_SYNC_WORKERS=0), so the reclaim is
-      // observed on a view-syncer's tree; restart one to make it happen.
-      for (const vs of ctx.cluster.viewSyncers) {
-        await vs.stop('SIGTERM');
-        await vs.start();
-      }
-      const after = await fileSize(ctx.cluster.changeLogFile);
-      out.measurements['changeLogBytesBeforeOff'] = before;
-      out.measurements['changeLogBytesAfterOff'] = after;
-      if (before > 0 && after >= before) {
-        // The reclaim is `deleteStaleChangeLog`, called at the top of a
-        // replicator worker. A replication-manager runs no *syncing*
-        // replicator (`NUM_SYNC_WORKERS=0`), but it does run a
-        // backup-replicator over the same replica path whenever a backup URL
-        // is configured, and that is what normally reclaims the file. Report
-        // the bytes rather than a cause: "does turning it off actually free
-        // the disk" is the class-5 question, and a no here is the answer.
-        out.findings.push(
-          `C12: the change log still holds ${after} bytes (was ${before}) ` +
-            `after the mode was rolled back to off`,
-        );
-      }
-    },
-  },
-  {
     id: 'C13',
     title: 'A view-syncer already behind, meeting a reseed (C4 and C6)',
     expected:
@@ -833,7 +717,7 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
       await vs.start();
       measureReservationHold(ctx.log, backSince, vs.name, out);
       recordConfirmationEvidence(ctx.log, backSince, out);
-      expectNoDemotions(ctx, backSince, 'C13', out);
+      expectNoDelayedReservations(ctx, backSince, 'C13', out);
       await load;
     },
   },
@@ -906,17 +790,17 @@ export const CHAOS_ACTIONS: readonly ChaosAction[] = [
       // transaction and the backup trails the replica while that runs. A
       // restored volume has no chain, so litestream starts a fresh one at the
       // restored state and the new generation is covered almost immediately.
-      // The demotion assertion therefore lives on C6/C13, not here; this one
-      // only records that the cheap path stayed cheap.
+      // The delayed-reservation assertion therefore lives on C6/C13, not
+      // here; this one only records that the cheap path stayed cheap.
       const backSince = Date.now();
       await restartViewSyncer(ctx, 0, 'SIGTERM', out);
-      const demotions = ctx.log.events.filter(
-        e => e.tsMs >= backSince && e.kind === 'reservation-demoted',
+      const delayed = ctx.log.events.filter(
+        e => e.tsMs >= backSince && e.kind === 'reservation-delayed',
       );
-      out.measurements['demotionsAfterVolumeLoss'] = demotions.length;
-      if (demotions.length > 0) {
+      out.measurements['delayedReservationsAfterVolumeLoss'] = delayed.length;
+      if (delayed.length > 0) {
         out.findings.push(
-          `C14 demoted ${demotions.length} follower(s) to PG after the RM ` +
+          `C14 delayed ${delayed.length} follower reservation(s) after the RM ` +
             'restored onto a fresh volume, which should be the cheap path: ' +
             'a restored replica has no local LTX chain to re-upload, so its ' +
             'new generation is covered almost immediately',
