@@ -1,6 +1,6 @@
-import {assert} from 'console';
 import {clearInterval} from 'timers';
 import type {LogContext} from '@rocicorp/logger';
+import {assert} from '../../../../shared/src/asserts.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import type {Source} from '../../types/streams.ts';
@@ -12,7 +12,7 @@ const CHECK_INTERVAL_MS = 10 * 1000;
 
 /**
  * The single-node equivalent of a backup monitor polls the replica file every
- * 30 seconds and schedules cleanup when the watermark
+ * {@link CHECK_INTERVAL_MS} and schedules cleanup when the watermark
  * (i.e. stateVersion) moves forward.
  */
 export class ReplicaPoller implements BackupPoller {
