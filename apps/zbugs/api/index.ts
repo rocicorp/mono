@@ -276,7 +276,7 @@ fastify.get<{
   }
 
   const issueResult =
-    await sql`SELECT id, title FROM "issue" WHERE "shortID" = ${shortID}`;
+    await sql`SELECT id FROM "issue" WHERE "shortID" = ${shortID}`;
 
   const issue = issueResult[0];
 
@@ -289,10 +289,12 @@ fastify.get<{
     VALUES (${existingUser.id}, ${issue.id}, false)
     ON CONFLICT ("userID", "issueID") 
     DO UPDATE SET "subscribed" = false`;
+  // No stored content, such as the issue title, goes in this response: it is
+  // HTML on the app origin, and the endpoint is unauthenticated.
   reply
     .type('text/html')
     .send(
-      `OK! You are unsubscribed from <a href="https://bugs.rocicorp.dev/issue/${shortID}">${issue.title}</a>.`,
+      `OK! You are unsubscribed from <a href="https://bugs.rocicorp.dev/issue/${shortID}">issue #${shortID}</a>.`,
     );
 });
 
