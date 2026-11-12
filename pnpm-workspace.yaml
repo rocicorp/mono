@@ -43,7 +43,7 @@ minimumReleaseAgeExclude:
   - '@badrap/valita@0.5.5'
   - '@rocicorp/zero-sqlite3@1.1.5'
   - '@rocicorp/zero-sqlite3@1.1.7'
-  - '@rocicorp/zero@1.11.0'
+  - '@rocicorp/zero@1.12.0'
 
 # docusaurus-plugin-typedoc and typedoc-docusaurus-theme both import typedoc
 # without declaring it, so they can only resolve it through pnpm's hoisted
@@ -106,16 +106,16 @@ overrides:
   # @expo/cli still depends on zod 3, which has no patched release. It only
   # uses zod APIs that are unchanged in zod 4.
   zod@<4.6.6: ^4.6.6
-  # @rocicorp/zero-previous (npm:@rocicorp/zero@1.11.0) is only used for its
+  # @rocicorp/zero-previous (npm:@rocicorp/zero@1.12.0) is only used for its
   # client in zql-integration-tests; align its OpenTelemetry deps with the
   # workspace so it doesn't drag in old, vulnerable instrumentations.
-  '@rocicorp/zero@1.11.0>@opentelemetry/api-logs': ^0.223.0
-  '@rocicorp/zero@1.11.0>@opentelemetry/auto-instrumentations-node': ^0.81.2
-  '@rocicorp/zero@1.11.0>@opentelemetry/exporter-metrics-otlp-http': ^0.223.0
-  '@rocicorp/zero@1.11.0>@opentelemetry/resources': ^2.12.0
-  '@rocicorp/zero@1.11.0>@opentelemetry/sdk-metrics': ^2.12.0
-  '@rocicorp/zero@1.11.0>@opentelemetry/sdk-node': ^0.223.0
-  '@rocicorp/zero@1.11.0>@opentelemetry/sdk-trace-node': ^2.12.0
+  '@rocicorp/zero@1.12.0>@opentelemetry/api-logs': ^0.223.0
+  '@rocicorp/zero@1.12.0>@opentelemetry/auto-instrumentations-node': ^0.81.2
+  '@rocicorp/zero@1.12.0>@opentelemetry/exporter-metrics-otlp-http': ^0.223.0
+  '@rocicorp/zero@1.12.0>@opentelemetry/resources': ^2.12.0
+  '@rocicorp/zero@1.12.0>@opentelemetry/sdk-metrics': ^2.12.0
+  '@rocicorp/zero@1.12.0>@opentelemetry/sdk-node': ^0.223.0
+  '@rocicorp/zero@1.12.0>@opentelemetry/sdk-trace-node': ^2.12.0
 
 patchedDependencies:
   postgres@3.4.7: packages/zero/patches/postgres@3.4.7.patch

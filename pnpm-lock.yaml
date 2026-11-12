@@ -48,13 +48,13 @@ overrides:
   valibot@<1.4.2: ^1.4.2
   webpackbar: ^7.0.0
   zod@<4.6.6: ^4.6.6
-  '@rocicorp/zero@1.11.0>@opentelemetry/api-logs': ^0.223.0
-  '@rocicorp/zero@1.11.0>@opentelemetry/auto-instrumentations-node': ^0.81.2
-  '@rocicorp/zero@1.11.0>@opentelemetry/exporter-metrics-otlp-http': ^0.223.0
-  '@rocicorp/zero@1.11.0>@opentelemetry/resources': ^2.12.0
-  '@rocicorp/zero@1.11.0>@opentelemetry/sdk-metrics': ^2.12.0
-  '@rocicorp/zero@1.11.0>@opentelemetry/sdk-node': ^0.223.0
-  '@rocicorp/zero@1.11.0>@opentelemetry/sdk-trace-node': ^2.12.0
+  '@rocicorp/zero@1.12.0>@opentelemetry/api-logs': ^0.223.0
+  '@rocicorp/zero@1.12.0>@opentelemetry/auto-instrumentations-node': ^0.81.2
+  '@rocicorp/zero@1.12.0>@opentelemetry/exporter-metrics-otlp-http': ^0.223.0
+  '@rocicorp/zero@1.12.0>@opentelemetry/resources': ^2.12.0
+  '@rocicorp/zero@1.12.0>@opentelemetry/sdk-metrics': ^2.12.0
+  '@rocicorp/zero@1.12.0>@opentelemetry/sdk-node': ^0.223.0
+  '@rocicorp/zero@1.12.0>@opentelemetry/sdk-trace-node': ^2.12.0
 
 packageExtensionsChecksum: sha256-NnOXomnH/6V1n8jvosjxCTq9LA9MLNKPbiSSsqLarLI=
 
@@ -1685,8 +1685,8 @@ importers:
         specifier: ^6.1.0
         version: 6.1.0
       '@rocicorp/zero-previous':
-        specifier: npm:@rocicorp/zero@1.11.0
-        version: '@rocicorp/zero@1.11.0(@opentelemetry/core@2.12.0(@opentelemetry/api@1.9.1))'
+        specifier: npm:@rocicorp/zero@1.12.0
+        version: '@rocicorp/zero@1.12.0(@opentelemetry/core@2.12.0(@opentelemetry/api@1.9.1))'
       '@rocicorp/zero-sqlite3':
         specifier: ^1.1.7
         version: 1.1.7
@@ -4903,10 +4903,6 @@ packages:
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
-  '@opentelemetry/semantic-conventions@1.41.1':
-    resolution: {integrity: sha512-/UhIkaZgPutTFmQ7RnIJGgDXZmtEJ7Dvi86xNTFWcnRxVRNk/aotsqDJYeEvDP+FSMB2SdW+pQzNMcWP0rwuNA==}
-    engines: {node: '>=14'}
-
   '@opentelemetry/semantic-conventions@1.43.0':
     resolution: {integrity: sha512-eSYWTm620tTk45EKSedaUL8MFYI8hW164hIXsgIHyxu3VobUB3fFCu5t0hQby6OoWRPsG1KkKUG2M5UadiLiVg==}
     engines: {node: '>=14'}
@@ -5275,22 +5271,10 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@oxfmt/binding-android-arm-eabi@0.65.0':
-    resolution: {integrity: sha512-M10Gs1SSpTNI6ahGx3M/OlIdUF4hkaP6OgUb+MS79t/Pgflk3r1nW5gPFqsZGUAXg0H1AfANT9AvLdBSTIhZKg==}
-    engines: {node: ^20.19.0 || >=22.12.0}
-    cpu: [arm]
-    os: [android]
-
   '@oxfmt/binding-android-arm-eabi@0.74.0':
     resolution: {integrity: sha512-xxQwrf5EPI5zxvuCTW8r6tzCTjPQ+h6+HqJ0iRKRy2zS1yBllt/xLVjoIyUc+FnR7g0a5g1SZv2yyDYhTItLbA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm]
-    os: [android]
-
-  '@oxfmt/binding-android-arm64@0.65.0':
-    resolution: {integrity: sha512-6DXH5sftNlaHpWJG50hFMF+Qxtq5D2TmahvcDPxWNcGIf8qrC9Y0YgHYcYZ2hlWzaccKXh/f3GcssH8vtkl4JA==}
-    engines: {node: ^20.19.0 || >=22.12.0}
-    cpu: [arm64]
     os: [android]
 
   '@oxfmt/binding-android-arm64@0.74.0':
@@ -5299,22 +5283,10 @@ packages:
     cpu: [arm64]
     os: [android]
 
-  '@oxfmt/binding-darwin-arm64@0.65.0':
-    resolution: {integrity: sha512-K9m7lr53pcOLETNsC88sWes/GWHUGjZyHx95UhYcSXy0r30haLdeXlSufSenEAtoLaW753WN8/l4M7GYcRt6cg==}
-    engines: {node: ^20.19.0 || >=22.12.0}
-    cpu: [arm64]
-    os: [darwin]
-
   '@oxfmt/binding-darwin-arm64@0.74.0':
     resolution: {integrity: sha512-TfmNKBD30dGyMu9GCLiaw2rt/z7fms9LS+5cKcNOyWst0QgAs8oZs6wPxMbVaaDVE0/PCdCosgWM1vbu6f5NUg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
-    os: [darwin]
-
-  '@oxfmt/binding-darwin-x64@0.65.0':
-    resolution: {integrity: sha512-sTNwIx1gre3MyiHOPLu7IGW4UyMScYL4DTmJT01p4vzB0En+OJUQz6KuH8t0PpsClRSaMuY3b0QmtoPItfO8Lg==}
-    engines: {node: ^20.19.0 || >=22.12.0}
-    cpu: [x64]
     os: [darwin]
 
   '@oxfmt/binding-darwin-x64@0.74.0':
@@ -5323,32 +5295,14 @@ packages:
     cpu: [x64]
     os: [darwin]
 
-  '@oxfmt/binding-freebsd-x64@0.65.0':
-    resolution: {integrity: sha512-lYZMVIiIpnjGu5hJb2jxA8NYQ/e0OTGuaiAf4dqlGPNnPmUTu23FZRMltmjro/KkQm1uE4NT4n5yJ2zWmKcpfA==}
-    engines: {node: ^20.19.0 || >=22.12.0}
-    cpu: [x64]
-    os: [freebsd]
-
   '@oxfmt/binding-freebsd-x64@0.74.0':
     resolution: {integrity: sha512-eL+1O3gykw1XihbZh2MRAciQvU2988LByrnjhyo/dmNG74X4oZ7XzigRoWPRFLfJCp8hzRkp/LbEhwe7uuT2eA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [freebsd]
 
-  '@oxfmt/binding-linux-arm-gnueabihf@0.65.0':
-    resolution: {integrity: sha512-gIdXFAt/bURnjxuoedDEWdZ0PEWEmdDcm8qdpoFYYvW3QMk/5D4vUaH4mlMeRpeTdST4izUgHVO6RawQ4QulJw==}
-    engines: {node: ^20.19.0 || >=22.12.0}
-    cpu: [arm]
-    os: [linux]
-
   '@oxfmt/binding-linux-arm-gnueabihf@0.74.0':
     resolution: {integrity: sha512-Xt0QtO2hJ4stnul8IL4LJGVLyp0xnc6ccN9fZ30yuubv8FWSRYxWwd1Za62KsEqAfmPSazoS/cLSUUJpja6npA==}
-    engines: {node: ^20.19.0 || >=22.12.0}
-    cpu: [arm]
-    os: [linux]
-
-  '@oxfmt/binding-linux-arm-musleabihf@0.65.0':
-    resolution: {integrity: sha512-jJVyADto7gA2AaX5qAjAexrxx9PJQaKWOe8PICE7yKMbjBRyOHcmj9TtVJ+MZYDUQ3hodU0AcoTj0jFQ1W4C6Q==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm]
     os: [linux]
@@ -5359,26 +5313,12 @@ packages:
     cpu: [arm]
     os: [linux]
 
-  '@oxfmt/binding-linux-arm64-gnu@0.65.0':
-    resolution: {integrity: sha512-p3RFkB+u7u+8up99b/NEcI1hdpLDiGgJYNwDorB60n7eH+eKposAKuMBxx+NqB3b+sJP4CZmYDh9G7X62tUsKg==}
-    engines: {node: ^20.19.0 || >=22.12.0}
-    cpu: [arm64]
-    os: [linux]
-    libc: [glibc]
-
   '@oxfmt/binding-linux-arm64-gnu@0.74.0':
     resolution: {integrity: sha512-846bKzF+HJd+JkOFh3rxzmYvSq4Cm+GMT+p+mW7S13ZYo6GAAGv8bL8cAOi/XcdeMqxEJDCIMTVQLVBXHMCdig==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
-
-  '@oxfmt/binding-linux-arm64-musl@0.65.0':
-    resolution: {integrity: sha512-5Prb0uFzJHr+OUD/qS/TmU526wD+PaHDsm3KoRiUXbMIDpTSErjeQYkK3OQeshAvD/PuLa9WGEi9WPajjdOZJg==}
-    engines: {node: ^20.19.0 || >=22.12.0}
-    cpu: [arm64]
-    os: [linux]
-    libc: [musl]
 
   '@oxfmt/binding-linux-arm64-musl@0.74.0':
     resolution: {integrity: sha512-nI5FJwZ4Flo6CBdscpwxymZXxO3m3IErQJX55ZS6h+ObfGXu8FostL85L/RWPFaCLnIVE4/WfLw+2q8XvVEeUA==}
@@ -5387,24 +5327,10 @@ packages:
     os: [linux]
     libc: [musl]
 
-  '@oxfmt/binding-linux-ppc64-gnu@0.65.0':
-    resolution: {integrity: sha512-S8svxTp81obnF3admN9yd+u2rOYXtyzThLGBTg1PY6TPtGcC09BaaXLQD+TBSMa7yvqhCDZ8DFri+S/yG60qCg==}
-    engines: {node: ^20.19.0 || >=22.12.0}
-    cpu: [ppc64]
-    os: [linux]
-    libc: [glibc]
-
   '@oxfmt/binding-linux-ppc64-gnu@0.74.0':
     resolution: {integrity: sha512-BoQYKuqUdsKAFAkK6DLBvkdv4+t0hppSm79sB0wIcE2o/eOwNj+6Z3OlKY4q3Eta/tlssP65FaS9vHn8TeF7vQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [ppc64]
-    os: [linux]
-    libc: [glibc]
-
-  '@oxfmt/binding-linux-riscv64-gnu@0.65.0':
-    resolution: {integrity: sha512-WtXBr75G/h2qOHy8SiGtC1R6aS3jt4mE52v1D8AtwMXIgoOmSNP9lKvbSaTRoL0e5wsMPoi6T72QWDYPu+S+nA==}
-    engines: {node: ^20.19.0 || >=22.12.0}
-    cpu: [riscv64]
     os: [linux]
     libc: [glibc]
 
@@ -5415,13 +5341,6 @@ packages:
     os: [linux]
     libc: [glibc]
 
-  '@oxfmt/binding-linux-riscv64-musl@0.65.0':
-    resolution: {integrity: sha512-YwSLVvpaz4o/nv/miiPEBJz+eJ+VmbgNIrao6RccK9ce+L5EA8wP+ZD0uFeq6wKOza6zoWv/dR0sj6lip6R3EA==}
-    engines: {node: ^20.19.0 || >=22.12.0}
-    cpu: [riscv64]
-    os: [linux]
-    libc: [musl]
-
   '@oxfmt/binding-linux-riscv64-musl@0.74.0':
     resolution: {integrity: sha512-0VLQD0dhGBLY9Ik/w+otMvD81D0YXi4VDwql65macV+O9UzmSWmUr6CKf+dMtysDeC0PnG3y6kBkRO08BJx52g==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -5429,24 +5348,10 @@ packages:
     os: [linux]
     libc: [musl]
 
-  '@oxfmt/binding-linux-s390x-gnu@0.65.0':
-    resolution: {integrity: sha512-XQTPqgvyrgkKcFq+Tp2eK6JS7sqqJ+nRmy2Fav4j3I+i4dJoPJm7YwEdoeSDX9xkqj9jZ/lWfF3bXUWztIrn6A==}
-    engines: {node: ^20.19.0 || >=22.12.0}
-    cpu: [s390x]
-    os: [linux]
-    libc: [glibc]
-
   '@oxfmt/binding-linux-s390x-gnu@0.74.0':
     resolution: {integrity: sha512-6X7BbZNz34+OHM6Oqjf6TRcUyRn6aRcB4VtIDZAF/uQRyeVhg+G2hv6MlMvmnRekVSyTJ/8rG/u8W2dRFW6glg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [s390x]
-    os: [linux]
-    libc: [glibc]
-
-  '@oxfmt/binding-linux-x64-gnu@0.65.0':
-    resolution: {integrity: sha512-cjZlx6S/VkeCNWCbwZriTnLnZeTcV3DEyeRGSw/2wwLP9viq+C0bJ4bC1k/ZLkFxDcB1lUgSasPkYGP1bdraOg==}
-    engines: {node: ^20.19.0 || >=22.12.0}
-    cpu: [x64]
     os: [linux]
     libc: [glibc]
 
@@ -5457,13 +5362,6 @@ packages:
     os: [linux]
     libc: [glibc]
 
-  '@oxfmt/binding-linux-x64-musl@0.65.0':
-    resolution: {integrity: sha512-2azCjxdLtK4zCcIOU1dlXlU0xxfbPi6EjwWx7Ac7teWPidIIDOcIhudup83xNCKYhtqeVd/gaVDOxbUq4syXWA==}
-    engines: {node: ^20.19.0 || >=22.12.0}
-    cpu: [x64]
-    os: [linux]
-    libc: [musl]
-
   '@oxfmt/binding-linux-x64-musl@0.74.0':
     resolution: {integrity: sha512-MfWz4wDREjp/JQDmuxtKieix4FHGa1z5rBvB3betdcPwZvf5fqeQrlCm1mmoyuUVQOh9Pt3M61HwN94kJCxw7Q==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -5471,23 +5369,11 @@ packages:
     os: [linux]
     libc: [musl]
 
-  '@oxfmt/binding-openharmony-arm64@0.65.0':
-    resolution: {integrity: sha512-KXQ7xi1e/voP0IQaw6fG6XY4Z5+Llf1XmRSZS1t7pVFCecFJ0iXaboKmVwjFtp5MLlT5iWQrJ2U1C3GJdZ2u+Q==}
-    engines: {node: ^20.19.0 || >=22.12.0}
-    cpu: [arm64]
-    os: [openharmony]
-
   '@oxfmt/binding-openharmony-arm64@0.74.0':
     resolution: {integrity: sha512-6rmAApkq5s1kbDjvNI6Nl5A+JqQkLORb2sR941pf5HWsrd01WGKyagK/B4vX9+kh1FfvRkNgEu59FHvVk4H8cQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [openharmony]
-
-  '@oxfmt/binding-win32-arm64-msvc@0.65.0':
-    resolution: {integrity: sha512-2FbbjG5jEqLSLKVJwBap84uJfpn5Y5A53KEO0aUNr+zeiRB9nyPUIFMcSbZVMFLitfBytFWRNngozXYjb6Rsbw==}
-    engines: {node: ^20.19.0 || >=22.12.0}
-    cpu: [arm64]
-    os: [win32]
 
   '@oxfmt/binding-win32-arm64-msvc@0.74.0':
     resolution: {integrity: sha512-+5SpRUnZNGeXTyumHnpHa791tQtt04qZs076WT8eTcGF2OJ631VLnf7S0kQSPuDG+PtJM0phadEB2WAr5n1w9g==}
@@ -5495,22 +5381,10 @@ packages:
     cpu: [arm64]
     os: [win32]
 
-  '@oxfmt/binding-win32-ia32-msvc@0.65.0':
-    resolution: {integrity: sha512-LJ+ZacAPSjegDOnSLyA1TMWAhdDrsK4el3REdr1oL2UtVBCMhO2II/Sb3cEW6mF2MfLhl8hDNCSvc7KSbgk3LQ==}
-    engines: {node: ^20.19.0 || >=22.12.0}
-    cpu: [ia32]
-    os: [win32]
-
   '@oxfmt/binding-win32-ia32-msvc@0.74.0':
     resolution: {integrity: sha512-1Fg+wYBO3Dsti1QX+/6EYHjeQzLC84tLOAqPu/r7ah3UJlUs9C/DB703Ay9Vcg+8VMzqZA2P5VGhzJraVUD4OQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [ia32]
-    os: [win32]
-
-  '@oxfmt/binding-win32-x64-msvc@0.65.0':
-    resolution: {integrity: sha512-higu9cWEO6XXFzATD1jf0mCK34rNfN2H9JrJie7QB1IhleVpTh0QlLH9Ip2C1H/Nd5n0v5pvRtC+5R0uE4HpVg==}
-    engines: {node: ^20.19.0 || >=22.12.0}
-    cpu: [x64]
     os: [win32]
 
   '@oxfmt/binding-win32-x64-msvc@0.74.0':
@@ -6012,21 +5886,12 @@ packages:
     peerDependencies:
       react: ^16.8.0 || ^17.0.0-rc.1 || ^18.0.0 || ^19.0.0-rc.1
 
-  '@rocicorp/lock@1.0.4':
-    resolution: {integrity: sha512-FavTiO8ETXFXDVfA87IThGduTTTR8iqzBnr/c60gUUmbk7knGEXPmf2B+yiNuluJD0ku0fL2V2r62UXnsLXl6w==}
-    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
-
   '@rocicorp/lock@2.0.1':
     resolution: {integrity: sha512-dKWMCEPZWrgzeeBsSlihM0bVzc6Oe/wfPIxbl9ZCULDU/o7g9i2Sh9qRWLagDXSZcHBuVV9YLMbjQ1okrp+tYg==}
     engines: {node: '>=22.0.0'}
 
   '@rocicorp/logger@6.1.0':
     resolution: {integrity: sha512-4jOOwem9veRxl7uH15PsmT48PRd3OzM7n3umkO8WCMt8M929MJml4kfeqAcga8feZAfUb/+DRjsvl4ySgPWqYQ==}
-
-  '@rocicorp/resolver@1.0.2':
-    resolution: {integrity: sha512-TfjMTQp9cNNqNtHFfa+XHEGdA7NnmDRu+ZJH4YF3dso0Xk/b9DMhg/sl+b6CR4ThFZArXXDsG1j8Mwl34wcOZQ==}
-    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
-    deprecated: Use Promise.withResolvers instead
 
   '@rocicorp/zero-sqlite3@1.1.7':
     resolution: {integrity: sha512-aLcgrhws7mlr7pbe7pD/QDie5u4dzOrrkzYZMLdd338nKrE6vqbvIY2hBPyOJ81BAY/aJzZXYpDMxNTMlPl86A==}
@@ -6050,8 +5915,8 @@ packages:
       solid-js:
         optional: true
 
-  '@rocicorp/zero@1.11.0':
-    resolution: {integrity: sha512-E28zBTeQrK3mDczOmmOdUqKRB+5ezrnvqoy8Q3Ld7E5NwCNMKuhlEkU8tAMiV5mSEc7CoF/eQJqjy+haQmiNzQ==}
+  '@rocicorp/zero@1.12.0':
+    resolution: {integrity: sha512-ws7yDY2ZUEnin4ai8t5SH3+u+Rai1jPYi82JgTm7lRI/sF7v7Euaj3sbr5aPnpo6DvL4arh1RBoM/WI9bmJ9mA==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -10627,19 +10492,6 @@ packages:
 
   oxc-resolver@11.24.2:
     resolution: {integrity: sha512-FY91FiDBj7ls5MsFS9jN3tjz2o0/zsdSsymlakySaBwVJZorHhkWyICLZMKxlu1R9vYo+sd3z1jwb4J8x7bNDw==}
-
-  oxfmt@0.65.0:
-    resolution: {integrity: sha512-SgS5VgnP42T0zl3zWD+xoH8FCqg1SAFnSRoOT/qeoa6gxcYIqrDMOmcXIg/EWSN92Du4ogB4riuKhKd6Y4CGhw==}
-    engines: {node: ^20.19.0 || >=22.12.0}
-    hasBin: true
-    peerDependencies:
-      svelte: ^5.0.0
-      vite-plus: '*'
-    peerDependenciesMeta:
-      svelte:
-        optional: true
-      vite-plus:
-        optional: true
 
   oxfmt@0.74.0:
     resolution: {integrity: sha512-G4OP7FgwGYZR5ttRpCOOfJdyRsSyvtn34vSXnjDq6Oqed5Dufg5mB44mank+51nAdHOKuTJ0lj0mksY7L+N61A==}
@@ -17866,8 +17718,6 @@ snapshots:
       '@opentelemetry/resources': 2.12.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.43.0
 
-  '@opentelemetry/semantic-conventions@1.41.1': {}
-
   '@opentelemetry/semantic-conventions@1.43.0': {}
 
   '@opentelemetry/sql-common@0.42.0(@opentelemetry/api@1.9.1)':
@@ -18061,115 +17911,58 @@ snapshots:
   '@oxc-resolver/binding-win32-x64-msvc@11.24.2':
     optional: true
 
-  '@oxfmt/binding-android-arm-eabi@0.65.0':
-    optional: true
-
   '@oxfmt/binding-android-arm-eabi@0.74.0':
-    optional: true
-
-  '@oxfmt/binding-android-arm64@0.65.0':
     optional: true
 
   '@oxfmt/binding-android-arm64@0.74.0':
     optional: true
 
-  '@oxfmt/binding-darwin-arm64@0.65.0':
-    optional: true
-
   '@oxfmt/binding-darwin-arm64@0.74.0':
-    optional: true
-
-  '@oxfmt/binding-darwin-x64@0.65.0':
     optional: true
 
   '@oxfmt/binding-darwin-x64@0.74.0':
     optional: true
 
-  '@oxfmt/binding-freebsd-x64@0.65.0':
-    optional: true
-
   '@oxfmt/binding-freebsd-x64@0.74.0':
-    optional: true
-
-  '@oxfmt/binding-linux-arm-gnueabihf@0.65.0':
     optional: true
 
   '@oxfmt/binding-linux-arm-gnueabihf@0.74.0':
     optional: true
 
-  '@oxfmt/binding-linux-arm-musleabihf@0.65.0':
-    optional: true
-
   '@oxfmt/binding-linux-arm-musleabihf@0.74.0':
-    optional: true
-
-  '@oxfmt/binding-linux-arm64-gnu@0.65.0':
     optional: true
 
   '@oxfmt/binding-linux-arm64-gnu@0.74.0':
     optional: true
 
-  '@oxfmt/binding-linux-arm64-musl@0.65.0':
-    optional: true
-
   '@oxfmt/binding-linux-arm64-musl@0.74.0':
-    optional: true
-
-  '@oxfmt/binding-linux-ppc64-gnu@0.65.0':
     optional: true
 
   '@oxfmt/binding-linux-ppc64-gnu@0.74.0':
     optional: true
 
-  '@oxfmt/binding-linux-riscv64-gnu@0.65.0':
-    optional: true
-
   '@oxfmt/binding-linux-riscv64-gnu@0.74.0':
-    optional: true
-
-  '@oxfmt/binding-linux-riscv64-musl@0.65.0':
     optional: true
 
   '@oxfmt/binding-linux-riscv64-musl@0.74.0':
     optional: true
 
-  '@oxfmt/binding-linux-s390x-gnu@0.65.0':
-    optional: true
-
   '@oxfmt/binding-linux-s390x-gnu@0.74.0':
-    optional: true
-
-  '@oxfmt/binding-linux-x64-gnu@0.65.0':
     optional: true
 
   '@oxfmt/binding-linux-x64-gnu@0.74.0':
     optional: true
 
-  '@oxfmt/binding-linux-x64-musl@0.65.0':
-    optional: true
-
   '@oxfmt/binding-linux-x64-musl@0.74.0':
-    optional: true
-
-  '@oxfmt/binding-openharmony-arm64@0.65.0':
     optional: true
 
   '@oxfmt/binding-openharmony-arm64@0.74.0':
     optional: true
 
-  '@oxfmt/binding-win32-arm64-msvc@0.65.0':
-    optional: true
-
   '@oxfmt/binding-win32-arm64-msvc@0.74.0':
     optional: true
 
-  '@oxfmt/binding-win32-ia32-msvc@0.65.0':
-    optional: true
-
   '@oxfmt/binding-win32-ia32-msvc@0.74.0':
-    optional: true
-
-  '@oxfmt/binding-win32-x64-msvc@0.65.0':
     optional: true
 
   '@oxfmt/binding-win32-x64-msvc@0.74.0':
@@ -18733,15 +18526,9 @@ snapshots:
     dependencies:
       react: 19.3.1
 
-  '@rocicorp/lock@1.0.4':
-    dependencies:
-      '@rocicorp/resolver': 1.0.2
-
   '@rocicorp/lock@2.0.1': {}
 
   '@rocicorp/logger@6.1.0': {}
-
-  '@rocicorp/resolver@1.0.2': {}
 
   '@rocicorp/zero-sqlite3@1.1.7':
     dependencies:
@@ -18754,7 +18541,7 @@ snapshots:
       react-dom: 19.3.1(react@19.3.1)
       solid-js: 1.9.17
 
-  '@rocicorp/zero@1.11.0(@opentelemetry/core@2.12.0(@opentelemetry/api@1.9.1))':
+  '@rocicorp/zero@1.12.0(@opentelemetry/core@2.12.0(@opentelemetry/api@1.9.1))':
     dependencies:
       '@badrap/valita': 0.5.5
       '@databases/escape-identifier': 1.0.3
@@ -18772,15 +18559,14 @@ snapshots:
       '@opentelemetry/sdk-metrics': 2.12.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-node': 0.223.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-node': 2.12.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/semantic-conventions': 1.41.1
+      '@opentelemetry/semantic-conventions': 1.43.0
       '@postgresql-typed/oids': 0.2.0
-      '@rocicorp/lock': 1.0.4
+      '@rocicorp/lock': 2.0.1
       '@rocicorp/logger': 6.1.0
-      '@rocicorp/resolver': 1.0.2
       '@rocicorp/zero-sqlite3': 1.1.7
       '@standard-schema/spec': 1.1.0
       '@types/basic-auth': 1.1.8
-      '@types/ws': 8.18.1
+      '@types/ws': 8.18.2
       basic-auth: 2.0.1
       chalk-template: 1.1.2
       chokidar: 4.0.3
@@ -18796,16 +18582,18 @@ snapshots:
       json-custom-numbers: 3.1.1
       kasi: 1.1.2
       nanoid: 5.1.16
-      oxfmt: 0.65.0
+      oxc-parser: 0.129.0
+      oxfmt: 0.74.0
       parse-prometheus-text-format: 1.1.1
       pg-format: pg-format-fix@1.0.5
       postgres: 3.4.7(patch_hash=1ab70f82038a98cb34611424c35af68a1d87aa3bd8ed78a7f863c628ae3aeac7)
-      semver: 7.8.0
+      semver: 7.8.5
       url-pattern: 1.0.3
       urlpattern-polyfill: 10.1.0
       ws: 8.22.0
     transitivePeerDependencies:
       - '@75lb/nature'
+      - '@astrojs/compiler-rs'
       - '@opentelemetry/core'
       - bufferutil
       - supports-color
@@ -24192,30 +23980,6 @@ snapshots:
       '@oxc-resolver/binding-wasm32-wasi': 11.24.2
       '@oxc-resolver/binding-win32-arm64-msvc': 11.24.2
       '@oxc-resolver/binding-win32-x64-msvc': 11.24.2
-
-  oxfmt@0.65.0:
-    dependencies:
-      tinypool: 2.2.0
-    optionalDependencies:
-      '@oxfmt/binding-android-arm-eabi': 0.65.0
-      '@oxfmt/binding-android-arm64': 0.65.0
-      '@oxfmt/binding-darwin-arm64': 0.65.0
-      '@oxfmt/binding-darwin-x64': 0.65.0
-      '@oxfmt/binding-freebsd-x64': 0.65.0
-      '@oxfmt/binding-linux-arm-gnueabihf': 0.65.0
-      '@oxfmt/binding-linux-arm-musleabihf': 0.65.0
-      '@oxfmt/binding-linux-arm64-gnu': 0.65.0
-      '@oxfmt/binding-linux-arm64-musl': 0.65.0
-      '@oxfmt/binding-linux-ppc64-gnu': 0.65.0
-      '@oxfmt/binding-linux-riscv64-gnu': 0.65.0
-      '@oxfmt/binding-linux-riscv64-musl': 0.65.0
-      '@oxfmt/binding-linux-s390x-gnu': 0.65.0
-      '@oxfmt/binding-linux-x64-gnu': 0.65.0
-      '@oxfmt/binding-linux-x64-musl': 0.65.0
-      '@oxfmt/binding-openharmony-arm64': 0.65.0
-      '@oxfmt/binding-win32-arm64-msvc': 0.65.0
-      '@oxfmt/binding-win32-ia32-msvc': 0.65.0
-      '@oxfmt/binding-win32-x64-msvc': 0.65.0
 
   oxfmt@0.74.0:
     dependencies:
