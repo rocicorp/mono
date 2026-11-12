@@ -125,7 +125,7 @@ jobs:
           fi
 
   build:
-    name: Build artifacts
+    name: Build package
     runs-on: ubuntu-latest
     needs: plan
     permissions:
@@ -134,7 +134,6 @@ jobs:
       tarball_name: ${{ steps.pack.outputs.filename }}
     env:
       SCRIPTS: ${{ github.workspace }}/ci/scripts/src
-      SOURCE_SHA: ${{ needs.plan.outputs.source_sha }}
       VERSION: ${{ needs.plan.outputs.version }}
     steps:
       - name: Checkout workflow scripts
@@ -190,14 +189,59 @@ jobs:
           TARBALL: ${{ runner.temp }}/npm/${{ steps.pack.outputs.filename }}
         run: node "$SCRIPTS/release-verify-tarball.ts" "$TARBALL" "$VERSION"
 
+      - name: Upload npm package artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: zero-npm-${{ needs.plan.outputs.version }}
+          if-no-files-found: error
+          retention-days: 7
+          path: ${{ runner.temp }}/npm/${{ steps.pack.outputs.filename }}
+
+  build-docker:
+    name: Build Docker image (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    needs: [plan, build]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    permissions:
+      contents: read
+    env:
+      ARCH: ${{ matrix.arch }}
+      PLATFORM: ${{ matrix.platform }}
+      SOURCE_SHA: ${{ needs.plan.outputs.source_sha }}
+      TARBALL: ${{ needs.build.outputs.tarball_name }}
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          path: source
+          ref: ${{ needs.plan.outputs.source_sha }}
+          persist-credentials: false
+
+      - name: Download npm package artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: zero-npm-${{ needs.plan.outputs.version }}
+          path: ${{ runner.temp }}/npm
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
 
       - name: Build Docker image archive
         env:
-          TARBALL: ${{ steps.pack.outputs.filename }}
-          TARBALL_PATH: ${{ runner.temp }}/npm/${{ steps.pack.outputs.filename }}
-          IMAGE_ARCHIVE: ${{ runner.temp }}/docker/zero-image.tar
+          IMAGE_ARCHIVE: ${{ runner.temp }}/docker/zero-image-${{ matrix.arch }}.tar
+          IMAGE_DIGEST: ${{ runner.temp }}/docker/zero-image-${{ matrix.arch }}.digest
+          IMAGE_METADATA: ${{ runner.temp }}/docker/zero-image-${{ matrix.arch }}.json
+          TARBALL_PATH: ${{ runner.temp }}/npm/${{ needs.build.outputs.tarball_name }}
         run: |
           set -euo pipefail
           mkdir -p source/packages/zero/pkgs "$(dirname "$IMAGE_ARCHIVE")"
@@ -209,37 +253,38 @@ jobs:
             build_contexts+=(--build-context monogo=source/go)
           fi
           docker buildx build \
-            --platform linux/amd64,linux/arm64 \
+            --platform "$PLATFORM" \
             "${build_contexts[@]}" \
             --build-arg ZERO_VERSION="$VERSION" \
             --build-arg ZERO_PACKAGE="$TARBALL" \
             --label org.opencontainers.image.revision="$SOURCE_SHA" \
             --label org.opencontainers.image.version="$VERSION" \
+            --metadata-file "$IMAGE_METADATA" \
             --sbom=true \
             --provenance=mode=max \
             --output=type=oci,dest="$IMAGE_ARCHIVE" \
             source/packages/zero
-
-      - name: Upload npm package artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: zero-npm-${{ needs.plan.outputs.version }}
-          if-no-files-found: error
-          retention-days: 7
-          path: ${{ runner.temp }}/npm/${{ steps.pack.outputs.filename }}
+          digest=$(jq -r '."containerimage.digest"' "$IMAGE_METADATA")
+          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Invalid $ARCH image digest: $digest" >&2
+            exit 1
+          fi
+          printf '%s\n' "$digest" > "$IMAGE_DIGEST"
 
       - name: Upload Docker image artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: zero-docker-${{ needs.plan.outputs.version }}
+          name: zero-docker-${{ needs.plan.outputs.version }}-${{ matrix.arch }}
           if-no-files-found: error
           retention-days: 7
-          path: ${{ runner.temp }}/docker/zero-image.tar
+          path: |
+            ${{ runner.temp }}/docker/zero-image-${{ matrix.arch }}.tar
+            ${{ runner.temp }}/docker/zero-image-${{ matrix.arch }}.digest
 
   publish-npm:
     name: Publish npm package
     runs-on: ubuntu-latest
-    needs: [plan, build]
+    needs: [plan, build, build-docker]
     environment:
       name: zero-release-npm
     permissions:
@@ -305,7 +350,7 @@ jobs:
   publish-docker:
     name: Publish Docker images
     runs-on: ubuntu-latest
-    needs: [plan, build, archive-cloudzero-source]
+    needs: [plan, build-docker, archive-cloudzero-source]
     environment:
       name: zero-release-docker
     permissions:
@@ -315,31 +360,33 @@ jobs:
       MODE: ${{ needs.plan.outputs.mode }}
       VERSION: ${{ needs.plan.outputs.version }}
     steps:
-      - name: Download Docker image artifact
+      - name: Download amd64 Docker image artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: zero-docker-${{ needs.plan.outputs.version }}
+          name: zero-docker-${{ needs.plan.outputs.version }}-amd64
           path: dist/docker
 
-      - name: Push GHCR Docker image
-        uses: docker://quay.io/containers/skopeo:v1.22.2-immutable@sha256:ca4fd94dba8cab15cf79c4c156bfc26d28e2265411294e9bba87756942e739ad
+      - name: Download arm64 Docker image artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          args: >-
-            copy --all
-            --dest-creds ${{ github.actor }}:${{ github.token }}
-            oci-archive:dist/docker/zero-image.tar
-            docker://ghcr.io/rocicorp/zero:${{ needs.plan.outputs.version }}
+          name: zero-docker-${{ needs.plan.outputs.version }}-arm64
+          path: dist/docker
 
-      - name: Push GHCR head tag
-        # The version signature covers this tag because both resolve to one digest.
-        if: needs.plan.outputs.mode == 'head'
-        uses: docker://quay.io/containers/skopeo:v1.22.2-immutable@sha256:ca4fd94dba8cab15cf79c4c156bfc26d28e2265411294e9bba87756942e739ad
-        with:
-          args: >-
-            copy --all
-            --dest-creds ${{ github.actor }}:${{ github.token }}
-            oci-archive:dist/docker/zero-image.tar
-            docker://ghcr.io/rocicorp/zero:head
+      - name: Read Docker image digests
+        id: digests
+        run: |
+          set -euo pipefail
+          for arch in amd64 arm64; do
+            digest=$(<"dist/docker/zero-image-$arch.digest")
+            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "Invalid $arch image digest: $digest" >&2
+              exit 1
+            fi
+            echo "$arch=$digest" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
 
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
@@ -362,27 +409,81 @@ jobs:
         with:
           username: rocicorp
 
-      - name: Push Docker Hub image
+      - name: Push GHCR amd64 image by digest
         uses: docker://quay.io/containers/skopeo:v1.22.2-immutable@sha256:ca4fd94dba8cab15cf79c4c156bfc26d28e2265411294e9bba87756942e739ad
         env:
           REGISTRY_AUTH_FILE: ${{ runner.temp }}/docker-auth/config.json
         with:
           args: >-
-            copy --all
-            oci-archive:dist/docker/zero-image.tar
-            docker://docker.io/rocicorp/zero:${{ needs.plan.outputs.version }}
+            copy --all --preserve-digests
+            oci-archive:dist/docker/zero-image-amd64.tar
+            docker://ghcr.io/rocicorp/zero@${{ steps.digests.outputs.amd64 }}
 
-      - name: Push Docker Hub head tag
-        # The version signature covers this tag because both resolve to one digest.
-        if: needs.plan.outputs.mode == 'head'
+      - name: Push GHCR arm64 image by digest
         uses: docker://quay.io/containers/skopeo:v1.22.2-immutable@sha256:ca4fd94dba8cab15cf79c4c156bfc26d28e2265411294e9bba87756942e739ad
         env:
           REGISTRY_AUTH_FILE: ${{ runner.temp }}/docker-auth/config.json
         with:
           args: >-
-            copy --all
-            oci-archive:dist/docker/zero-image.tar
-            docker://docker.io/rocicorp/zero:head
+            copy --all --preserve-digests
+            oci-archive:dist/docker/zero-image-arm64.tar
+            docker://ghcr.io/rocicorp/zero@${{ steps.digests.outputs.arm64 }}
+
+      - name: Push Docker Hub amd64 image by digest
+        uses: docker://quay.io/containers/skopeo:v1.22.2-immutable@sha256:ca4fd94dba8cab15cf79c4c156bfc26d28e2265411294e9bba87756942e739ad
+        env:
+          REGISTRY_AUTH_FILE: ${{ runner.temp }}/docker-auth/config.json
+        with:
+          args: >-
+            copy --all --preserve-digests
+            oci-archive:dist/docker/zero-image-amd64.tar
+            docker://docker.io/rocicorp/zero@${{ steps.digests.outputs.amd64 }}
+
+      - name: Push Docker Hub arm64 image by digest
+        uses: docker://quay.io/containers/skopeo:v1.22.2-immutable@sha256:ca4fd94dba8cab15cf79c4c156bfc26d28e2265411294e9bba87756942e739ad
+        env:
+          REGISTRY_AUTH_FILE: ${{ runner.temp }}/docker-auth/config.json
+        with:
+          args: >-
+            copy --all --preserve-digests
+            oci-archive:dist/docker/zero-image-arm64.tar
+            docker://docker.io/rocicorp/zero@${{ steps.digests.outputs.arm64 }}
+
+      - name: Create multi-platform Docker image tags
+        env:
+          AMD64_DIGEST: ${{ steps.digests.outputs.amd64 }}
+          ARM64_DIGEST: ${{ steps.digests.outputs.arm64 }}
+          DOCKER_CONFIG: ${{ runner.temp }}/docker-auth
+        run: |
+          set -euo pipefail
+          for image in ghcr.io/rocicorp/zero docker.io/rocicorp/zero; do
+            tags=(--tag "$image:$VERSION")
+            if [ "$MODE" = 'head' ]; then
+              # The version signature covers head because both use one digest.
+              tags+=(--tag "$image:head")
+            fi
+            docker buildx imagetools create \
+              "${tags[@]}" \
+              "$image@$AMD64_DIGEST" \
+              "$image@$ARM64_DIGEST"
+          done
+
+      - name: Verify multi-platform Docker image tags
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/docker-auth
+        run: |
+          set -euo pipefail
+          for image in \
+            "ghcr.io/rocicorp/zero:$VERSION" \
+            "docker.io/rocicorp/zero:$VERSION"; do
+            platforms=$(docker buildx imagetools inspect "$image" --raw |
+              jq -r '.manifests[].platform | select(.os == "linux") | .architecture' |
+              sort -u | paste -sd, -)
+            if [ "$platforms" != 'amd64,arm64' ]; then
+              echo "Expected $image to contain linux/amd64 and linux/arm64, got: $platforms" >&2
+              exit 1
+            fi
+          done
 
       - name: Sign Docker images
         env:
