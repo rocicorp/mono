@@ -33,6 +33,8 @@ import {
 const pgTimestampRe =
   /^(\d+)-(\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}(?:\.\d+)?)([+-]\d{1,2}(?::\d{2})?)?(?: BC)?$/;
 
+const NANOS_PER_GREGORIAN_CYCLE = 146_097n * 24n * 60n * 60n * 1_000_000_000n;
+
 // exported for testing.
 export function timestampToFpMillis(timestamp: string): number {
   if (timestamp === 'infinity') return Infinity;
@@ -51,22 +53,19 @@ export function timestampToFpMillis(timestamp: string): number {
     year = -(year - 1);
   }
 
-  // Format year as ISO 8601 expanded year if needed.
-  // https://tc39.es/ecma262/#sec-expanded-years
-  let isoYear: string;
-  if (year >= 0 && year <= 9999) {
-    isoYear = String(year).padStart(4, '0');
-  } else if (year >= 0) {
-    isoYear = '+' + String(year).padStart(6, '0');
-  } else {
-    isoYear = '-' + String(Math.abs(year)).padStart(6, '0');
-  }
+  // Postgres timestamps extend to the year 294276, which is past what a
+  // Date can represent (the year 275760). The Gregorian calendar repeats
+  // every 400 years, so the time is computed for the equivalent year in
+  // [2000, 2400) and then shifted by the number of cycles.
+  const cycles = Math.floor((year - 2000) / 400);
 
   // Build a UTC ISO string so PreciseDate returns microsecond precision.
-  const utcString = `${isoYear}-${monthDay}T${time}Z`;
+  const utcString = `${year - cycles * 400}-${monthDay}T${time}Z`;
 
   try {
-    const fullTime = new PreciseDate(utcString).getFullTime();
+    const fullTime =
+      new PreciseDate(utcString).getFullTime() +
+      BigInt(cycles) * NANOS_PER_GREGORIAN_CYCLE;
     const millis = Number(fullTime / 1_000_000n);
     const nanos = Number(fullTime % 1_000_000n);
     const ret = millis + nanos * 1e-6; // floating point milliseconds
