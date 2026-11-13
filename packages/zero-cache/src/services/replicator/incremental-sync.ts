@@ -44,6 +44,7 @@ type ErrorType = Enum<typeof ErrorType>;
 
 const MAX_WORKER_BATCH_MESSAGES = 256;
 const MAX_WORKER_BATCH_SIZE = 1024 * 1024;
+const SLOW_WRITE_MS = 1000;
 
 // The number of times to reconnect after being rejected by a
 // replication-manager with an older replica version (e.g. one that has yet
@@ -211,10 +212,22 @@ export class IncrementalSyncer {
             return;
           }
           const batch = writeBatch;
+          const size = writeBatchSize;
           writeBatch = [];
           writeBatchSize = 0;
 
+          const start = performance.now();
           const result = await this.#worker.processMessages(batch);
+          const elapsed = performance.now() - start;
+          if (elapsed >= SLOW_WRITE_MS) {
+            // Statements that take long are logged by the write worker. This
+            // covers the time that those logs do not, e.g. many statements
+            // that are each fast, or a worker that is not getting to run.
+            lc.warn?.(
+              `slow replica write: ${elapsed.toFixed(0)} ms for ` +
+                `${batch.length} messages (${size} bytes)`,
+            );
+          }
           this.#handleResult(lc, result);
           if (result?.completedBackfill) {
             backfill = undefined;
@@ -249,7 +262,7 @@ export class IncrementalSyncer {
           return false;
         };
 
-        for await (const {data: message, size} of downstream) {
+        for await (const {data: message, size, receivedMs} of downstream) {
           if (shouldSkip(message)) {
             continue;
           }
@@ -276,6 +289,7 @@ export class IncrementalSyncer {
                 if (lagReport.lastTimings) {
                   report.lastTimings = {
                     ...lagReport.lastTimings,
+                    deliverTimeMs: receivedMs,
                     replicateTimeMs: Date.now(),
                   };
                 }

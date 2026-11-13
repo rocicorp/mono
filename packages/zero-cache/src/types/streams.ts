@@ -252,6 +252,8 @@ type Ack = v.Infer<typeof ackSchema>;
 export type Sized<T> = {
   data: T;
   size: number;
+  /** When the value was received from the websocket, if it was. */
+  receivedMs?: number | undefined;
 };
 
 export type StreamOutOptions = {
@@ -359,7 +361,7 @@ export function streamInternalWithSize<
     inSchema,
     outSource,
     BigIntJSON.stringify,
-    (data, _frame, _id, size) => ({data, size}),
+    (data, _frame, _id, size) => ({data, size, receivedMs: Date.now()}),
     options,
   );
 }
