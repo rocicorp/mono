@@ -17,6 +17,46 @@ import {getOrCreateCounter} from '../../observability/metrics.ts';
 export const DEFAULT_MAX_SNAPSHOT_ROW_CACHE_ENTRIES = 50_000;
 
 /**
+ * The maximum approximate size of the rows retained by a
+ * {@link SnapshotRowCache}, in string characters and blob bytes.
+ *
+ * The entry count alone does not bound memory: each update of a row adds
+ * entries for the new version of the row, so a large row (e.g. one with a
+ * large JSON column) that is updated many times a second fills the heap long
+ * before the entry limit is reached.
+ */
+const MAX_SNAPSHOT_ROW_CACHE_BYTES = 64 * 1024 * 1024;
+
+/**
+ * Approximates the memory retained by a cached value, which is a raw SQLite
+ * row or an array of them. Only strings and blobs are measured exactly, as
+ * they are the values that can be large.
+ */
+function approximateSize(value: unknown): number {
+  if (typeof value === 'string') {
+    return value.length;
+  }
+  if (value instanceof Uint8Array) {
+    return value.byteLength;
+  }
+  if (Array.isArray(value)) {
+    let size = 0;
+    for (const row of value) {
+      size += approximateSize(row);
+    }
+    return size;
+  }
+  if (typeof value === 'object' && value !== null) {
+    let size = 0;
+    for (const col in value) {
+      size += approximateSize((value as Record<string, unknown>)[col]);
+    }
+    return size;
+  }
+  return 8;
+}
+
+/**
  * Serializes a lookup key value (i.e. a SQLite-bound parameter). Numbers and
  * bigints serialize identically, as row keys parsed from the change log are
  * JSON numbers whereas the values read from SQLite are bigints; both address
@@ -90,7 +130,9 @@ const MISS = {result: 'miss'} as const;
  *
  * ### Eviction
  *
- * The cache is bounded by entry count and evicts in insertion (FIFO) order
+ * The cache is bounded by entry count and by the approximate size of its
+ * rows (see {@link MAX_SNAPSHOT_ROW_CACHE_BYTES}), and evicts in insertion
+ * (FIFO) order
  * rather than by recency. Diffs are traversed in change log order by every
  * client group, so the entries that will not be needed again are those that
  * were inserted the earliest (all groups have moved past them), while the
@@ -111,6 +153,10 @@ export class SnapshotRowCache {
   // instead costs O(evictions) per insert, as V8 leaves deleted entries in
   // the table until it is compacted and every new iterator walks over them.)
   readonly #keys = new RingBuffer<string>();
+  // The approximate size of each entry, in the same order as #keys.
+  readonly #sizes = new RingBuffer<number>();
+  readonly #maxBytes: number;
+  #bytes = 0;
   // Interns the SQL text of each distinct read so that entry keys
   // do not repeat the (long) column list of every statement.
   readonly #sqlIDs = new Map<string, number>();
@@ -122,8 +168,12 @@ export class SnapshotRowCache {
   #hits = 0;
   #misses = 0;
 
-  constructor(maxEntries = DEFAULT_MAX_SNAPSHOT_ROW_CACHE_ENTRIES) {
+  constructor(
+    maxEntries = DEFAULT_MAX_SNAPSHOT_ROW_CACHE_ENTRIES,
+    maxBytes = MAX_SNAPSHOT_ROW_CACHE_BYTES,
+  ) {
     this.#maxEntries = Math.max(0, maxEntries);
+    this.#maxBytes = maxBytes;
   }
 
   get size(): number {
@@ -169,8 +219,16 @@ export class SnapshotRowCache {
       // `key` is not in #entries (this is a miss), so it is always added.
       this.#entries.set(key, value);
       this.#keys.push(key);
-      if (this.#keys.size > this.#maxEntries) {
+      const size = approximateSize(value);
+      this.#sizes.push(size);
+      this.#bytes += size;
+      // A value larger than #maxBytes is evicted here, i.e. it is not cached.
+      while (
+        this.#keys.size > this.#maxEntries ||
+        this.#bytes > this.#maxBytes
+      ) {
         this.#entries.delete(must(this.#keys.shift()));
+        this.#bytes -= must(this.#sizes.shift());
       }
     }
     return value;
@@ -179,6 +237,8 @@ export class SnapshotRowCache {
   clear(): void {
     this.#entries.clear();
     this.#keys.clear();
+    this.#sizes.clear();
+    this.#bytes = 0;
     this.#sqlIDs.clear();
   }
 
