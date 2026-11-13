@@ -154,6 +154,12 @@ type ReplicationOwner = {
 
 const backfillRequestsSchema = v.array(backfillRequestSchema);
 
+// The first catchup page is small because the size of the changes is not yet
+// known. See Storer.#readCatchupPages().
+const INITIAL_CATCHUP_PAGE_ROWS = 100;
+const MAX_CATCHUP_PAGE_ROWS = 2000;
+const CATCHUP_PAGE_BYTES = 32 * 1024 * 1024;
+
 export type TuningOptions = {
   backPressureLimitHeapProportion: number;
   statementTimeoutMs: number;
@@ -641,31 +647,6 @@ export class Storer implements Service {
        ORDER BY watermark
        LIMIT ${limit}`;
     return rows.map(({watermark}) => watermark);
-  }
-
-  /**
-   * Reads `(afterWatermark, throughWatermark]` in stream order and bounded batches.
-   * This query matches the subscriber catchup query.
-   *
-   * Both queries fail when an escaped NUL reaches `change->'tag'`.
-   * Postgres cannot convert that value to text.
-   */
-  readCatchupRange(
-    afterWatermark: string,
-    throughWatermark: string,
-    batchRows = 2000,
-  ): AsyncIterable<ChangeLogEntry[]> {
-    assert(
-      Number.isSafeInteger(batchRows) && batchRows > 0,
-      'Postgres change log batch size must be a positive safe integer',
-    );
-    return this.#db<ChangeLogEntry[]> /*sql*/ `
-      SELECT watermark, change->'tag' as tag, change::text FROM ${this.#cdc('changeLog')}
-       WHERE watermark > ${afterWatermark}
-         AND watermark <= ${throughWatermark}
-       ORDER BY watermark, pos`.cursor(batchRows) as AsyncIterable<
-      ChangeLogEntry[]
-    >;
   }
 
   // Note: These are the only db `await`s that are not tracked by the
@@ -1220,6 +1201,51 @@ export class Storer implements Service {
     });
   }
 
+  /**
+   * Reads the changeLog from `fromWatermark` (inclusive) through
+   * `throughWatermark` in pages of about {@link CATCHUP_PAGE_BYTES}.
+   *
+   * A change can be anything from a few bytes to megabytes (a row with a
+   * large JSON column), so a page with a fixed number of rows can exceed the
+   * heap. Postgres cannot limit a result by size, so the row limit of each
+   * page is derived from the average size of the changes in the previous one.
+   */
+  async *#readCatchupPages(
+    tx: PostgresTransaction,
+    fromWatermark: string,
+    throughWatermark: string,
+  ): AsyncGenerator<ChangeLogEntry[]> {
+    let limit = INITIAL_CATCHUP_PAGE_ROWS;
+    let start = tx`watermark >= ${fromWatermark}`;
+    for (;;) {
+      const entries = await tx<(ChangeLogEntry & {pos: bigint})[]> /*sql*/ `
+        SELECT watermark, pos, change->'tag' as tag, change::text FROM ${this.#cdc('changeLog')}
+         WHERE ${start}
+           AND watermark <= ${throughWatermark}
+         ORDER BY watermark, pos
+         LIMIT ${limit}`;
+      if (entries.length > 0) {
+        yield entries;
+      }
+      if (entries.length < limit) {
+        return;
+      }
+      const last = must(entries.at(-1));
+      start = tx`(watermark, pos) > (${last.watermark}, ${last.pos})`;
+      let bytes = 0;
+      for (const entry of entries) {
+        bytes += Buffer.byteLength(entry.change);
+      }
+      limit = Math.max(
+        1,
+        Math.min(
+          MAX_CATCHUP_PAGE_ROWS,
+          Math.floor((CATCHUP_PAGE_BYTES * entries.length) / bytes),
+        ),
+      );
+    }
+  }
+
   async #catchup(
     lc: LogContext,
     {subscriber: sub, mode}: SubscriberAndMode,
@@ -1244,11 +1270,11 @@ export class Storer implements Service {
         let count = 0;
         let lastBatchConsumed: Promise<unknown> | undefined;
 
-        for await (const entries of tx<ChangeLogEntry[]> /*sql*/ `
-          SELECT watermark, change->'tag' as tag, change::text FROM ${this.#cdc('changeLog')}
-           WHERE watermark >= ${sub.watermark}
-             AND watermark <= ${lastWatermark}
-           ORDER BY watermark, pos`.cursor(2000)) {
+        for await (const entries of this.#readCatchupPages(
+          tx,
+          sub.watermark,
+          lastWatermark,
+        )) {
           catchupProgressed();
           entriesReceived += entries.length;
 
@@ -1257,8 +1283,8 @@ export class Storer implements Service {
             // subscriber before sending down the current batch. This pipelining
             // allows one batch of changes to be received from the change-db
             // while the previous batch of changes are sent to the subscriber,
-            // resulting in flow control that caps the number of changes
-            // referenced in memory to 2 * batch-size.
+            // resulting in flow control that caps the changes referenced in
+            // memory to about 2 * CATCHUP_PAGE_BYTES.
             const start = performance.now();
             await lastBatchConsumed;
             const elapsed = performance.now() - start;
