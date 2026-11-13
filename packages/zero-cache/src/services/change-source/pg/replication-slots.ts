@@ -3,6 +3,7 @@ import {
   PG_CONFIGURATION_LIMIT_EXCEEDED,
   PG_INSUFFICIENT_PRIVILEGE,
   PG_LOCK_NOT_AVAILABLE,
+  PG_SERIALIZATION_FAILURE,
 } from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import {defu} from 'defu';
@@ -159,11 +160,14 @@ export async function createReplicationSlot(
     if (
       diagnosticsDB &&
       (isPostgresError(e, PG_LOCK_NOT_AVAILABLE) ||
+        isPostgresError(e, PG_SERIALIZATION_FAILURE) ||
         e instanceof SlotCreationTimeoutError)
     ) {
       // After a lock_timeout, the walsender is no longer waiting, but the
       // transactions it was waiting on are likely still running. After the
-      // client-side timeout, it may still be waiting on them.
+      // client-side timeout, it may still be waiting on them. After a
+      // serialization failure, the transactions that made the snapshot too
+      // large are likely still running.
       await logSlotCreationBlockers(lc, diagnosticsDB, walsenderPID, slotName);
     }
     throw e;
@@ -227,15 +231,21 @@ export async function logSlotCreationBlockers(
 }
 
 /**
- * Whether slot creation failed because it was waiting on transactions on the
- * upstream instance: the server's lock_timeout fired, the client-side timeout
- * was reached, or the replication session was closed while it was waiting.
+ * Whether slot creation failed because of transactions on the upstream
+ * instance: the server's lock_timeout fired while waiting on them, the
+ * client-side timeout was reached, the replication session was closed while
+ * it was waiting, or Postgres could not export the slot's snapshot
+ * ("initial slot snapshot too large", a serialization failure). The latter
+ * happens when more transaction ids than the instance has backends are
+ * in progress or aborted at the slot's consistent point, e.g. because a
+ * running transaction has many subtransactions.
  * Such failures are expected on busy upstreams, and leave no durable state,
  * so the attempt can simply be retried.
  */
 function isSlotCreationBlocked(e: unknown): boolean {
   return (
     isPostgresError(e, PG_LOCK_NOT_AVAILABLE) ||
+    isPostgresError(e, PG_SERIALIZATION_FAILURE) ||
     e instanceof SlotCreationTimeoutError ||
     (e instanceof Error && (e as {code?: unknown}).code === 'CONNECTION_CLOSED')
   );
