@@ -225,6 +225,12 @@ export async function initViewSyncerSchema(
     },
   };
 
+  const migratedV18ToV19: Migration = {
+    migrateSchema: async (_, sql) => {
+      await sql`ALTER TABLE ${sql(schema)}.instances ALTER COLUMN "ttlClock" SET DEFAULT 0`;
+    },
+  };
+
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
     2: migrateV1toV2,
     3: migrateV2ToV3,
@@ -266,6 +272,10 @@ export async function initViewSyncerSchema(
     // across view-syncer restarts. NULL for existing groups until their next
     // validated connection.
     18: migratedV17ToV18,
+    // V19 sets the default of instances."ttlClock" to 0. A CVR set up by
+    // zero-cache 0.22 to 0.24 created the column without a default, unlike
+    // one upgraded through V13 or set up later.
+    19: migratedV18ToV19,
   };
 
   await runSchemaMigrations(
