@@ -18,6 +18,7 @@ export const INT8 = 20;
 export const INT2 = 21;
 export const INT4 = 23;
 export const TEXT = 25;
+export const OID = 26;
 export const JSON = 114;
 export const FLOAT4 = 700;
 export const FLOAT8 = 701;

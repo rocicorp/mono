@@ -13,6 +13,7 @@ import {
   INT8,
   JSONB,
   NUMERIC,
+  OID,
   TEXT,
   TIME,
   TIMESTAMP,
@@ -216,15 +217,43 @@ const KNOWN_BINARY_OIDS = new Set([
   NUMERIC,
 ]);
 
+// The array types of the elements that makeElementDecoder() can decode.
+const KNOWN_BINARY_ARRAY_OIDS = new Set([
+  199, // json[]
+  1000, // bool[]
+  1002, // char[]
+  1005, // int2[]
+  1007, // int4[]
+  1009, // text[]
+  1014, // bpchar[]
+  1015, // varchar[]
+  1016, // int8[]
+  1021, // float4[]
+  1022, // float8[]
+  1028, // oid[]
+  1115, // timestamp[]
+  1182, // date[]
+  1183, // time[]
+  1185, // timestamptz[]
+  1231, // numeric[]
+  1270, // timetz[]
+  2951, // uuid[]
+  3807, // jsonb[]
+]);
+
 /**
  * Returns true if the column's binary format is known and can be decoded
  * natively. For columns where this returns false, the COPY SELECT should
- * cast the column to `::text` so PG sends the text representation inside
- * the binary frame.
+ * convert the column to text so PG sends the text representation inside
+ * the binary frame. Not every type has a binary format, so a column must not
+ * be sent as binary unless it is known.
  */
 export function hasBinaryDecoder(spec: BinaryColumnSpec): boolean {
   if (spec.elemPgTypeClass !== null && spec.elemPgTypeClass !== undefined) {
-    return true; // Array types
+    return (
+      spec.elemPgTypeClass === PostgresTypeClass.Enum ||
+      KNOWN_BINARY_ARRAY_OIDS.has(spec.typeOID)
+    );
   }
   if (spec.pgTypeClass === PostgresTypeClass.Enum) {
     return true; // Enums are sent as UTF-8 text in binary format
@@ -232,7 +261,7 @@ export function hasBinaryDecoder(spec: BinaryColumnSpec): boolean {
   return KNOWN_BINARY_OIDS.has(spec.typeOID);
 }
 
-/** Decoder for columns cast to `::text` in the COPY SELECT. */
+/** Decoder for columns converted to text in the COPY SELECT. */
 export const textCastDecoder: BinaryDecoder = buf => buf.toString('utf8');
 
 /**
@@ -241,7 +270,7 @@ export const textCastDecoder: BinaryDecoder = buf => buf.toString('utf8');
  * directly to a `LiteValueType`, bypassing text parsing entirely.
  *
  * Only call this for columns where {@link hasBinaryDecoder} returns true.
- * For other columns, cast to `::text` in the SELECT and use
+ * For other columns, convert to text in the SELECT and use
  * {@link textCastDecoder}.
  */
 export function makeBinaryDecoder(spec: BinaryColumnSpec): BinaryDecoder {
@@ -603,6 +632,8 @@ function makeElementDecoder(elemOid: number): (buf: Buffer) => unknown {
       return buf => decodeTimeTZ(buf);
     case NUMERIC:
       return buf => decodeNumeric(buf);
+    case OID:
+      return buf => buf.readUInt32BE(0);
     default:
       return buf => buf.toString('utf8');
   }

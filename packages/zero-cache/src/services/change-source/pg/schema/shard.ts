@@ -29,7 +29,7 @@ import {
   replicaStageSchema,
   type ReplicaStage,
 } from './replica-stage-enum.ts';
-import {validate} from './validation.ts';
+import {validate, validateRelationNames} from './validation.ts';
 
 /**
  * PostgreSQL unquoted identifiers must start with a letter or underscore
@@ -693,6 +693,7 @@ export function validatePublications(
   });
 
   published.tables.forEach(table => validate(lc, table));
+  validateRelationNames(published);
 }
 
 type ReplicaIdentities = {

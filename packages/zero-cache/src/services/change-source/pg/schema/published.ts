@@ -43,13 +43,17 @@ WITH published_columns AS (SELECT
   pc.relreplident AS "replicaIdentity",
   attnum AS "pos", 
   attname AS "col", 
-  pt.typname AS "type", 
+  -- A type name is a label on the replica, in which '|' delimits the attributes
+  -- of the type and '[]' marks an array.
+  replace(replace(COALESCE(elem_pt.typname, pt.typname), '|', '_'), '[]', '__') AS "type",
   atttypid::int8 AS "typeOID", 
   pt.typtype,
   elem_pt.typtype AS "elemTyptype",
   coll.collisdeterministic AS "collationIsDeterministic",
   NULLIF(atttypmod, -1) AS "maxLen", 
-  attndims "arrayDims", 
+  -- attndims is only declarative: it is 0 for an array column made by
+  -- CREATE TABLE AS or declared as e.g. _int4.
+  CASE WHEN elem_pt.oid IS NULL THEN 0 ELSE GREATEST(attndims, 1) END AS "arrayDims",
   attnotnull AS "notNull",
   pg_get_expr(pd.adbin, pd.adrelid) as "dflt",
   NULLIF(ARRAY_POSITION(conkey, attnum), -1) AS "keyPos", 
@@ -59,7 +63,9 @@ FROM pg_attribute
 JOIN pg_class pc ON pc.oid = attrelid
 JOIN pg_namespace pns ON pns.oid = relnamespace
 JOIN pg_type pt ON atttypid = pt.oid
-LEFT JOIN pg_type elem_pt ON elem_pt.oid = pt.typelem
+-- Not pt.typelem, which is also set for types that aren't arrays, such as
+-- point, name and int2vector.
+LEFT JOIN pg_type elem_pt ON elem_pt.typarray = pt.oid
 LEFT JOIN pg_collation coll ON coll.oid = pg_attribute.attcollation
 JOIN pg_publication_tables as pb ON 
   pb.schemaname = nspname AND 
@@ -82,9 +88,7 @@ tables AS (SELECT json_build_object(
     col,
     jsonb_build_object(
       'pos', "pos",
-      'dataType', CASE WHEN "arrayDims" = 0 
-                       THEN "type" 
-                       ELSE substring("type" from 2) || repeat('[]', "arrayDims") END,
+      'dataType', "type" || repeat('[]', "arrayDims"),
       'pgTypeClass', "typtype",
       'elemPgTypeClass', "elemTyptype",
       'typeOID', "typeOID",
@@ -142,7 +146,13 @@ tables AS (SELECT json_build_object(
       -- format compatible with older versions of the zero-cache, which
       -- ignore "predicateSQL" and would otherwise create a full UNIQUE index
       -- on the replica.
-      (pg_index.indisunique AND pg_index.indpred IS NULL) as "unique",
+      --
+      -- A deferrable unique constraint is reported as non-unique for a similar
+      -- reason: a transaction can pass through states that violate it, which
+      -- the replica would reject as they are replicated. The exception is a
+      -- primary key, which clients rely on.
+      (pg_index.indisunique AND pg_index.indpred IS NULL AND
+        (pg_index.indimmediate OR pg_index.indisprimary)) as "unique",
       pg_index.indisprimary as "isPrimaryKey",
       pg_index.indisreplident as "isReplicaIdentity",
       pg_index.indimmediate as "isImmediate",

@@ -8,8 +8,12 @@ import {
   Index,
   Nothing,
 } from '../../../../db/postgres-replica-identity-enum.ts';
+import {liteTableName} from '../../../../types/names.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../../../replicator/schema/constants.ts';
-import type {PublishedTableWithReplicaIdentity} from './published.ts';
+import type {
+  PublishedSchema,
+  PublishedTableWithReplicaIdentity,
+} from './published.ts';
 
 const ALLOWED_TABLE_CHARS = /^[A-Za-z_]+[A-Za-z0-9_-]*$/;
 
@@ -52,13 +56,46 @@ export function validate(
       `Table "${table.name}" has invalid characters.`,
     );
   }
+  const columnNames = new Map<string, string>();
   for (const [col, spec] of Object.entries(mapPostgresToLite(table).columns)) {
     if (!ALLOWED_COLUMN_CHARS.test(col)) {
       throw new UnsupportedTableSchemaError(
         `Column "${col}" in table "${table.name}" has invalid characters.`,
       );
     }
+    const other = columnNames.get(foldCase(col));
+    if (other !== undefined) {
+      throw new UnsupportedTableSchemaError(
+        `Columns "${other}" and "${col}" in table "${table.name}" differ only by case, which the replica cannot represent.`,
+      );
+    }
+    columnNames.set(foldCase(col), col);
     warnIfDataTypeSupported(lc, spec.dataType, table.name, col);
+  }
+}
+
+// SQLite compares names without regard to the case of ASCII letters.
+function foldCase(name: string): string {
+  return name.replace(/[A-Z]/g, c => c.toLowerCase());
+}
+
+/**
+ * Checks the names that share a namespace on the replica, which unlike
+ * Postgres holds tables and indexes of all schemas in one namespace.
+ */
+export function validateRelationNames({tables, indexes}: PublishedSchema) {
+  const names = new Map<string, string>();
+  for (const name of [
+    ...tables.map(t => liteTableName(t)),
+    ...indexes.map(i => liteTableName({schema: i.schema, name: i.name})),
+  ]) {
+    const other = names.get(foldCase(name));
+    if (other !== undefined) {
+      throw new UnsupportedTableSchemaError(
+        `"${other}" and "${name}" have the same name on the replica, which does not distinguish case or tables from indexes.`,
+      );
+    }
+    names.set(foldCase(name), name);
   }
 }
 

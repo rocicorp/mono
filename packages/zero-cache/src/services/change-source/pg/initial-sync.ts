@@ -24,10 +24,12 @@ import {
 } from '../../../db/pg-copy-binary.ts';
 import {TsvParser} from '../../../db/pg-copy.ts';
 import {
+  isArrayColumn,
   mapPostgresToLite,
   mapPostgresToLiteIndex,
 } from '../../../db/pg-to-lite.ts';
 import {getTypeParsers} from '../../../db/pg-type-parser.ts';
+import * as PostgresTypeClass from '../../../db/postgres-type-class-enum.ts';
 import {runTx} from '../../../db/run-transaction.ts';
 import type {IndexSpec, PublishedTableSpec} from '../../../db/specs.ts';
 import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.ts';
@@ -852,6 +854,16 @@ function publicationRowFilter(table: PublishedTableSpec): string | null {
 // Exported for testing.
 export const INSERT_BATCH_SIZE = 50;
 
+// SQLITE_MAX_VARIABLE_NUMBER, which a batch of a wide table can exceed.
+const MAX_SQL_VARIABLES = 32766;
+
+function insertBatchSize(valuesPerRow: number): number {
+  return Math.min(
+    INSERT_BATCH_SIZE,
+    Math.floor(MAX_SQL_VARIABLES / valuesPerRow),
+  );
+}
+
 const MB = 1024 * 1024;
 const MAX_BUFFERED_ROWS = 10_000;
 const BUFFERED_SIZE_THRESHOLD = 8 * MB;
@@ -885,8 +897,8 @@ function limitClause(maxRowsPerTable: number | undefined): string {
 }
 
 /**
- * Returns the SELECT column expressions for binary COPY, casting columns
- * without a known binary decoder to `::text`.
+ * Returns the SELECT column expressions for binary COPY, converting columns
+ * without a known binary decoder to text.
  */
 export function makeBinarySelectExprs(
   table: PublishedTableSpec,
@@ -894,7 +906,16 @@ export function makeBinarySelectExprs(
 ): string[] {
   return cols.map(col => {
     const spec = table.columns[col];
-    return hasBinaryDecoder(spec) ? id(col) : `${id(col)}::text`;
+    if (hasBinaryDecoder(spec)) {
+      return id(col);
+    }
+    if (isArrayColumn(spec)) {
+      // Replication doesn't parse the elements of an array of a domain.
+      return spec.elemPgTypeClass === PostgresTypeClass.Domain
+        ? `to_json(${id(col)}::text[])::text`
+        : `to_json(${id(col)})::text`;
+    }
+    return `${id(col)}::text`;
   });
 }
 
@@ -1343,9 +1364,10 @@ async function copyBinary(
     columnNames.length > 0 ? `(${'?,'.repeat(columnNames.length - 1)}?)` : '()';
   const insertSql = /*sql*/ `
     INSERT INTO "${tableName}" (${insertColumnList}) VALUES ${valuesSql}`;
+  const batchSize = insertBatchSize(columnNames.length);
   const insertStmt = to.prepare(insertSql);
   const insertBatchStmt = to.prepare(
-    insertSql + `,${valuesSql}`.repeat(INSERT_BATCH_SIZE - 1),
+    insertSql + `,${valuesSql}`.repeat(batchSize - 1),
   );
 
   // Build SELECT with ::text casts for columns without a known binary decoder.
@@ -1362,7 +1384,7 @@ async function copyBinary(
   );
 
   const valuesPerRow = columnSpecs.length;
-  const valuesPerBatch = valuesPerRow * INSERT_BATCH_SIZE;
+  const valuesPerBatch = valuesPerRow * batchSize;
 
   const pendingValues: LiteValueType[] = Array.from({
     length: MAX_BUFFERED_ROWS * valuesPerRow,
@@ -1376,7 +1398,7 @@ async function copyBinary(
     const flushedSize = pendingSize;
 
     let l = 0;
-    for (; pendingRows > INSERT_BATCH_SIZE; pendingRows -= INSERT_BATCH_SIZE) {
+    for (; pendingRows > batchSize; pendingRows -= batchSize) {
       insertBatchStmt.run(pendingValues.slice(l, (l += valuesPerBatch)));
     }
     for (; pendingRows > 0; pendingRows--) {
@@ -1533,9 +1555,10 @@ async function copyText(
     columnNames.length > 0 ? `(${'?,'.repeat(columnNames.length - 1)}?)` : '()';
   const insertSql = /*sql*/ `
     INSERT INTO "${tableName}" (${insertColumnList}) VALUES ${valuesSql}`;
+  const batchSize = insertBatchSize(columnNames.length);
   const insertStmt = to.prepare(insertSql);
   const insertBatchStmt = to.prepare(
-    insertSql + `,${valuesSql}`.repeat(INSERT_BATCH_SIZE - 1),
+    insertSql + `,${valuesSql}`.repeat(batchSize - 1),
   );
 
   const {select} = makeDownloadStatements(
@@ -1545,7 +1568,7 @@ async function copyText(
     maxRowsPerTable,
   );
   const valuesPerRow = columnSpecs.length;
-  const valuesPerBatch = valuesPerRow * INSERT_BATCH_SIZE;
+  const valuesPerBatch = valuesPerRow * batchSize;
 
   const pendingValues: LiteValueType[] = Array.from({
     length: MAX_BUFFERED_ROWS * valuesPerRow,
@@ -1559,7 +1582,7 @@ async function copyText(
     const flushedSize = pendingSize;
 
     let l = 0;
-    for (; pendingRows > INSERT_BATCH_SIZE; pendingRows -= INSERT_BATCH_SIZE) {
+    for (; pendingRows > batchSize; pendingRows -= batchSize) {
       insertBatchStmt.run(pendingValues.slice(l, (l += valuesPerBatch)));
     }
     for (; pendingRows > 0; pendingRows--) {

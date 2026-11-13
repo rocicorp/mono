@@ -96,7 +96,7 @@ import {
   type InternalShardConfig,
   type Replica,
 } from './schema/shard.ts';
-import {validate} from './schema/validation.ts';
+import {validate, validateRelationNames} from './schema/validation.ts';
 
 // Parameterize this if necessary. In practice starvation may never happen.
 const MAX_LOW_PRIORITY_DELAY_MS = 1000;
@@ -1540,6 +1540,7 @@ class ChangeMaker {
       for (const table of nextTbl.values()) {
         validate(lc, table);
       }
+      validateRelationNames(nextSchema);
 
       const [droppedIdx, createdIdx] = symmetricDifferences(prevIdx, nextIdx);
 

@@ -444,14 +444,17 @@ class TransactionProcessor {
     return must(this.#tableSpecs.get(name), `Unknown table ${name}`);
   }
 
+  #keyColumns(relation: MessageRelation) {
+    return relation.rowKey.type !== 'full'
+      ? relation.rowKey.columns // already a suitable key
+      : this.#tableSpec(liteTableName(relation)).primaryKey;
+  }
+
   #getKey(
     {row, numCols}: {row: LiteRow; numCols: number},
     {relation}: {relation: MessageRelation},
   ): LiteRowKey {
-    const keyColumns =
-      relation.rowKey.type !== 'full'
-        ? relation.rowKey.columns // already a suitable key
-        : this.#tableSpec(liteTableName(relation)).primaryKey;
+    const keyColumns = this.#keyColumns(relation);
     if (!keyColumns?.length) {
       throw new Error(
         `Cannot replicate table "${relation.name}" without a PRIMARY KEY or UNIQUE INDEX`,
@@ -493,6 +496,18 @@ class TransactionProcessor {
     this.#logSetOp(table, key, getBackfilledColumns(newRow.row, tableSpec));
   }
 
+  // A table without a key gets UPDATEs and DELETEs only with REPLICA IDENTITY
+  // FULL, which identifies a row by all of its values. Any one row with those
+  // values will do, as they are interchangeable. As with INSERTs, these
+  // changes are not recorded in the changeLog.
+  #matchRowWithoutKey(table: string, {row}: {row: LiteRow}) {
+    const conds = Object.keys(row).map(col => `${id(col)} IS ?`);
+    return {
+      where: `_rowid_ = (SELECT _rowid_ FROM ${id(table)} WHERE ${conds.join(' AND ')} LIMIT 1)`,
+      params: Object.values(row),
+    };
+  }
+
   #upsert(table: string, row: LiteRow) {
     const columns = Object.keys(row).map(c => id(c));
     this.#db.run(
@@ -521,6 +536,22 @@ class TransactionProcessor {
     const tableSpec = this.#tableSpec(table);
     const newRow = liteRow(update.new, tableSpec, this.#jsonFormat);
     const row = {...newRow.row, [ZERO_VERSION_COLUMN_NAME]: this.#version};
+
+    if (update.key && !this.#keyColumns(update.relation)?.length) {
+      const {where, params} = this.#matchRowWithoutKey(
+        table,
+        liteRow(update.key, tableSpec, this.#jsonFormat),
+      );
+      const setExprs = Object.keys(row).map(col => `${id(col)}=?`);
+      const {changes} = this.#db.run(
+        `UPDATE ${id(table)} SET ${setExprs.join(',')} WHERE ${where}`,
+        [...Object.values(row), ...params],
+      );
+      if (changes === 0) {
+        this.#upsert(table, row);
+      }
+      return;
+    }
 
     // update.key is set with the old values if the key has changed.
     const oldKey = update.key
@@ -586,6 +617,14 @@ class TransactionProcessor {
   processDelete(del: MessageDelete) {
     const table = liteTableName(del.relation);
     const tableSpec = this.#tableSpec(table);
+    if (!this.#keyColumns(del.relation)?.length) {
+      const {where, params} = this.#matchRowWithoutKey(
+        table,
+        liteRow(del.key, tableSpec, this.#jsonFormat),
+      );
+      this.#db.run(`DELETE FROM ${id(table)} WHERE ${where}`, params);
+      return;
+    }
     const rowKey = this.#getKey(
       liteRow(del.key, tableSpec, this.#jsonFormat),
       del,
@@ -653,7 +692,14 @@ class TransactionProcessor {
 
     const oldName = liteTableName(rename.old);
     const newName = liteTableName(rename.new);
-    this.#db.db.exec(`ALTER TABLE ${id(oldName)} RENAME TO ${id(newName)}`);
+    if (oldName.toLowerCase() === newName.toLowerCase()) {
+      // SQLite ignores case, and would take this for a table that exists.
+      const tmpName = `tmp.${newName}`;
+      this.#db.db.exec(`ALTER TABLE ${id(oldName)} RENAME TO ${id(tmpName)}`);
+      this.#db.db.exec(`ALTER TABLE ${id(tmpName)} RENAME TO ${id(newName)}`);
+    } else {
+      this.#db.db.exec(`ALTER TABLE ${id(oldName)} RENAME TO ${id(newName)}`);
+    }
 
     // Rename in metadata table
     this.#columnMetadata.renameTable(oldName, newName);
