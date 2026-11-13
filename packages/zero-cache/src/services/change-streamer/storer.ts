@@ -156,9 +156,13 @@ const backfillRequestsSchema = v.array(backfillRequestSchema);
 
 // The first catchup page is small because the size of the changes is not yet
 // known. See Storer.#readCatchupPages().
+//
+// The size of a page is the length of its JSON strings and not their UTF-8
+// size, which would need a scan of every string. A page of non-Latin-1 text
+// can therefore be up to about three times CATCHUP_PAGE_CHARS in UTF-8.
 const INITIAL_CATCHUP_PAGE_ROWS = 100;
 const MAX_CATCHUP_PAGE_ROWS = 2000;
-const CATCHUP_PAGE_BYTES = 32 * 1024 * 1024;
+const CATCHUP_PAGE_CHARS = 32 * 1024 * 1024;
 
 export type TuningOptions = {
   backPressureLimitHeapProportion: number;
@@ -1203,7 +1207,7 @@ export class Storer implements Service {
 
   /**
    * Reads the changeLog from `fromWatermark` (inclusive) through
-   * `throughWatermark` in pages of about {@link CATCHUP_PAGE_BYTES}.
+   * `throughWatermark` in pages of about {@link CATCHUP_PAGE_CHARS}.
    *
    * A change can be anything from a few bytes to megabytes (a row with a
    * large JSON column), so a page with a fixed number of rows can exceed the
@@ -1232,15 +1236,15 @@ export class Storer implements Service {
       }
       const last = must(entries.at(-1));
       start = tx`(watermark, pos) > (${last.watermark}, ${last.pos})`;
-      let bytes = 0;
+      let chars = 0;
       for (const entry of entries) {
-        bytes += Buffer.byteLength(entry.change);
+        chars += entry.change.length;
       }
       limit = Math.max(
         1,
         Math.min(
           MAX_CATCHUP_PAGE_ROWS,
-          Math.floor((CATCHUP_PAGE_BYTES * entries.length) / bytes),
+          Math.floor((CATCHUP_PAGE_CHARS * entries.length) / chars),
         ),
       );
     }
@@ -1284,7 +1288,7 @@ export class Storer implements Service {
             // allows one batch of changes to be received from the change-db
             // while the previous batch of changes are sent to the subscriber,
             // resulting in flow control that caps the changes referenced in
-            // memory to about 2 * CATCHUP_PAGE_BYTES.
+            // memory to about 2 * CATCHUP_PAGE_CHARS.
             const start = performance.now();
             await lastBatchConsumed;
             const elapsed = performance.now() - start;
