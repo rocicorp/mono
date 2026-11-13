@@ -414,6 +414,8 @@ function newDdlEventSecret() {
 // Exported for testing.
 export const TAGS = [
   'CREATE TABLE',
+  'CREATE TABLE AS',
+  'SELECT INTO',
   'ALTER TABLE',
   'CREATE INDEX',
   'DROP TABLE',
@@ -454,7 +456,7 @@ CREATE EVENT TRIGGER ${sharded(`${appID}_ddl_end`)}
     `DROP FUNCTION IF EXISTS ${schema}.notice_ignore(text, record);`,
   );
   for (const tag of [...TAGS, 'COMMENT']) {
-    const tagID = tag.toLowerCase().replace(' ', '_');
+    const tagID = tag.toLowerCase().replaceAll(' ', '_');
     triggers.push(`DROP FUNCTION IF EXISTS ${schema}.emit_${tagID}() CASCADE;`);
   }
   return triggers.join('');

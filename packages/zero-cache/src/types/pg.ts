@@ -33,7 +33,11 @@ import {
 const pgTimestampRe =
   /^(\d+)-(\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}(?:\.\d+)?)([+-]\d{1,2}(?::\d{2}){0,2})?(?: BC)?$/;
 
-const NANOS_PER_GREGORIAN_CYCLE = 146_097n * 24n * 60n * 60n * 1_000_000_000n;
+// Matches: YEAR-MM-DD[ BC]
+const pgDateRe = /^(\d+)-(\d{2}-\d{2})(?: BC)?$/;
+
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
+const MICROSECONDS_PER_DAY = BigInt(MILLISECONDS_PER_DAY) * 1000n;
 
 // exported for testing.
 export function timestampToFpMillis(timestamp: string): number {
@@ -45,44 +49,55 @@ export function timestampToFpMillis(timestamp: string): number {
   }
 
   const [, yearStr, monthDay, time, tz] = match;
-  const bc = timestamp.endsWith(' BC');
+  const [isoYear, days] = pgYearToIsoYear(yearStr, timestamp.endsWith(' BC'));
 
-  let year = Number(yearStr);
-  if (bc) {
-    // Postgres: 1 BC = JS year 0, 2 BC = JS year -1, N BC = -(N-1)
-    year = -(year - 1);
+  const [wholeSeconds, fraction = ''] = time.split('.');
+  const millis = Date.parse(`${isoYear}-${monthDay}T${wholeSeconds}Z`);
+  if (Number.isNaN(millis)) {
+    throw new Error(`Error parsing ${timestamp}`);
   }
+  let micros =
+    BigInt(millis) * 1000n +
+    BigInt(days) * MICROSECONDS_PER_DAY +
+    BigInt(fraction.padEnd(6, '0').slice(0, 6));
 
-  // Postgres timestamps extend to the year 294276, which is past what a
-  // Date can represent (the year 275760). The Gregorian calendar repeats
-  // every 400 years, so the time is computed for the equivalent year in
-  // [2000, 2400) and then shifted by the number of cycles.
-  const cycles = Math.floor((year - 2000) / 400);
-
-  // Build a UTC ISO string so PreciseDate returns microsecond precision.
-  const utcString = `${year - cycles * 400}-${monthDay}T${time}Z`;
-
-  try {
-    const fullTime =
-      new PreciseDate(utcString).getFullTime() +
-      BigInt(cycles) * NANOS_PER_GREGORIAN_CYCLE;
-    const millis = Number(fullTime / 1_000_000n);
-    const nanos = Number(fullTime % 1_000_000n);
-    const ret = millis + nanos * 1e-6; // floating point milliseconds
-
-    // Add back in the timezone offset. We passed local time as UTC,
-    // so a positive offset means we need to subtract, and vice versa.
-    if (tz) {
-      const positiveOffset = tz.startsWith('+');
-      const [hours, minutes = 0, seconds = 0] = tz.split(':').map(Number);
-      const offset = Math.abs(hours) * 3600 + minutes * 60 + seconds;
-      const offsetMillis = offset * 1_000;
-      return positiveOffset ? ret - offsetMillis : ret + offsetMillis;
-    }
-    return ret;
-  } catch (e) {
-    throw new Error(`Error parsing ${timestamp}`, {cause: e});
+  // Add back in the timezone offset. We passed local time as UTC,
+  // so a positive offset means we need to subtract, and vice versa.
+  if (tz) {
+    const [hours, minutes = 0, seconds = 0] = tz.split(':').map(Number);
+    const offset = Math.abs(hours) * 3600 + minutes * 60 + seconds;
+    const offsetMicros = BigInt(offset) * 1_000_000n;
+    micros = tz.startsWith('+') ? micros - offsetMicros : micros + offsetMicros;
   }
+  return microsToFpMillis(micros);
+}
+
+/**
+ * Converts whole microseconds since the Unix epoch to floating point
+ * milliseconds, the representation of timestamps in the replica.
+ */
+export function microsToFpMillis(micros: bigint): number {
+  return Number(micros) / 1000;
+}
+
+const DAYS_PER_400_YEARS = 146_097;
+
+/**
+ * Maps a Postgres year to a year from 0 to 399 with the same calendar, and the
+ * days between the two. Date.parse() stops at year 275760, short of the range
+ * of Postgres, but the calendar repeats every 400 years.
+ */
+function pgYearToIsoYear(
+  pgYear: string,
+  bc: boolean,
+): [isoYear: string, days: number] {
+  // Postgres: 1 BC = JS year 0, 2 BC = JS year -1, N BC = -(N-1)
+  const year = bc ? 1 - Number(pgYear) : Number(pgYear);
+  const periods = Math.floor(year / 400);
+  return [
+    String(year - periods * 400).padStart(4, '0'),
+    periods * DAYS_PER_400_YEARS,
+  ];
 }
 
 function serializeTimestamp(val: unknown): string {
@@ -109,8 +124,6 @@ function serializeTimestamp(val: unknown): string {
   }
   throw new Error(`Unsupported type "${typeof val}" for timestamp`);
 }
-
-const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function serializeTime(x: unknown, type: 'time' | 'timetz'): string {
   switch (typeof x) {
@@ -234,8 +247,16 @@ export function postgresTimeToMilliseconds(timeString: string): number {
 function dateToUTCMidnight(date: string): number {
   if (date === 'infinity') return Infinity;
   if (date === '-infinity') return -Infinity;
-  const d = new Date(date);
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  const match = date.match(pgDateRe);
+  if (!match) {
+    // Another DateStyle, which UPSTREAM_SESSION_SETTINGS rules out.
+    throw new Error('Error parsing a date that is not in the ISO DateStyle');
+  }
+  const [, yearStr, monthDay] = match;
+  const [isoYear, days] = pgYearToIsoYear(yearStr, date.endsWith(' BC'));
+  const millis = Date.parse(`${isoYear}-${monthDay}T00:00:00Z`);
+  // Sums whole days, which are exact. The result may exceed 2^53 and be rounded.
+  return (millis / MILLISECONDS_PER_DAY + days) * MILLISECONDS_PER_DAY;
 }
 
 /**
@@ -334,6 +355,22 @@ export const postgresTypeConfig = ({
     },
   },
 });
+
+/**
+ * Startup settings for the connections that read upstream values for the
+ * replica, which override any that the upstream database or role sets. The
+ * text Postgres writes for some types depends on them: a lower
+ * `extra_float_digits` rounds floats, the parsers in
+ * {@link postgresTypeConfig} only read dates and timestamps in the ISO
+ * `DateStyle`, and the bytea parser of postgres.js only reads hex. These are
+ * the defaults. `extra_float_digits = 1` writes the shortest text that reads
+ * back as the same float.
+ */
+export const UPSTREAM_SESSION_SETTINGS = {
+  ['extra_float_digits']: '1',
+  ['DateStyle']: 'ISO',
+  ['bytea_output']: 'hex',
+};
 
 export type PostgresDB = postgres.Sql<{
   bigint: bigint;

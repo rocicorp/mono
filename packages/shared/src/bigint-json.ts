@@ -130,6 +130,27 @@ export function stringify(
   return customStringify(obj, replacer, indent, customSerializer);
 }
 
+// JSON has no literal for Infinity, but it can spell a number too large for a
+// double, which every JSON parser reads back as Infinity.
+const INFINITY_JSON = '1e999';
+
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
+function infinitySerializer(k: string, v: any, type: string) {
+  if (type === 'number' && Math.abs(v) === Infinity) {
+    return v > 0 ? INFINITY_JSON : `-${INFINITY_JSON}`;
+  }
+  return customSerializer(k, v, type);
+}
+
+/**
+ * {@link stringify} that keeps infinite numbers, which it would otherwise turn
+ * into `null`. This is for data read back with {@link parse} between server
+ * components, and not for data sent to clients.
+ */
+export function stringifyWithInfinity(obj: unknown): string {
+  return customStringify(obj, undefined, undefined, infinitySerializer);
+}
+
 export const BigIntJSON = {
   parse,
   stringify,

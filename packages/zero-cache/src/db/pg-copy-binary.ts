@@ -1,12 +1,12 @@
-import {stringify} from '../../../shared/src/bigint-json.ts';
+import {parse, stringify} from '../../../shared/src/bigint-json.ts';
 import type {LiteValueType} from '../types/lite.ts';
 import {
   BOOL,
   BPCHAR,
   BYTEA,
-  CHAR,
   DATE,
   FLOAT4,
+  FLOAT4_ARRAY,
   FLOAT8,
   INT2,
   INT4,
@@ -23,6 +23,8 @@ import {
   VARCHAR,
 } from '../types/pg-types.ts';
 import {JSON as JSON_OID} from '../types/pg-types.ts';
+import {microsToFpMillis} from '../types/pg.ts';
+import {parseArray} from './pg-type-parser.ts';
 import * as PostgresTypeClass from './postgres-type-class-enum.ts';
 import type {ColumnSpec} from './specs.ts';
 
@@ -34,8 +36,8 @@ const PGCOPY_SIGNATURE = Buffer.from([
 const HEADER_MIN_SIZE = 11 + 4 + 4; // signature + flags + extension length
 
 // PostgreSQL epoch is 2000-01-01T00:00:00Z.
-// Offset from Unix epoch (1970-01-01) in milliseconds.
-const PG_EPOCH_UNIX_MILLIS = 946_684_800_000;
+// Offset from Unix epoch (1970-01-01) in microseconds.
+const PG_EPOCH_UNIX_MICROS = 946_684_800_000_000;
 
 // Days from Unix epoch (1970-01-01) to PG epoch (2000-01-01).
 const PG_EPOCH_UNIX_DAYS = 10_957;
@@ -199,12 +201,10 @@ const KNOWN_BINARY_OIDS = new Set([
   INT2,
   INT4,
   INT8,
-  FLOAT4,
   FLOAT8,
   TEXT,
   VARCHAR,
   BPCHAR,
-  CHAR,
   UUID,
   BYTEA,
   JSON_OID,
@@ -221,14 +221,12 @@ const KNOWN_BINARY_OIDS = new Set([
 const KNOWN_BINARY_ARRAY_OIDS = new Set([
   199, // json[]
   1000, // bool[]
-  1002, // char[]
   1005, // int2[]
   1007, // int4[]
   1009, // text[]
   1014, // bpchar[]
   1015, // varchar[]
   1016, // int8[]
-  1021, // float4[]
   1022, // float8[]
   1028, // oid[]
   1115, // timestamp[]
@@ -261,8 +259,24 @@ export function hasBinaryDecoder(spec: BinaryColumnSpec): boolean {
   return KNOWN_BINARY_OIDS.has(spec.typeOID);
 }
 
-/** Decoder for columns converted to text in the COPY SELECT. */
-export const textCastDecoder: BinaryDecoder = buf => buf.toString('utf8');
+/**
+ * Decoder for columns converted to text in the COPY SELECT.
+ *
+ * A `float4` is parsed from the shortest decimal that identifies it, which
+ * replication receives too. Widening the binary value to a double would keep its
+ * rounding error, e.g. 0.1 → 0.10000000149011612, and working out the shortest
+ * decimal here is far slower than parsing the one Postgres prints.
+ */
+export function makeTextCastDecoder(spec: BinaryColumnSpec): BinaryDecoder {
+  switch (spec.typeOID) {
+    case FLOAT4:
+      return buf => Number(buf.toString('utf8'));
+    case FLOAT4_ARRAY:
+      return buf => stringify(parseArray(buf.toString('utf8'), Number));
+    default:
+      return buf => buf.toString('utf8');
+  }
+}
 
 /**
  * Creates a specialized binary decoder for the given column spec.
@@ -271,7 +285,7 @@ export const textCastDecoder: BinaryDecoder = buf => buf.toString('utf8');
  *
  * Only call this for columns where {@link hasBinaryDecoder} returns true.
  * For other columns, convert to text in the SELECT and use
- * {@link textCastDecoder}.
+ * {@link makeTextCastDecoder}.
  */
 export function makeBinaryDecoder(spec: BinaryColumnSpec): BinaryDecoder {
   const {typeOID, pgTypeClass, elemPgTypeClass} = spec;
@@ -295,14 +309,11 @@ export function makeBinaryDecoder(spec: BinaryColumnSpec): BinaryDecoder {
       return buf => buf.readInt32BE(0);
     case INT8:
       return buf => buf.readBigInt64BE(0);
-    case FLOAT4:
-      return buf => buf.readFloatBE(0);
     case FLOAT8:
       return buf => buf.readDoubleBE(0);
     case TEXT:
     case VARCHAR:
     case BPCHAR:
-    case CHAR:
       return buf => buf.toString('utf8');
     case UUID:
       return buf => decodeUUID(buf);
@@ -359,7 +370,9 @@ export function decodeUUID(buf: Buffer): string {
  * Matches the output of `timestampToFpMillis()` in `types/pg.ts`.
  *
  * Uses Number arithmetic (avoiding BigInt) for speed. The microsecond value
- * fits safely in a Number for all practical dates (up to ~year 285,000).
+ * fits safely in a Number for about 285 years around the epochs, and adding
+ * the epochs before dividing keeps the only rounding in the division, as
+ * {@link microsToFpMillis} does. Dates outside of that range use BigInts.
  */
 export function decodeTimestamp(buf: Buffer): number {
   const hi = buf.readInt32BE(0);
@@ -369,7 +382,14 @@ export function decodeTimestamp(buf: Buffer): number {
     return -Infinity;
   }
   const microseconds = hi * 0x100000000 + lo;
-  return microseconds / 1000 + PG_EPOCH_UNIX_MILLIS;
+  const unixMicroseconds = microseconds + PG_EPOCH_UNIX_MICROS;
+  if (
+    Number.isSafeInteger(microseconds) &&
+    Number.isSafeInteger(unixMicroseconds)
+  ) {
+    return unixMicroseconds / 1000;
+  }
+  return microsToFpMillis(buf.readBigInt64BE(0) + BigInt(PG_EPOCH_UNIX_MICROS));
 }
 
 /**
@@ -411,9 +431,9 @@ export function decodeTimeTZ(buf: Buffer): number {
   const localMicros = hi * 0x100000000 + lo;
   const tzOffsetSeconds = buf.readInt32BE(8);
   const utcMicros = localMicros + tzOffsetSeconds * 1_000_000;
-  let ms = Math.trunc(utcMicros / 1000);
-  // Normalize to [0, MS_PER_DAY).
-  if (ms < 0 || ms >= MS_PER_DAY) {
+  let ms = Math.floor(utcMicros / 1000);
+  // Normalize to [0, MS_PER_DAY], where MS_PER_DAY is 24:00:00.
+  if (ms < 0 || ms > MS_PER_DAY) {
     ms = ((ms % MS_PER_DAY) + MS_PER_DAY) % MS_PER_DAY;
   }
   return ms;
@@ -606,21 +626,18 @@ function makeElementDecoder(elemOid: number): (buf: Buffer) => unknown {
           ? Number(val)
           : val;
       };
-    case FLOAT4:
-      return buf => buf.readFloatBE(0);
     case FLOAT8:
       return buf => buf.readDoubleBE(0);
     case TEXT:
     case VARCHAR:
     case BPCHAR:
-    case CHAR:
       return buf => buf.toString('utf8');
     case UUID:
       return buf => decodeUUID(buf);
     case JSON_OID:
-      return buf => JSON.parse(buf.toString('utf8'));
+      return buf => parse(buf.toString('utf8'));
     case JSONB:
-      return buf => JSON.parse(buf.toString('utf8', 1));
+      return buf => parse(buf.toString('utf8', 1));
     case TIMESTAMP:
     case TIMESTAMPTZ:
       return buf => decodeTimestamp(buf);

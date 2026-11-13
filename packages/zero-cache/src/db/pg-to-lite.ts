@@ -84,6 +84,124 @@ const BOOLEAN_LITERAL_REGEX = /^(true|false)$/;
 // re-quoted from its decoded value rather than copied from the expression.
 const QUOTED_STRING_WITH_CAST_REGEX = /^'((?:[^']|'')*)'::\w+$/;
 
+// A default that spells an integer. Postgres quotes a negative one, and one
+// beyond int4, e.g. `'-1'::integer` and `'2147483648'::bigint`.
+const INTEGER_DEFAULT_REGEX = /^(?:-?\d+|'-?\d+'::\w+)$/;
+
+// A default that spells a number, as itself or as an integer or numeric
+// constant, e.g. `1.5`, `'-1.5'::numeric` and `'-2'::integer`. Postgres writes
+// these the same way in any session. It writes a constant of another type, e.g.
+// `'0.1'::real`, with the settings of the session that adds the column.
+const NUMBER_DEFAULT_REGEX =
+  /^(?:(-?\d+(?:\.\d+)?)|'(-?\d+(?:\.\d+)?)'::(?:integer|bigint|numeric))$/;
+
+function numberInDefault(dflt: string): string | undefined {
+  const match = NUMBER_DEFAULT_REGEX.exec(dflt);
+  return match ? (match[1] ?? match[2]) : undefined;
+}
+
+// `numeric(p, s)` rounds a number to s digits after the point.
+function numericKeepsDefault(dflt: string, spec: ColumnSpec): boolean {
+  const number = numberInDefault(dflt);
+  if (number === undefined) {
+    return false;
+  }
+  // The typmod of a numeric column, which has none if it is unconstrained.
+  const typmod = spec.characterMaximumLength;
+  if (typmod === null || typmod === undefined) {
+    return true;
+  }
+  // The scale is in the low 11 bits of the typmod less 4, signed.
+  const scale = (((typmod - 4) & 0x7ff) ^ 0x400) - 0x400;
+  return (number.split('.')[1]?.length ?? 0) <= scale;
+}
+
+const float4 = new Float32Array(1);
+const float4Bits = new Uint32Array(float4.buffer);
+
+// Whether x, a positive normal number, is halfway between two float4s.
+function isHalfwayBetweenFloat4s(x: number): boolean {
+  const below = Math.fround(x);
+  if (below === x) {
+    return false;
+  }
+  float4[0] = below;
+  float4Bits[0] += x > below ? 1 : -1;
+  return Math.abs(x - below) === Math.abs(float4[0] - x);
+}
+
+const LEADING_ZEROS_REGEX = /^0+/;
+const TRAILING_ZEROS_REGEX = /0+$/;
+
+// A `real` keeps a decimal of at most 6 significant digits (FLT_DIG): it is the
+// shortest decimal that reads back as its float4, which is what Postgres writes.
+// The exception is one halfway between two float4s, which Postgres rounds to the
+// even one and then writes in full, e.g. 3e10 as 3.0000001e+10.
+function realKeepsDefault(dflt: string): boolean {
+  const number = numberInDefault(dflt);
+  if (number === undefined) {
+    return false;
+  }
+  const digits = number
+    .replace('-', '')
+    .replace('.', '')
+    .replace(LEADING_ZEROS_REGEX, '')
+    .replace(TRAILING_ZEROS_REGEX, '');
+  const x = Math.abs(Number(number));
+  return (
+    digits.length <= 6 &&
+    (x === 0 || (x >= 1.2e-38 && x <= 3.4e38 && !isHalfwayBetweenFloat4s(x)))
+  );
+}
+
+// Postgres pads a `char(n)` to n characters.
+function bpcharDefault(dflt: string, spec: ColumnSpec): string | undefined {
+  const match = QUOTED_STRING_WITH_CAST_REGEX.exec(dflt);
+  if (!match || !dflt.endsWith('::bpchar')) {
+    return undefined;
+  }
+  const length = spec.characterMaximumLength;
+  if (length === null || length === undefined) {
+    return dflt;
+  }
+  const value = match[1].replaceAll("''", "'");
+  const padding = length - [...value].length;
+  return padding < 0
+    ? undefined
+    : `${lit(value + ' '.repeat(padding))}::bpchar`;
+}
+
+/**
+ * Returns the default that makes the replica store a new column's value in
+ * existing rows as replication would, or `undefined` if there is none, given a
+ * default that {@link mapPostgresToLiteDefault} accepts.
+ */
+type NewColumnDefault = (dflt: string, spec: ColumnSpec) => string | undefined;
+
+const keepIf =
+  (keeps: (dflt: string, spec: ColumnSpec) => boolean): NewColumnDefault =>
+  (dflt, spec) =>
+    keeps(dflt, spec) ? dflt : undefined;
+
+// The defaults of new columns that are not backfilled, by the column's type. A
+// new column of any other type, or with any other default, is backfilled, which
+// reads the values Postgres stored: it rounds a `numeric(p, s)` and the replica
+// parses a `date`, for example.
+const NEW_COLUMN_DEFAULTS = new Map<string, NewColumnDefault>([
+  // Stored as the text Postgres writes.
+  ...['text', 'varchar', 'name', 'uuid', 'json', 'jsonb', 'inet', 'cidr'].map(
+    type => [type, keepIf(() => true)] as const,
+  ),
+  ['bool', keepIf(dflt => BOOLEAN_LITERAL_REGEX.test(dflt))],
+  ['int2', keepIf(dflt => INTEGER_DEFAULT_REGEX.test(dflt))],
+  ['int4', keepIf(dflt => INTEGER_DEFAULT_REGEX.test(dflt))],
+  ['int8', keepIf(dflt => INTEGER_DEFAULT_REGEX.test(dflt))],
+  ['numeric', keepIf(numericKeepsDefault)],
+  ['float4', keepIf(realKeepsDefault)],
+  ['float8', keepIf(dflt => numberInDefault(dflt) !== undefined)],
+  ['bpchar', bpcharDefault],
+]);
+
 // Empty array constructor syntax: ARRAY[]::text[], ARRAY[]::integer[], etc.
 // Maps to '[]' (JSON empty array) in SQLite.
 const EMPTY_ARRAY_CONSTRUCTOR_REGEX = /^ARRAY\s*\[\s*\]::\w+\[\]$/i;
@@ -186,6 +304,43 @@ export function mapPostgresToLiteColumn(
         : mapPostgresToLiteDefault(table, column.name, dflt),
     elemPgTypeClass,
   };
+}
+
+/**
+ * Returns the default for the `add-column` of a new column, or throws an
+ * {@link UnsupportedColumnDefaultError} if the column must be backfilled
+ * instead. The default is the column's, or one that
+ * {@link mapPostgresToLiteDefault} maps to the value Postgres gave existing
+ * rows, e.g. a `char(n)` padded to n characters.
+ *
+ * This only accepts the defaults in {@link NEW_COLUMN_DEFAULTS}. It is stricter
+ * than {@link mapPostgresToLiteDefault} because only the change source can
+ * schedule a backfill. A replica has to apply an `add-column` that is already
+ * in the change log, with no backfill to follow, so what it accepts can't be
+ * narrowed without stopping replication.
+ */
+export function newColumnDefault(
+  table: string,
+  column: {name: string; spec: ColumnSpec},
+): string | null | undefined {
+  mapPostgresToLiteColumn(table, column);
+  const {spec} = column;
+  if (!spec.dflt) {
+    return spec.dflt;
+  }
+  const dflt =
+    isArrayColumn(spec) || isEnumColumn(spec)
+      ? // The only array default mapPostgresToLiteDefault() accepts is an
+        // empty one, which is stored as `[]`, and an enum is stored as its
+        // label.
+        spec.dflt
+      : NEW_COLUMN_DEFAULTS.get(spec.dataType)?.(spec.dflt, spec);
+  if (dflt === undefined) {
+    throw new UnsupportedColumnDefaultError(
+      `Unsupported default value for ${table}.${column.name}: ${spec.dflt}`,
+    );
+  }
+  return dflt;
 }
 
 export function mapPostgresToLite(

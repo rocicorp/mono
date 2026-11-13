@@ -20,7 +20,7 @@ import {
   BinaryCopyParser,
   hasBinaryDecoder,
   makeBinaryDecoder,
-  textCastDecoder,
+  makeTextCastDecoder,
 } from '../../../db/pg-copy-binary.ts';
 import {TsvParser} from '../../../db/pg-copy.ts';
 import {
@@ -44,9 +44,11 @@ import {
 } from '../../../types/lite.ts';
 import {liteTableName} from '../../../types/names.ts';
 import {hasPostgresPatch} from '../../../types/pg-patch.ts';
+import {FLOAT4, FLOAT4_ARRAY} from '../../../types/pg-types.ts';
 import {PG_15} from '../../../types/pg-versions.ts';
 import {
   connectPgClient,
+  UPSTREAM_SESSION_SETTINGS,
   type PostgresDB,
   type PostgresTransaction,
   type PostgresValueType,
@@ -165,7 +167,9 @@ export async function initialSync(
   ).publish(lc, 'Initializing');
   try {
     const copyProfiler = profileCopy ? await CpuProfiler.connect() : null;
-    sql = await connectPgClient(lc, upstreamURI, 'initial-sync');
+    sql = await connectPgClient(lc, upstreamURI, 'initial-sync', {
+      connection: UPSTREAM_SESSION_SETTINGS,
+    });
     await checkUpstreamConfig(sql);
 
     // In shadow mode we assume the shard is already initialized and just
@@ -232,6 +236,7 @@ export async function initialSync(
         {
           max: numWorkers,
           ['max_lifetime']: 120 * 60, // set a long (2h) limit for COPY streaming
+          connection: UPSTREAM_SESSION_SETTINGS,
         },
       );
       const copiers = await startTableCopyWorkers(
@@ -909,13 +914,18 @@ export function makeBinarySelectExprs(
     if (hasBinaryDecoder(spec)) {
       return id(col);
     }
+    if (spec.typeOID === FLOAT4 || spec.typeOID === FLOAT4_ARRAY) {
+      return `${id(col)}::text`; // parsed by makeTextCastDecoder()
+    }
     if (isArrayColumn(spec)) {
       // Replication doesn't parse the elements of an array of a domain.
       return spec.elemPgTypeClass === PostgresTypeClass.Domain
         ? `to_json(${id(col)}::text[])::text`
         : `to_json(${id(col)})::text`;
     }
-    return `${id(col)}::text`;
+    // The output format of the type, which is what replication sends. A cast
+    // to text can differ: it adds a full netmask to an inet, for instance.
+    return `CASE WHEN ${id(col)} IS NOT NULL THEN format('%s', ${id(col)}) END`;
   });
 }
 
@@ -1380,7 +1390,9 @@ async function copyBinary(
   ).select;
 
   const decoders = orderedColumns.map(([, spec]) =>
-    hasBinaryDecoder(spec) ? makeBinaryDecoder(spec) : textCastDecoder,
+    hasBinaryDecoder(spec)
+      ? makeBinaryDecoder(spec)
+      : makeTextCastDecoder(spec),
   );
 
   const valuesPerRow = columnSpecs.length;

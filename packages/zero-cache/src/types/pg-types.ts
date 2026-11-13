@@ -13,7 +13,6 @@
 
 export const BOOL = 16;
 export const BYTEA = 17;
-export const CHAR = 18;
 export const INT8 = 20;
 export const INT2 = 21;
 export const INT4 = 23;
@@ -22,6 +21,7 @@ export const OID = 26;
 export const JSON = 114;
 export const FLOAT4 = 700;
 export const FLOAT8 = 701;
+export const FLOAT4_ARRAY = 1021;
 export const BPCHAR = 1042;
 export const VARCHAR = 1043;
 export const DATE = 1082;

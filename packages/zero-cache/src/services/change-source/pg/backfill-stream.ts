@@ -15,14 +15,19 @@ import {
   BinaryCopyParser,
   hasBinaryDecoder,
   makeBinaryDecoder,
-  textCastDecoder,
+  makeTextCastDecoder,
 } from '../../../db/pg-copy-binary.ts';
 import {TsvParser} from '../../../db/pg-copy.ts';
 import {getTypeParsers} from '../../../db/pg-type-parser.ts';
 import type {PublishedTableSpec} from '../../../db/specs.ts';
 import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.ts';
 import {hasPostgresPatch} from '../../../types/pg-patch.ts';
-import {connectPgClient, pgClient, type PostgresDB} from '../../../types/pg.ts';
+import {
+  connectPgClient,
+  pgClient,
+  UPSTREAM_SESSION_SETTINGS,
+  type PostgresDB,
+} from '../../../types/pg.ts';
 import {id} from '../../../types/sql.ts';
 import {
   SchemaIncompatibilityError,
@@ -139,8 +144,8 @@ type StreamOptions = {
 
   /**
    * Use text-format COPY instead of binary COPY.
-   * Binary is faster and handles all types (unknown types are cast to
-   * `::text` in the SELECT). This flag exists as an escape hatch to
+   * Binary is faster and handles all types (unknown types are converted to
+   * text in the SELECT). This flag exists as an escape hatch to
    * revert to the old code path if needed.
    */
   textCopy?: boolean | undefined;
@@ -195,6 +200,7 @@ export async function* streamBackfill(
     // of the inactivity watchdog, which could kill connnections that are
     // taking a back seat for upstream replication changes.
     liveness: 'keepalive',
+    connection: UPSTREAM_SESSION_SETTINGS,
   });
   let tx: TransactionPool | undefined;
   let watermark: string;
@@ -283,7 +289,7 @@ export async function* streamBackfill(
           const spec = tableSpec.columns[col];
           const decoder = hasBinaryDecoder(spec)
             ? makeBinaryDecoder(spec)
-            : textCastDecoder;
+            : makeTextCastDecoder(spec);
           return (buf: Buffer) => decoder(buf) as unknown as JSONValue;
         }),
         (buf: Buffer) => buf.toString('utf8'), // ctid::text

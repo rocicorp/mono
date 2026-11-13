@@ -357,17 +357,33 @@ function getIncrementalMigrations(
       },
     },
 
+    // v36: Upgrade the DDL event triggers to fire for CREATE TABLE AS and
+    // SELECT INTO.
+    36: {
+      migrateSchema: async (lc, sql) => {
+        const [{publications}] = await sql<{publications: string[]}[]>`
+          SELECT publications FROM ${sql(shardConfigTable)}`;
+        await setupTriggers(
+          lc,
+          sql,
+          {...shard, publications},
+          installPartialIndexTriggers,
+        );
+        lc.info?.(`Upgraded DDL event triggers`);
+      },
+    },
+
     // Note: While this is conditional, it always has to be bumped to the last
-    // version. (It was v29, v31 and v33, and is re-run for shards at those
+    // version. (It was v29, v31, v33 and v35, and is re-run for shards at those
     // versions when it is bumped, which is harmless as setupTriggers() is
     // idempotent.)
     ...(installPartialIndexTriggers
       ? {
-          // v35: Upgrade the DDL event triggers to include partial indexes in
+          // v37: Upgrade the DDL event triggers to include partial indexes in
           // schema snapshots. Note that setupTriggers() also refreshes the
           // stored "publishedSchema" so that the change in format does not
           // manifest as a spurious schema change.
-          35: {
+          37: {
             migrateSchema: async (lc, sql) => {
               const [{publications}] = await sql<{publications: string[]}[]>`
                 SELECT publications FROM ${sql(shardConfigTable)}`;

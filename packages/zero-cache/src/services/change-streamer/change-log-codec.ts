@@ -1,4 +1,7 @@
-import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
+import {
+  BigIntJSON,
+  stringifyWithInfinity,
+} from '../../../../shared/src/bigint-json.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import type {ChangeTag, WatermarkedChange} from './change-streamer.ts';
 
@@ -26,7 +29,8 @@ export type SerializedChangeStreamData = {
 export function serializeChangeStreamDataWithChange(
   data: ChangeStreamData,
 ): SerializedChangeStreamData {
-  const change = BigIntJSON.stringify(data[1]);
+  // A row can hold an infinite number, e.g. from a float or timestamp column.
+  const change = stringifyWithInfinity(data[1]);
   const type = data[0];
   switch (type) {
     case 'begin':

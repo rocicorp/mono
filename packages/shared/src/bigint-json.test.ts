@@ -1,5 +1,10 @@
 import {describe, expect, test} from 'vitest';
-import {hasUnsafeIntegerDigits, parse, stringify} from './bigint-json.ts';
+import {
+  hasUnsafeIntegerDigits,
+  parse,
+  stringify,
+  stringifyWithInfinity,
+} from './bigint-json.ts';
 
 describe('types/json', () => {
   type Case = {
@@ -70,6 +75,32 @@ describe('hasUnsafeIntegerDigits', () => {
         }
       }
     }
+  });
+});
+
+describe('stringifyWithInfinity', () => {
+  test('infinite numbers survive being read back', () => {
+    const value = {a: Infinity, b: -Infinity, c: [Infinity], d: 1.5, e: 'x'};
+
+    expect(stringifyWithInfinity(value)).toBe(
+      '{"a":1e999,"b":-1e999,"c":[1e999],"d":1.5,"e":"x"}',
+    );
+    expect(parse(stringifyWithInfinity(value))).toEqual(value);
+    expect(JSON.parse(stringifyWithInfinity(value))).toEqual(value);
+  });
+
+  test('with a long integer, which takes the custom parser', () => {
+    const value = {a: Infinity, b: 2n ** 70n};
+
+    expect(parse(stringifyWithInfinity(value))).toEqual(value);
+  });
+
+  test('NaN is still null, and bigints are still numbers', () => {
+    expect(stringifyWithInfinity({a: NaN, b: 10n})).toBe('{"a":null,"b":10}');
+  });
+
+  test('stringify is unchanged, since its output can reach clients', () => {
+    expect(stringify({a: Infinity})).toBe('{"a":null}');
   });
 });
 
