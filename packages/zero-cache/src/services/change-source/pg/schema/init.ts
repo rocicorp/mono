@@ -389,17 +389,33 @@ function getIncrementalMigrations(
       },
     },
 
+    // v38: Upgrade the DDL event triggers to fire for the commands that drop
+    // the columns of a table with CASCADE, such as DROP TYPE.
+    38: {
+      migrateSchema: async (lc, sql) => {
+        const [{publications}] = await sql<{publications: string[]}[]>`
+          SELECT publications FROM ${sql(shardConfigTable)}`;
+        await setupTriggers(
+          lc,
+          sql,
+          {...shard, publications},
+          installPartialIndexTriggers,
+        );
+        lc.info?.(`Upgraded DDL event triggers`);
+      },
+    },
+
     // Note: While this is conditional, it always has to be bumped to the last
-    // version. (It was v29, v31, v33, v35 and v37, and is re-run for shards at those
+    // version. (It was v29, v31, v33, v35, v37 and v38, and is re-run for shards at those
     // versions when it is bumped, which is harmless as setupTriggers() is
     // idempotent.)
     ...(installPartialIndexTriggers
       ? {
-          // v38: Upgrade the DDL event triggers to include partial indexes in
+          // v39: Upgrade the DDL event triggers to include partial indexes in
           // schema snapshots. Note that setupTriggers() also refreshes the
           // stored "publishedSchema" so that the change in format does not
           // manifest as a spurious schema change.
-          38: {
+          39: {
             migrateSchema: async (lc, sql) => {
               const [{publications}] = await sql<{publications: string[]}[]>`
                 SELECT publications FROM ${sql(shardConfigTable)}`;

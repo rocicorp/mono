@@ -427,6 +427,13 @@ export const TAGS = [
   'DROP INDEX',
   'ALTER PUBLICATION',
   'ALTER SCHEMA',
+  // With CASCADE, these drop the columns that depend on what they drop.
+  'DROP TYPE',
+  'DROP DOMAIN',
+  'DROP COLLATION',
+  'DROP EXTENSION',
+  'DROP SCHEMA',
+  'DROP OWNED',
 ] as const;
 
 export function createEventTriggerStatements(shard: ShardConfig) {
