@@ -38,6 +38,18 @@ type RawChangeLogRow = readonly [
   change: string,
 ];
 
+// A change can be anything from a few bytes to megabytes (a row with a large
+// JSON column), so a batch with a fixed number of rows can exceed the heap.
+// SQLite cannot limit a result by size, so the row limit of each batch is
+// derived from the average size of the changes in the previous one. The first
+// batch is small because the size of the changes is not yet known.
+//
+// The size is the length of the JSON strings and not their UTF-8 size,
+// because Buffer.byteLength() on every change made the read 15% slower in
+// sqlite-change-log-reader.bench.ts.
+const INITIAL_BATCH_ROWS = 100;
+const BATCH_CHARS = 32 * 1024 * 1024;
+
 type PreparedStatements = {
   readonly plan: Statement;
   readonly readBatch: Statement;
@@ -175,11 +187,11 @@ export class SQLiteChangeLogReader implements Disposable {
     let lastPos = Number.MAX_SAFE_INTEGER;
     let lastTag: string | undefined;
     let rowsRead = 0;
+    let limit = Math.min(batchSize, INITIAL_BATCH_ROWS);
 
     while (true) {
       this.#throwIfAborted(signal);
-      const remainingRows =
-        maxRows === undefined ? batchSize : maxRows - rowsRead;
+      const remainingRows = maxRows === undefined ? limit : maxRows - rowsRead;
       if (remainingRows === 0) {
         break;
       }
@@ -187,7 +199,7 @@ export class SQLiteChangeLogReader implements Disposable {
         lastWatermark,
         lastPos,
         throughWatermark,
-        Math.min(batchSize, remainingRows),
+        Math.min(limit, remainingRows),
       );
       this.#throwIfAborted(signal);
 
@@ -202,6 +214,14 @@ export class SQLiteChangeLogReader implements Disposable {
       assert(last !== undefined, 'non-empty batch must have a final row');
       [lastWatermark, lastPos, lastTag] = last;
       rowsRead += rows.length;
+      let chars = 0;
+      for (const row of rows) {
+        chars += row[3].length;
+      }
+      limit = Math.max(
+        1,
+        Math.min(batchSize, Math.floor((BATCH_CHARS * rows.length) / chars)),
+      );
 
       // all() has exhausted the SELECT and closed its implicit read
       // transaction. This yield therefore cannot pin the WAL while subscriber
