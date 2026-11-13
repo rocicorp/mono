@@ -3,6 +3,7 @@ import {LogContext} from '@rocicorp/logger';
 import type {LogConfig} from '../../../../shared/src/logging.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {resolver} from '../../../../shared/src/resolver.ts';
+import {DEFAULT_REPLICA_ANALYSIS_LIMIT} from '../../config/zero-config.ts';
 import {parentWorker, type Worker} from '../../types/processes.ts';
 import type {Source} from '../../types/streams.ts';
 import {getPragmaConfig, setupReplica} from '../../workers/replicator.ts';
@@ -244,10 +245,15 @@ export default async function runWorker(
     parent,
     failpoint,
   );
-  await worker.init(dbPath, 'serving', getPragmaConfig(), {
-    level: 'error',
-    format: 'text',
-  });
+  await worker.init(
+    dbPath,
+    'serving',
+    getPragmaConfig(DEFAULT_REPLICA_ANALYSIS_LIMIT),
+    {
+      level: 'error',
+      format: 'text',
+    },
+  );
 
   const replicator = new ReplicatorService(
     lc,

@@ -17,10 +17,7 @@ import {
   getAscendingEvents,
   recordEvent,
 } from '../services/replicator/schema/replication-state.ts';
-import {
-  applyPragmas,
-  type PragmaConfig,
-} from '../services/replicator/write-worker-client.ts';
+import type {PragmaConfig} from '../services/replicator/write-worker-client.ts';
 import type {Worker} from '../types/processes.ts';
 
 export const replicaFileModeSchema = v.literalUnion(
@@ -78,12 +75,17 @@ export function deleteStaleChangeLog(
   return true;
 }
 
+type PreparedReplicaOptions = Pick<
+  ReplicaOptions,
+  'file' | 'vacuumIntervalHours'
+>;
+
 const MILLIS_PER_HOUR = 1000 * 60 * 60;
 const MB = 1024 * 1024;
 
 async function prepare(
   lc: LogContext,
-  {file, vacuumIntervalHours}: ReplicaOptions,
+  {file, vacuumIntervalHours}: PreparedReplicaOptions,
   walMode: WalMode,
   mode: ReplicaFileMode,
 ): Promise<{file: string; walMode: WalMode; pageSize: number}> {
@@ -160,14 +162,9 @@ async function prepare(
     }
 
     await setJournalMode(lc, replica, walMode);
-
-    const pragmas = getPragmaConfig();
-    applyPragmas(replica, pragmas);
-
-    replica.pragma('optimize = 0x10002');
-    lc.info?.(`optimized ${file}`);
   } finally {
-    replica.close();
+    // The write worker gathers the replica's statistics when it opens it.
+    replica.close({optimize: false});
   }
   return {file, walMode, pageSize};
 }
@@ -197,19 +194,18 @@ async function setJournalMode(
 }
 
 /**
- * Returns the PragmaConfig for the replica.
- * This is used by both the main thread (setupReplica) and
- * the write worker thread to apply the same pragma settings.
+ * Returns the PragmaConfig that the write worker applies to its connection to
+ * the replica.
  *
  * The writer never checkpoints, since an automatic checkpoint runs (and
  * syncs the disk) within the COMMIT, stalling replication on a slow disk.
  * Instead, litestream checkpoints the backup replica, and the
  * `ServingCheckpointer` checkpoints the serving replica.
  */
-export function getPragmaConfig(): PragmaConfig {
+export function getPragmaConfig(analysisLimit: number): PragmaConfig {
   return {
     busyTimeout: 30000,
-    analysisLimit: 1000,
+    analysisLimit,
     walAutocheckpoint: 0,
   };
 }
@@ -217,7 +213,7 @@ export function getPragmaConfig(): PragmaConfig {
 export function setupReplica(
   lc: LogContext,
   mode: ReplicaFileMode,
-  replicaOptions: ReplicaOptions,
+  replicaOptions: PreparedReplicaOptions,
 ) {
   lc.info?.(`setting up ${mode} replica`);
 
@@ -236,7 +232,8 @@ export function setupReplica(
       lc.info?.(`copying ${file} to ${copyLocation}`);
       const replica = new Database(lc, file);
       replica.prepare(`VACUUM INTO ?`).run(copyLocation);
-      replica.close();
+      // The replica's statistics are maintained by the replicator.
+      replica.close({optimize: false});
       lc.info?.(`finished copy (${Date.now() - start} ms)`);
 
       return prepare(lc, {...replicaOptions, file: copyLocation}, 'wal2', mode);

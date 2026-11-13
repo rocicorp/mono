@@ -141,6 +141,13 @@ export const CREATE_V17_BACKFILLING_TABLE = /*sql*/ `
   );
 `;
 
+export const CREATE_V19_STATISTICS_TABLE = /*sql*/ `
+  CREATE TABLE "_zero.statistics" (
+    analysisLimit INTEGER,
+    lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
+  );
+`;
+
 // Deliberately shadows the same names in `replicator/change-log-db.ts`: these
 // describe replica files created by pre-release v14 builds, while that module
 // describes the separate change-log database. The two are frozen apart.
@@ -373,6 +380,32 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
       db.exec(
         /*sql*/ `ALTER TABLE "${BACKFILLING_TABLE}" ADD COLUMN "progress" TEXT`,
       );
+    },
+  },
+
+  // Adds `_zero.statistics`, which records the `analysis_limit` under which
+  // the replicator gathered the replica's statistics, so that it gathers them
+  // again when `replica.analysisLimit` changes. See
+  // `replicator/schema/statistics.ts`.
+  //
+  // A replica that has statistics records NULL for them, whether it reaches
+  // this version by an upgrade or by rolling forward after a rollback: an
+  // earlier zero-cache gathered them, under limits it did not record. A limit
+  // of 1000, the one it set on the replicator's connections, keeps them, and
+  // another limit gathers every table's again.
+  //
+  // No `minSafeVersion`: an older zero-cache ignores the table.
+  19: {
+    migrateSchema: (_, db) => {
+      db.exec(CREATE_V19_STATISTICS_TABLE);
+    },
+
+    migrateData: (_, db) => {
+      db.exec(/*sql*/ `
+        DELETE FROM "_zero.statistics";
+        INSERT INTO "_zero.statistics" (analysisLimit, lock)
+          SELECT NULL, 1 FROM sqlite_master WHERE name = 'sqlite_stat1';
+      `);
     },
   },
 };
