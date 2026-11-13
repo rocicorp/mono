@@ -89,6 +89,11 @@ export function validateRelationNames({tables, indexes}: PublishedSchema) {
     ...tables.map(t => liteTableName(t)),
     ...indexes.map(i => liteTableName({schema: i.schema, name: i.name})),
   ]) {
+    if (foldCase(name).startsWith('sqlite_')) {
+      throw new UnsupportedTableSchemaError(
+        `"${name}" starts with "sqlite_", which the replica reserves.`,
+      );
+    }
     const other = names.get(foldCase(name));
     if (other !== undefined) {
       throw new UnsupportedTableSchemaError(
