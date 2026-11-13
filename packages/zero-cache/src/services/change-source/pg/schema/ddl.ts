@@ -336,10 +336,15 @@ BEGIN
   --       any DROP * statement.
   IF (target.object_type = 'table' AND TG_TAG != 'ALTER TABLE') 
      OR target.object_type = 'table column' THEN
+    -- A partition is relevant if the table it is a partition of is published,
+    -- as the published schema lists the partitions of that table.
     SELECT ns.nspname AS "schema", c.relname AS "name" FROM pg_class AS c
       JOIN pg_namespace AS ns ON c.relnamespace = ns.oid
       JOIN pg_publication_tables AS pb ON pb.schemaname = ns.nspname AND pb.tablename = c.relname
-      WHERE c.oid = target.objid AND pb.pubname = ANY (publications)
+      WHERE (c.oid = target.objid OR
+             c.oid IN (SELECT relid FROM pg_partition_ancestors(target.objid)))
+        AND pb.pubname = ANY (publications)
+      LIMIT 1
       INTO relevant;
 
   ELSIF target.object_type = 'index' THEN

@@ -1615,12 +1615,35 @@ class ChangeMaker {
 
       // DROP
       const [droppedTbl, createdTbl] = symmetricDifferences(prevTbl, nextTbl);
+      const tables = intersection(prevTbl, nextTbl);
+
+      // Attaching, detaching or dropping a partition adds rows to, or removes
+      // rows from, the partitioned table without changes to those rows in the
+      // replication stream. The replica cannot tell which rows these are, so
+      // the table is dropped, created again and backfilled.
+      for (const id of tables) {
+        const prev = must(prevTbl.get(id));
+        const next = must(nextTbl.get(id));
+        if (partitionsChanged(prev, next, tag)) {
+          lc.info?.(
+            `resyncing ${next.schema}.${next.name}: its partitions changed`,
+          );
+          tables.delete(id);
+          droppedTbl.add(id);
+          createdTbl.add(id);
+          for (const [idxID, idx] of nextIdx) {
+            if (idx.schema === next.schema && idx.tableName === next.name) {
+              createdIdx.add(idxID);
+            }
+          }
+        }
+      }
+
       for (const id of droppedTbl) {
         const {schema, name} = must(prevTbl.get(id));
         changes.push({tag: 'drop-table', id: {schema, name}});
       }
       // ALTER TABLE | ALTER PUBLICATION
-      const tables = intersection(prevTbl, nextTbl);
       for (const id of tables) {
         changes.push(
           ...this.#getTableChanges(
@@ -1923,6 +1946,24 @@ function translateError(e: unknown): Error {
   return e;
 }
 const idString = (id: Identifier) => `${id.schema}.${id.name}`;
+
+/**
+ * Whether the rows of a partitioned table may have changed because the set of
+ * its partitions did. A new partition made by `CREATE TABLE` is empty.
+ */
+function partitionsChanged(
+  prev: PublishedTableWithReplicaIdentity,
+  next: PublishedTableWithReplicaIdentity,
+  tag: string,
+): boolean {
+  return (
+    tag !== 'CREATE TABLE' &&
+    // Unknown for a schema stored before partitions were reported.
+    prev.partitions !== undefined &&
+    next.partitions !== undefined &&
+    !deepEqual(prev.partitions, next.partitions)
+  );
+}
 
 function specsByID(published: PublishedSchema) {
   return [

@@ -41,6 +41,11 @@ WITH published_columns AS (SELECT
   pc.relnamespace::int8 AS "schemaOID" ,
   pc.relname AS "name", 
   pc.relreplident AS "replicaIdentity",
+  -- The partitions that hold the rows of a partitioned table.
+  CASE WHEN pc.relkind = 'p' THEN ARRAY(
+    SELECT relid::oid::int8 FROM pg_partition_tree(pc.oid)
+      WHERE isleaf ORDER BY 1
+  ) END AS "partitions",
   attnum AS "pos", 
   attname AS "col", 
   -- A type name is a label on the replica, in which '|' delimits the attributes
@@ -83,6 +88,7 @@ tables AS (SELECT json_build_object(
   'schemaOID', "schemaOID",
   'name', "name", 
   'replicaIdentity', "replicaIdentity",
+  'partitions', "partitions",
   'columns', json_object_agg(
     DISTINCT
     col,
@@ -114,7 +120,7 @@ tables AS (SELECT json_build_object(
     jsonb_build_object('rowFilter', "rowFilter")
   )
 ) AS "table" FROM published_columns 
-  GROUP BY "schema", "schemaOID", "name", "oid", "replicaIdentity"),
+  GROUP BY "schema", "schemaOID", "name", "oid", "replicaIdentity", "partitions"),
   ` +
     // Note: pg_attribute contains column names for tables and for indexes.
     // However, the latter does not get updated when a column in a table is
@@ -218,6 +224,9 @@ const rawPublishedColumnSpec = publishedColumnSpec.extend({
 
 const rawPublishedTableSpec = publishedTableSpec.extend({
   columns: v.record(rawPublishedColumnSpec),
+  // The OIDs of the partitions that hold the rows of a partitioned table.
+  // Absent in schemas stored before this was reported.
+  partitions: v.array(v.number()).nullable().optional(),
 });
 
 const rawPublishedIndexSpec = publishedIndexSpec.extend({
@@ -292,8 +301,9 @@ export const publishedSchema = v
       }
     }
 
-    const tables = rawTables.map(table => ({
+    const tables = rawTables.map(({partitions, ...table}) => ({
       ...table,
+      ...(partitions ? {partitions} : {}),
       columns: Object.fromEntries(
         Object.entries(table.columns).map(
           ([name, {collationIsDeterministic: _, ...column}]) => [name, column],
