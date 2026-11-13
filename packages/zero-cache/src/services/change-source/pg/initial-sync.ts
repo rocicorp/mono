@@ -11,6 +11,7 @@ import {equals} from '../../../../../shared/src/set-utils.ts';
 import type {DownloadStatus} from '../../../../../zero-events/src/status.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {
+  createLiteIndex,
   createLiteIndexStatement,
   createLiteTableStatement,
 } from '../../../db/create.ts';
@@ -718,7 +719,7 @@ export async function createLiteIndices(
     );
     // Exclude the time spent waiting for the event from the index's timing.
     progress.restartTimer();
-    tx.exec(stmt);
+    createLiteIndex(lc, tx, liteIndex);
     const elapsed = progress.finish();
     totalMs += elapsed;
     lc.info?.(`Created index ${n} (${elapsed.toFixed(3)} ms): ${stmt}`);

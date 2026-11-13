@@ -10,7 +10,7 @@ import {assignProperty} from '../../../../shared/src/objects.ts';
 import {mapEntries} from '../../../../shared/src/objects.ts';
 import type {DownloadStatus} from '../../../../zero-events/src/status.ts';
 import {
-  createLiteIndexStatement,
+  createLiteIndex,
   createLiteTableStatement,
   liteColumnDef,
 } from '../../db/create.ts';
@@ -875,7 +875,7 @@ class TransactionProcessor {
 
   processCreateIndex(create: IndexCreate) {
     const index = mapPostgresToLiteIndex(create.spec);
-    this.#db.db.exec(createLiteIndexStatement(index));
+    createLiteIndex(this.#lc, this.#db.db, index);
 
     // indexes affect tables visibility (e.g. sync-ability is gated on
     // having a unique index), so reset pipelines to refresh table schemas.

@@ -157,8 +157,14 @@ tables AS (SELECT json_build_object(
       -- reason: a transaction can pass through states that violate it, which
       -- the replica would reject as they are replicated. The exception is a
       -- primary key, which clients rely on.
+      --
+      -- So is a unique index over a type that the replica stores with less
+      -- precision, in which distinct values can be the same value on the
+      -- replica: numeric, a double there, and time, in milliseconds. The
+      -- exceptions are a primary key and a replica identity, which are keys.
       (pg_index.indisunique AND pg_index.indpred IS NULL AND
-        (pg_index.indimmediate OR pg_index.indisprimary)) as "unique",
+        (pg_index.indimmediate OR pg_index.indisprimary) AND
+        (pg_index.indisprimary OR pg_index.indisreplident OR NOT indexed.lossy)) as "unique",
       pg_index.indisprimary as "isPrimaryKey",
       pg_index.indisreplident as "isReplicaIdentity",
       pg_index.indimmediate as "isImmediate",
@@ -173,7 +179,18 @@ tables AS (SELECT json_build_object(
       pb.tablename = pg_indexes.tablename
     JOIN pg_index ON pg_index.indexrelid = pc.oid
     JOIN LATERAL (
-      SELECT array_agg(attname) as attnames, array_agg(attgenerated != '') as generated FROM pg_attribute
+      SELECT array_agg(attname) as attnames, array_agg(attgenerated != '') as generated,
+          -- numeric, time and timetz, and the arrays of and domains over them
+          bool_or(EXISTS (
+            WITH RECURSIVE types(oid) AS (
+              SELECT atttypid
+              UNION ALL
+              SELECT CASE WHEN t.typtype = 'd' THEN t.typbasetype ELSE t.typelem END
+                FROM types JOIN pg_type t ON t.oid = types.oid
+                WHERE t.typtype = 'd' OR (t.typcategory = 'A' AND t.typelem != 0)
+            ) SELECT 1 FROM types WHERE types.oid IN (1700, 1083, 1266)
+          )) as lossy
+        FROM pg_attribute
         WHERE attrelid = pg_index.indrelid
           AND attnum = ANY( (pg_index.indkey::smallint[] )[:pg_index.indnkeyatts - 1] )
     ) as indexed ON true
