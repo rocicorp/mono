@@ -1169,6 +1169,21 @@ class ChangeMaker {
     lsn: bigint,
     msg: Message,
   ): Promise<ChangeStreamData[]> {
+    // A table with no published columns is not on the replica, as it has
+    // nothing to store.
+    if (
+      (msg.tag === 'insert' || msg.tag === 'update' || msg.tag === 'delete') &&
+      msg.relation.columns.length === 0
+    ) {
+      return [];
+    }
+    if (msg.tag === 'truncate') {
+      const relations = msg.relations.filter(r => r.columns.length > 0);
+      if (relations.length === 0) {
+        return [];
+      }
+      msg = {...msg, relations};
+    }
     switch (msg.tag) {
       case 'begin':
         return [
@@ -1801,6 +1816,10 @@ class ChangeMaker {
     const orel = this.#replica.initialSchema.tables.find(
       t => t.oid === rel.relationOid,
     );
+    if (!orel && rel.columns.length === 0) {
+      // A table with no published columns is not in the published schema.
+      return [];
+    }
     if (!orel) {
       // Can happen if a table is created and then dropped in the same transaction.
       throw new MissingEventTriggerSupport(
