@@ -4,6 +4,7 @@ import {
   stringify,
   type JSONValue,
 } from '../../../../../shared/src/bigint-json.ts';
+import {assignProperty} from '../../../../../shared/src/objects.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import type {Database, Statement} from '../../../../../zqlite/src/db.ts';
 import type {LexiVersion} from '../../../types/lexi-version.ts';
@@ -248,7 +249,7 @@ export class ChangeLog {
     } else {
       const versions: Record<string, string> = {};
       for (const col of backfilled) {
-        versions[col] = version;
+        assignProperty(versions, col, version);
       }
       this.#logRowOpWithBackfillStmt.run({
         version,

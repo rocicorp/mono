@@ -6,6 +6,7 @@ import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../shared/src/bigint-json.ts';
 import {deepEqual} from '../../../../shared/src/json.ts';
 import {must} from '../../../../shared/src/must.ts';
+import {assignProperty} from '../../../../shared/src/objects.ts';
 import {mapEntries} from '../../../../shared/src/objects.ts';
 import type {DownloadStatus} from '../../../../zero-events/src/status.ts';
 import {
@@ -467,7 +468,7 @@ class TransactionProcessor {
     }
     const key: Record<string, LiteValueType> = {};
     for (const col of keyColumns) {
-      key[col] = row[col];
+      assignProperty(key, col, row[col]);
     }
     return key;
   }

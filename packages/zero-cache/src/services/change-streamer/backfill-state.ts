@@ -1,6 +1,7 @@
 import {unreachable} from '../../../../shared/src/asserts.ts';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {deepEqual} from '../../../../shared/src/json.ts';
+import {assignProperty} from '../../../../shared/src/objects.ts';
 import {
   acceptBackfill,
   covers,
@@ -253,7 +254,11 @@ export class BackfillState {
     // rowKey columns are excluded from `columns` but are backfilled with them
     // (e.g. for a new table).
     for (const name of [...relation.rowKey.columns, ...columns]) {
-      const col = backfill.columns[name];
+      // Not backfill.columns[name], which is Object.prototype for a column
+      // named __proto__ that is not being backfilled.
+      const col = Object.hasOwn(backfill.columns, name)
+        ? backfill.columns[name]
+        : undefined;
       if (!col) {
         continue;
       }
@@ -261,8 +266,8 @@ export class BackfillState {
       // pre-transaction state.
       const updated = {...col};
       if (apply(col.progress, updated, name)) {
-        if (name in backfill.columns) {
-          backfill.columns[name] = updated;
+        if (Object.hasOwn(backfill.columns, name)) {
+          assignProperty(backfill.columns, name, updated);
         }
       } else {
         ignored.push(`${relation.schema}.${relation.name}.${name}`);
@@ -302,7 +307,7 @@ export class BackfillState {
             this.#state.set(key, backfill);
           }
           // A new backfill always starts from scratch.
-          backfill.columns[op.column] = {id: op.backfill};
+          assignProperty(backfill.columns, op.column, {id: op.backfill});
           break;
         }
         case 'rename-table': {
@@ -320,10 +325,10 @@ export class BackfillState {
           break;
         case 'rename-column': {
           const backfill = this.#state.get(tableKey(op.table));
-          const col = backfill?.columns[op.old];
-          if (backfill && col) {
+          if (backfill && Object.hasOwn(backfill.columns, op.old)) {
+            const col = backfill.columns[op.old];
             delete backfill.columns[op.old];
-            backfill.columns[op.new] = col;
+            assignProperty(backfill.columns, op.new, col);
           }
           break;
         }

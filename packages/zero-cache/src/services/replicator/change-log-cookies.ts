@@ -34,6 +34,7 @@
 
 import {unreachable} from '../../../../shared/src/asserts.ts';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
+import {assignProperty} from '../../../../shared/src/objects.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import type {Database, Statement} from '../../../../zqlite/src/db.ts';
 import type {
@@ -395,7 +396,7 @@ export function backfillRequestsFrom(cookies: CookieSet): BackfillRequest[] {
       };
       requests.push(curr);
     }
-    curr.columns[column] = {id: backfill};
+    assignProperty(curr.columns, column, {id: backfill});
   }
   return v.parse(requests, backfillRequestsSchema);
 }

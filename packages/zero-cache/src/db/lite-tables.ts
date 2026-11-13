@@ -2,6 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {newArray} from '../../../shared/src/arrays.ts';
 import {getOrInsertComputed} from '../../../shared/src/map.ts';
 import {must} from '../../../shared/src/must.ts';
+import {assignProperty} from '../../../shared/src/objects.ts';
 import {difference} from '../../../shared/src/set-utils.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {primaryKeySchema} from '../../../zero-protocol/src/primary-key.ts';
@@ -117,14 +118,14 @@ export function listTables(
         : null;
     }
 
-    table.columns[col.name] = {
+    assignProperty(table.columns, col.name, {
       pos: Object.keys(table.columns).length + 1,
       dataType,
       characterMaximumLength: null,
       notNull: col.notNull !== 0,
       dflt: col.dflt,
       elemPgTypeClass,
-    };
+    });
     if (metadata?.isBackfilling) {
       table.backfilling.push(col.name);
     }
@@ -191,7 +192,7 @@ export function listIndexes(db: Database): ReplicaIndexSpec[] {
   } of indexes) {
     if (ret.at(-1)?.name === name) {
       // Aggregate multiple column names into the array.
-      must(ret.at(-1)).columns[column] = dir;
+      assignProperty(must(ret.at(-1)).columns, column, dir);
     } else {
       ret.push({
         tableName,
