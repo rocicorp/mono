@@ -398,6 +398,13 @@ const SOCKET_INACTIVITY_TIMEOUT_MS = parseInt(
   process.env.ZERO_PG_SOCKET_INACTIVITY_TIMEOUT ?? '120000',
 );
 
+// How long a connection attempt to one address may take before the next
+// address is tried. Node's default of 250 ms is less than one SYN
+// retransmission, and when no other address is reachable (e.g. an IPv6
+// address from a pod without an IPv6 route), a single delayed SYN fails the
+// connection with an AggregateError [ETIMEDOUT].
+const CONNECT_ATTEMPT_TIMEOUT_MS = 5000;
+
 type SocketFactoryOptions = {
   host: string[];
   port: number[];
@@ -477,7 +484,11 @@ export function inactivityTimeoutSocket(
     } else {
       const [host] = options.host;
       const [port] = options.port;
-      socket.connect(port, host);
+      socket.connect({
+        host,
+        port,
+        autoSelectFamilyAttemptTimeout: CONNECT_ATTEMPT_TIMEOUT_MS,
+      });
       // Read by postgres.js for the TLS SNI servername.
       Object.assign(socket, {host, port});
     }
