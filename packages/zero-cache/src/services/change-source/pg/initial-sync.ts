@@ -39,6 +39,7 @@ import {
   getOrCreateHistogram,
 } from '../../../observability/metrics.ts';
 import {
+  isUnusableKeyValue,
   JSON_STRINGIFIED,
   liteValue,
   type LiteValueType,
@@ -1014,9 +1015,10 @@ function keyColumnFlags(table: CopiedTableSpec, columns: string[]): boolean[] {
 }
 
 /**
- * Deletes the rows that have no value on the replica for a column of their
- * key, which is the case for a `NaN`. Changes to such a row could not be
- * matched to it, so replication skips them as well.
+ * Deletes the rows whose key has a value that cannot identify them: a `NaN`,
+ * which has no value on the replica, or an infinite number, which has none in
+ * the JSON of a row key. Changes to such a row could not be matched to it, so
+ * replication skips them as well.
  *
  * Returns the number of rows deleted.
  */
@@ -1029,13 +1031,19 @@ function deleteRowsWithoutKey(
 ): number {
   const conds = columns
     .filter((_, i) => isKey[i])
-    .map(col => `${id(col)} IS NULL`);
+    // Only a number: in a text column the text 'Inf' is equal to 9e999.
+    .map(
+      col =>
+        `${id(col)} IS NULL OR ` +
+        `(typeof(${id(col)}) = 'real' AND ${id(col)} IN (9e999, -9e999))`,
+    );
   const {changes} = db
     .prepare(`DELETE FROM ${id(tableName)} WHERE ${conds.join(' OR ')}`)
     .run();
   if (changes > 0) {
     lc.warn?.(
-      `Skipped ${changes} rows of ${tableName} that have a NaN in their key`,
+      `Skipped ${changes} rows of ${tableName} that have a NaN or an ` +
+        `infinite value in their key`,
     );
   }
   return changes;
@@ -1514,7 +1522,7 @@ async function copyBinary(
             pendingSize += fieldSize;
             const value = fieldBuf === null ? null : decoders[col](fieldBuf);
             pendingValues[pendingRows * valuesPerRow + col] = value;
-            if (isKey[col] && (value === null || Number.isNaN(value))) {
+            if (isKey[col] && isUnusableKeyValue(value)) {
               hasRowWithoutKey = true;
             }
 
@@ -1715,7 +1723,7 @@ async function copyText(
             pendingSize += fieldSize;
             const value = text === null ? null : parsers[col](text);
             pendingValues[pendingRows * valuesPerRow + col] = value;
-            if (isKey[col] && (value === null || Number.isNaN(value))) {
+            if (isKey[col] && isUnusableKeyValue(value)) {
               hasRowWithoutKey = true;
             }
 

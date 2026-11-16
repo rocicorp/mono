@@ -30,6 +30,7 @@ import type {ColumnSpec} from '../../db/specs.ts';
 import type {StatementRunner} from '../../db/statements.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {
+  isUnusableKeyValue,
   JSON_PARSED,
   liteRow,
   type JSONFormat,
@@ -473,13 +474,17 @@ class TransactionProcessor {
     return key;
   }
 
-  // A NaN has no value on the replica, where it is stored as a NULL. A row
-  // with one in its key could not be matched by later changes to it, so it is
-  // not replicated. (Initial sync and backfills skip these rows as well.)
+  // A NaN has no value on the replica, where it is stored as a NULL, and an
+  // infinite number has none in JSON, which is what row keys are in the
+  // change log and beyond. A row with either in its key could not be matched
+  // by later changes to it, so it is not replicated. (Initial sync and
+  // backfills skip these rows as well.)
   #lacksKey(table: string, key: LiteRowKey): boolean {
     for (const v of Object.values(key)) {
-      if (v === null || Number.isNaN(v)) {
-        this.#lc.warn?.(`Skipping a row of ${table} with a NaN in its key`);
+      if (isUnusableKeyValue(v)) {
+        this.#lc.warn?.(
+          `Skipping a row of ${table} with a NaN or an infinite value in its key`,
+        );
         return true;
       }
     }
@@ -491,8 +496,13 @@ class TransactionProcessor {
     const tableSpec = this.#tableSpec(table);
     const newRow = liteRow(insert.new, tableSpec, this.#jsonFormat);
     const keyed = !!this.#keyColumns(insert.relation)?.length;
-    if (keyed && this.#lacksKey(table, this.#getKey(newRow, insert))) {
-      return;
+    if (keyed) {
+      const key = this.#getKey(newRow, insert);
+      if (this.#lacksKey(table, key)) {
+        // An earlier row with this key may have left a row or an entry.
+        this.#deleteRowLackingKey(table, key, tableSpec.backfilling);
+        return;
+      }
     }
 
     this.#upsert(table, {
@@ -583,12 +593,12 @@ class TransactionProcessor {
     if (oldKey && this.#lacksKey(table, oldKey)) {
       // The row was not replicated, so the update is applied to its new key,
       // which adds the row.
-      this.#deleteRowLackingKey(table, oldKey);
+      this.#deleteRowLackingKey(table, oldKey, tableSpec.backfilling);
       oldKey = null;
     }
     if (this.#lacksKey(table, newKey)) {
       // The row is no longer replicated.
-      this.#deleteRowLackingKey(table, newKey);
+      this.#deleteRowLackingKey(table, newKey, tableSpec.backfilling);
       if (oldKey) {
         this.#delete(table, oldKey);
         this.#logDeleteOp(table, oldKey, tableSpec.backfilling);
@@ -664,7 +674,7 @@ class TransactionProcessor {
       del,
     );
     if (this.#lacksKey(table, rowKey)) {
-      this.#deleteRowLackingKey(table, rowKey);
+      this.#deleteRowLackingKey(table, rowKey, tableSpec.backfilling);
       return;
     }
 
@@ -672,10 +682,15 @@ class TransactionProcessor {
     this.#logDeleteOp(table, rowKey, tableSpec.backfilling);
   }
 
-  // A replica written before these rows were skipped can still hold one, with
-  // a NULL in its key. It is removed when its upstream row changes. Upstream
-  // has at most one row with a given key, so every match is a copy of it.
-  #deleteRowLackingKey(table: string, rowKey: LiteRowKey) {
+  // A replica written before these rows were skipped can still hold one: with
+  // a NULL in its key for a NaN, or the infinite number itself. It is removed
+  // when its upstream row changes. Upstream has at most one row with a given
+  // key, so every match is a copy of it.
+  #deleteRowLackingKey(
+    table: string,
+    rowKey: LiteRowKey,
+    backfilling: string[] | undefined,
+  ) {
     const conds: string[] = [];
     const params: LiteValueType[] = [];
     for (const [col, v] of Object.entries(rowKey)) {
@@ -690,6 +705,12 @@ class TransactionProcessor {
       `DELETE FROM ${id(table)} WHERE ${conds.join(' AND ')}`,
       params,
     );
+    // The change log entry of such a row has a null for these values, so no
+    // reader can find the row by it. The entry of a delete is skipped by
+    // them, where that of the insert or update it replaces is an error. It is
+    // written whether or not the row was still there, as an earlier version
+    // may have removed the row and left its entry.
+    this.#logDeleteOp(table, rowKey, backfilling);
   }
 
   #delete(table: string, rowKey: LiteRowKey) {
@@ -1079,6 +1100,8 @@ class TransactionProcessor {
       );
       const rowKey = this.#getKey(row, {relation});
       if (this.#lacksKey(tableName, rowKey)) {
+        // An earlier version may have left the row or its entry.
+        this.#deleteRowLackingKey(tableName, rowKey, tableSpec.backfilling);
         skipped++;
         continue;
       }

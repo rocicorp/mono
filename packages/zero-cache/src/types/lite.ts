@@ -201,6 +201,18 @@ export function liteTypeString(
   return typeString;
 }
 
+/**
+ * Whether the `value` of a key column is one that cannot identify a row past
+ * the replica: a `NaN`, which is a NULL there, or an infinite number, which
+ * JSON has no way to write. Row keys are JSON in the change log, in the CVR,
+ * and on the way to clients.
+ */
+export function isUnusableKeyValue(value: unknown): boolean {
+  return (
+    value === null || (typeof value === 'number' && !Number.isFinite(value))
+  );
+}
+
 export function upstreamDataType(liteTypeString: LiteTypeString) {
   const delim = liteTypeString.indexOf('|');
   return delim > 0 ? liteTypeString.substring(0, delim) : liteTypeString;
