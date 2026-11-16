@@ -483,7 +483,7 @@ class TransactionProcessor {
       [ZERO_VERSION_COLUMN_NAME]: this.#version,
     });
 
-    if (insert.relation.rowKey.columns.length === 0) {
+    if (!this.#keyColumns(insert.relation)?.length) {
       // INSERTs can be replicated for rows without a PRIMARY KEY or a
       // UNIQUE INDEX. These are written to the replica but not recorded
       // in the changeLog, because these rows cannot participate in IVM.

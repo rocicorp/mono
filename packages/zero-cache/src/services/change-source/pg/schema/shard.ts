@@ -9,7 +9,7 @@ import {
   type JSONObject,
 } from '../../../../../../shared/src/bigint-json.ts';
 import * as v from '../../../../../../shared/src/valita.ts';
-import {Default} from '../../../../db/postgres-replica-identity-enum.ts';
+import {Default, Full} from '../../../../db/postgres-replica-identity-enum.ts';
 import type {PostgresDB, PostgresTransaction} from '../../../../types/pg.ts';
 import type {AppID, ShardConfig, ShardID} from '../../../../types/shards.ts';
 import {appSchema, check, upstreamSchema} from '../../../../types/shards.ts';
@@ -708,8 +708,19 @@ export function replicaIdentitiesForTablesWithoutPrimaryKeys(
     tableName: string;
     indexName: string;
   }[] = [];
+  // Tables with no index to use, which may have a primary key that is not
+  // published. A partition has a replica identity of its own, which is what
+  // Postgres goes by for the rows in it.
+  const withoutIndex: number[] = [];
   for (const table of pubs.tables) {
-    if (!table.primaryKey?.length && table.replicaIdentity === Default) {
+    if (table.primaryKey?.length) {
+      continue;
+    }
+    if (table.replicaIdentity === Full) {
+      // Its partitions may have been added since it was set.
+      withoutIndex.push(...(table.partitions ?? []));
+    } else if (table.replicaIdentity === Default) {
+      const numIdentities = replicaIdentities.length;
       // Look for an index that can serve as the REPLICA IDENTITY USING INDEX. It must be:
       // - UNIQUE
       // - NOT NULL columns
@@ -732,14 +743,41 @@ export function replicaIdentitiesForTablesWithoutPrimaryKeys(
         replicaIdentities.push({schema, tableName, indexName});
         break;
       }
+      if (replicaIdentities.length === numIdentities) {
+        withoutIndex.push(table.oid, ...(table.partitions ?? []));
+      }
     }
   }
 
-  if (replicaIdentities.length === 0) {
+  if (replicaIdentities.length === 0 && withoutIndex.length === 0) {
     return undefined;
   }
   return {
     apply: async (lc: LogContext, sql: PostgresDB) => {
+      // Postgres does not send a generated column unless it is published,
+      // which only Postgres 18 can do, so a primary key with one identifies no
+      // row in an UPDATE or DELETE. Before 18 Postgres sends those anyway.
+      // REPLICA IDENTITY FULL identifies the row by its other columns.
+      const generatedKeys = withoutIndex.length
+        ? await sql<{schema: string; tableName: string}[]>`
+        SELECT ns.nspname AS "schema", c.relname AS "tableName"
+          FROM pg_class c JOIN pg_namespace ns ON ns.oid = c.relnamespace
+          WHERE c.oid = ANY (${withoutIndex}::oid[]) AND c.relreplident = 'd'
+            AND EXISTS (
+              SELECT 1 FROM pg_index i
+                JOIN pg_attribute a
+                  ON a.attrelid = i.indrelid AND a.attnum = ANY (i.indkey)
+                WHERE i.indrelid = c.oid AND i.indisprimary
+                  AND a.attgenerated != '')`
+        : [];
+      for (const {schema, tableName} of generatedKeys) {
+        lc.info?.(
+          `setting REPLICA IDENTITY FULL for "${tableName}", ` +
+            `which has a generated column in its primary key`,
+        );
+        await sql`
+        ALTER TABLE ${sql(schema)}.${sql(tableName)} REPLICA IDENTITY FULL`;
+      }
       for (const {schema, tableName, indexName} of replicaIdentities) {
         lc.info?.(
           `setting "${indexName}" as the REPLICA IDENTITY for "${tableName}"`,

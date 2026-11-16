@@ -61,7 +61,14 @@ WITH published_columns AS (SELECT
   CASE WHEN elem_pt.oid IS NULL THEN 0 ELSE GREATEST(attndims, 1) END AS "arrayDims",
   attnotnull AS "notNull",
   pg_get_expr(pd.adbin, pd.adrelid) as "dflt",
-  NULLIF(ARRAY_POSITION(conkey, attnum), -1) AS "keyPos", 
+  -- A primary key with a column that is not published, such as a generated
+  -- column, does not identify rows in the replication stream.
+  CASE WHEN EXISTS (
+    SELECT 1 FROM pg_attribute ka
+      WHERE ka.attrelid = pk.conrelid AND ka.attnum = ANY(pk.conkey) AND (
+        NOT ka.attname = ANY(pb.attnames) OR
+        (current_setting('server_version_num')::int < 160000 AND ka.attgenerated != ''))
+  ) THEN NULL ELSE NULLIF(ARRAY_POSITION(conkey, attnum), -1) END AS "keyPos", 
   pb.rowfilter as "rowFilter",
   pb.pubname as "publication"
 FROM pg_attribute

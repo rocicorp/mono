@@ -10,12 +10,13 @@ import type {PostgresDB} from '../../../../types/pg.ts';
 import {upstreamSchema, type ShardConfig} from '../../../../types/shards.ts';
 import {id} from '../../../../types/sql.ts';
 import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
-import {publishedSchema} from './published.ts';
+import {getPublicationInfo, publishedSchema} from './published.ts';
 import * as ReplicaStage from './replica-stage-enum.ts';
 import {
   getMutationsTableDefinition,
   legacyReplicationSlot,
   metadataPublicationName,
+  replicaIdentitiesForTablesWithoutPrimaryKeys,
   setupTablesAndReplication,
   setupTriggers,
 } from './shard.ts';
@@ -421,17 +422,41 @@ function getIncrementalMigrations(
       },
     },
 
+    // v40: Upgrade the DDL event functions to report no primary key for one
+    // with a column that is not published, and set the replica identity of
+    // the tables that have such a key.
+    40: {
+      migrateSchema: async (lc, sql) => {
+        const [{publications}] = await sql<{publications: string[]}[]>`
+          SELECT publications FROM ${sql(shardConfigTable)}`;
+        await setupTriggers(
+          lc,
+          sql,
+          {...shard, publications},
+          installPartialIndexTriggers,
+        );
+        lc.info?.(`Upgraded DDL event triggers`);
+        // After the triggers, so that the events of these ALTER TABLEs
+        // describe the tables as the upgraded functions do.
+        const pubs = await getPublicationInfo(sql, publications);
+        await replicaIdentitiesForTablesWithoutPrimaryKeys(pubs)?.apply(
+          lc,
+          sql,
+        );
+      },
+    },
+
     // Note: While this is conditional, it always has to be bumped to the last
-    // version. (It was v29, v31, v33, v35, v37, v38 and v39, and is re-run for shards at those
+    // version. (It was v29, v31, v33, v35, v37, v38, v39 and v40, and is re-run for shards at those
     // versions when it is bumped, which is harmless as setupTriggers() is
     // idempotent.)
     ...(installPartialIndexTriggers
       ? {
-          // v40: Upgrade the DDL event triggers to include partial indexes in
+          // v41: Upgrade the DDL event triggers to include partial indexes in
           // schema snapshots. Note that setupTriggers() also refreshes the
           // stored "publishedSchema" so that the change in format does not
           // manifest as a spurious schema change.
-          40: {
+          41: {
             migrateSchema: async (lc, sql) => {
               const [{publications}] = await sql<{publications: string[]}[]>`
                 SELECT publications FROM ${sql(shardConfigTable)}`;
