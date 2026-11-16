@@ -379,6 +379,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    */
   #shuttingDown = false;
   readonly #initialized = resolver<'initialized'>();
+  // Whether an initConnection has resolved #initialized, i.e. the CVR has
+  // been given its client schema.
+  #hasInitialized = false;
 
   #cvr: CVRSnapshot | undefined;
   /**
@@ -773,6 +776,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       try {
+        if (
+          reloaded &&
+          this.#hasInitialized &&
+          this.#cvr.clientSchema === null
+        ) {
+          // The store no longer has the CVR this view-syncer initialized.
+          // No client of this instance can be reconciled with the reloaded
+          // one: stop so that all of them, not only the one whose operation
+          // reloaded the CVR, start over.
+          const e = clientSchemaMissingError(this.#cvr);
+          this.#stateChanges.fail(e);
+          throw e;
+        }
         if (reloaded && this.#cvr.pinnedUser !== null) {
           // Validation of every connection to this instance must agree with
           // the user the group was pinned to before it was (re)loaded.
@@ -854,9 +870,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     // incompatible schema) after it has already destroyed the pipelines.
     this.#pipelinesHydrated = false;
     this.connContextManager.setSharedRetransformReady(false);
-    this.#pipelines.reset(
-      must(cvr.clientSchema, 'cvr.clientSchema missing after initialization'),
-    );
+    this.#pipelines.reset(requireClientSchema(cvr));
     return true;
   }
 
@@ -917,10 +931,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.#batchTimeMs = undefined;
 
         await this.#runInLockWithCVR(async (lc, cvr) => {
-          const clientSchema = must(
-            cvr.clientSchema,
-            'cvr.clientSchema missing after initialization',
-          );
+          const clientSchema = requireClientSchema(cvr);
           if (!this.#pipelines.initialized()) {
             // On the first version-ready signal, connect to the replica.
             this.#pipelines.init(clientSchema);
@@ -1083,9 +1094,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         `resetting pipelines: ${e.message}${e.breakdown ? ` (${e.breakdown})` : ''}`,
       );
       this.#pipelineResets.add(1, {reason: e.reason});
-      this.#pipelines.reset(
-        must(cvr.clientSchema, 'cvr.clientSchema missing after initialization'),
-      );
+      this.#pipelines.reset(requireClientSchema(cvr));
       version = this.#pipelines.currentVersion();
     }
     const cvrVer = versionString(cvr.version);
@@ -1562,6 +1571,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             );
             // this.#authData  and cvr (in particular cvr.clientSchema) have been
             // initialized, signal the run loop to run.
+            this.#hasInitialized = true;
             this.#initialized.resolve('initialized');
           },
           newClient,
@@ -4579,6 +4589,33 @@ function checkClientAndCVRVersions(
       origin: ErrorOrigin.ZeroCache,
     });
   }
+}
+
+/**
+ * Returns the client schema of a CVR that is used after the view-syncer has
+ * been initialized.
+ *
+ * `initConnection` only signals initialization once the schema is in the CVR,
+ * so a CVR without one was reloaded (after an error cleared the cached
+ * snapshot) from a store that no longer has what this view-syncer wrote, e.g.
+ * because the CVR's row was removed or the CVR db was restored to an earlier
+ * state. The clients' state cannot be reconciled with such a CVR, so they are
+ * told to start over, as they are when the CVR has been purged.
+ *
+ * `#runInLockWithCVR` rejects such a CVR when it reloads it, so this is not
+ * expected to throw.
+ */
+function requireClientSchema(cvr: CVRSnapshot): ClientSchema {
+  if (cvr.clientSchema === null) {
+    throw clientSchemaMissingError(cvr);
+  }
+  return cvr.clientSchema;
+}
+
+function clientSchemaMissingError(cvr: CVRSnapshot): ClientNotFoundError {
+  return new ClientNotFoundError(
+    `CVR@${versionString(cvr.version)} has no client schema after initialization`,
+  );
 }
 
 function isTransformFailedError(error: ProtocolError): boolean {
