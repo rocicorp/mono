@@ -473,17 +473,34 @@ class TransactionProcessor {
     return key;
   }
 
+  // A NaN has no value on the replica, where it is stored as a NULL. A row
+  // with one in its key could not be matched by later changes to it, so it is
+  // not replicated. (Initial sync and backfills skip these rows as well.)
+  #lacksKey(table: string, key: LiteRowKey): boolean {
+    for (const v of Object.values(key)) {
+      if (v === null || Number.isNaN(v)) {
+        this.#lc.warn?.(`Skipping a row of ${table} with a NaN in its key`);
+        return true;
+      }
+    }
+    return false;
+  }
+
   processInsert(insert: MessageInsert) {
     const table = liteTableName(insert.relation);
     const tableSpec = this.#tableSpec(table);
     const newRow = liteRow(insert.new, tableSpec, this.#jsonFormat);
+    const keyed = !!this.#keyColumns(insert.relation)?.length;
+    if (keyed && this.#lacksKey(table, this.#getKey(newRow, insert))) {
+      return;
+    }
 
     this.#upsert(table, {
       ...newRow.row,
       [ZERO_VERSION_COLUMN_NAME]: this.#version,
     });
 
-    if (!this.#keyColumns(insert.relation)?.length) {
+    if (!keyed) {
       // INSERTs can be replicated for rows without a PRIMARY KEY or a
       // UNIQUE INDEX. These are written to the replica but not recorded
       // in the changeLog, because these rows cannot participate in IVM.
@@ -555,13 +572,29 @@ class TransactionProcessor {
     }
 
     // update.key is set with the old values if the key has changed.
-    const oldKey = update.key
+    let oldKey = update.key
       ? this.#getKey(
           liteRow(update.key, this.#tableSpec(table), this.#jsonFormat),
           update,
         )
       : null;
     const newKey = this.#getKey(newRow, update);
+
+    if (oldKey && this.#lacksKey(table, oldKey)) {
+      // The row was not replicated, so the update is applied to its new key,
+      // which adds the row.
+      this.#deleteRowLackingKey(table, oldKey);
+      oldKey = null;
+    }
+    if (this.#lacksKey(table, newKey)) {
+      // The row is no longer replicated.
+      this.#deleteRowLackingKey(table, newKey);
+      if (oldKey) {
+        this.#delete(table, oldKey);
+        this.#logDeleteOp(table, oldKey, tableSpec.backfilling);
+      }
+      return;
+    }
 
     if (oldKey) {
       this.#logDeleteOp(table, oldKey, tableSpec.backfilling);
@@ -630,9 +663,33 @@ class TransactionProcessor {
       liteRow(del.key, tableSpec, this.#jsonFormat),
       del,
     );
+    if (this.#lacksKey(table, rowKey)) {
+      this.#deleteRowLackingKey(table, rowKey);
+      return;
+    }
 
     this.#delete(table, rowKey);
     this.#logDeleteOp(table, rowKey, tableSpec.backfilling);
+  }
+
+  // A replica written before these rows were skipped can still hold one, with
+  // a NULL in its key. It is removed when its upstream row changes. Upstream
+  // has at most one row with a given key, so every match is a copy of it.
+  #deleteRowLackingKey(table: string, rowKey: LiteRowKey) {
+    const conds: string[] = [];
+    const params: LiteValueType[] = [];
+    for (const [col, v] of Object.entries(rowKey)) {
+      if (v === null || Number.isNaN(v)) {
+        conds.push(`${id(col)} IS NULL`);
+      } else {
+        conds.push(`${id(col)}=?`);
+        params.push(v);
+      }
+    }
+    this.#db.run(
+      `DELETE FROM ${id(table)} WHERE ${conds.join(' AND ')}`,
+      params,
+    );
   }
 
   #delete(table: string, rowKey: LiteRowKey) {
@@ -1021,6 +1078,10 @@ class TransactionProcessor {
         this.#jsonFormat,
       );
       const rowKey = this.#getKey(row, {relation});
+      if (this.#lacksKey(tableName, rowKey)) {
+        skipped++;
+        continue;
+      }
       const rowOp = this.#changeLog.getLatestRowOp(tableName, rowKey);
       if (rowOp?.op === DEL_OP && rowOp.stateVersion > watermark) {
         skipped++;

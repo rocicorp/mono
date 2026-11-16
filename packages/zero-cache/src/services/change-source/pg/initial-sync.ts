@@ -994,10 +994,52 @@ export function makeDownloadStatements(
   };
 }
 
+// A published table, with the columns of its replica identity when known.
+type CopiedTableSpec = PublishedTableSpec & {
+  readonly replicaIdentityColumns?: readonly string[] | undefined;
+};
+
 type DownloadState = {
-  spec: PublishedTableSpec;
+  spec: CopiedTableSpec;
   status: DownloadStatus;
 };
+
+/**
+ * Flags the columns of the key that identifies the rows of the `table` in the
+ * replication stream.
+ */
+function keyColumnFlags(table: CopiedTableSpec, columns: string[]): boolean[] {
+  const key = new Set(table.replicaIdentityColumns ?? table.primaryKey ?? []);
+  return columns.map(col => key.has(col));
+}
+
+/**
+ * Deletes the rows that have no value on the replica for a column of their
+ * key, which is the case for a `NaN`. Changes to such a row could not be
+ * matched to it, so replication skips them as well.
+ *
+ * Returns the number of rows deleted.
+ */
+function deleteRowsWithoutKey(
+  lc: LogContext,
+  db: Database,
+  tableName: string,
+  columns: string[],
+  isKey: boolean[],
+): number {
+  const conds = columns
+    .filter((_, i) => isKey[i])
+    .map(col => `${id(col)} IS NULL`);
+  const {changes} = db
+    .prepare(`DELETE FROM ${id(tableName)} WHERE ${conds.join(' OR ')}`)
+    .run();
+  if (changes > 0) {
+    lc.warn?.(
+      `Skipped ${changes} rows of ${tableName} that have a NaN in their key`,
+    );
+  }
+  return changes;
+}
 
 type CopyFormat = 'binary' | 'text';
 type InitialSyncMode = 'initial' | 'shadow';
@@ -1349,7 +1391,7 @@ function copy(
 
 async function copyBinary(
   lc: LogContext,
-  table: PublishedTableSpec,
+  table: CopiedTableSpec,
   status: DownloadStatus,
   from: PostgresTransaction,
   to: Database,
@@ -1404,6 +1446,8 @@ async function copyBinary(
   });
   let pendingRows = 0;
   let pendingSize = 0;
+  const isKey = keyColumnFlags(table, columnNames);
+  let hasRowWithoutKey = false;
 
   function flush() {
     const flushStart = performance.now();
@@ -1468,8 +1512,11 @@ async function copyBinary(
           for (const fieldBuf of binaryParser.parse(chunk)) {
             const fieldSize = fieldBuf === null ? 4 : fieldBuf.length;
             pendingSize += fieldSize;
-            pendingValues[pendingRows * valuesPerRow + col] =
-              fieldBuf === null ? null : decoders[col](fieldBuf);
+            const value = fieldBuf === null ? null : decoders[col](fieldBuf);
+            pendingValues[pendingRows * valuesPerRow + col] = value;
+            if (isKey[col] && (value === null || Number.isNaN(value))) {
+              hasRowWithoutKey = true;
+            }
 
             if (++col === decoders.length) {
               col = 0;
@@ -1509,6 +1556,10 @@ async function copyBinary(
     }),
   );
 
+  if (hasRowWithoutKey) {
+    status.rows -= deleteRowsWithoutKey(lc, to, tableName, columnNames, isKey);
+  }
+
   const sourceWaitMs = Math.max(
     0,
     performance.now() - copyStreamStart - processingMs,
@@ -1541,7 +1592,7 @@ async function copyBinary(
 
 async function copyText(
   lc: LogContext,
-  table: PublishedTableSpec,
+  table: CopiedTableSpec,
   status: DownloadStatus,
   dbClient: PostgresDB,
   from: PostgresTransaction,
@@ -1588,6 +1639,8 @@ async function copyText(
   });
   let pendingRows = 0;
   let pendingSize = 0;
+  const isKey = keyColumnFlags(table, columnNames);
+  let hasRowWithoutKey = false;
 
   function flush() {
     const flushStart = performance.now();
@@ -1660,8 +1713,11 @@ async function copyText(
           for (const text of tsvParser.parse(chunk)) {
             const fieldSize = text === null ? 4 : text.length;
             pendingSize += fieldSize;
-            pendingValues[pendingRows * valuesPerRow + col] =
-              text === null ? null : parsers[col](text);
+            const value = text === null ? null : parsers[col](text);
+            pendingValues[pendingRows * valuesPerRow + col] = value;
+            if (isKey[col] && (value === null || Number.isNaN(value))) {
+              hasRowWithoutKey = true;
+            }
 
             if (++col === parsers.length) {
               col = 0;
@@ -1700,6 +1756,10 @@ async function copyText(
       },
     }),
   );
+
+  if (hasRowWithoutKey) {
+    status.rows -= deleteRowsWithoutKey(lc, to, tableName, columnNames, isKey);
+  }
 
   const sourceWaitMs = Math.max(
     0,
