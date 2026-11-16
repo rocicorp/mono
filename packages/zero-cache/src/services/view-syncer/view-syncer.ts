@@ -195,6 +195,11 @@ export interface ViewSyncer {
   readonly createdAtMs: number;
   readonly servedVersion: string | null;
   readonly servingLagEligible: boolean;
+  /**
+   * Whether the client group is waiting for the API server to respond to a
+   * transform or validation request, during which it is not sent changes.
+   */
+  readonly awaitingAPIServer: boolean;
 
   // Shared-advance eligibility telemetry: which transformed queries this
   // client group runs, and the identity of its client schema. Pipelines with
@@ -1246,6 +1251,25 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     );
   }
 
+  #apiServerRequestsInFlight = 0;
+
+  get awaitingAPIServer(): boolean {
+    return this.#apiServerRequestsInFlight > 0;
+  }
+
+  /**
+   * Runs a request to the API server, during which {@link awaitingAPIServer}
+   * says that the client group is waiting for it.
+   */
+  async #awaitAPIServer<T>(request: () => Promise<T>): Promise<T> {
+    this.#apiServerRequestsInFlight++;
+    try {
+      return await request();
+    } finally {
+      this.#apiServerRequestsInFlight--;
+    }
+  }
+
   /**
    * Records that this client group is caught up through `stateVersion`, i.e.
    * everything the replica had at that version has been poked to clients.
@@ -2207,7 +2231,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           lc,
           '#hydrateUnchangedQueries transforming custom queries',
           () =>
-            customQueryTransformer.transform(connCtx, customQueries.values()),
+            this.#awaitAPIServer(() =>
+              customQueryTransformer.transform(connCtx, customQueries.values()),
+            ),
         ),
       );
       // Uncached results can also return the authoritative server userID
@@ -2766,7 +2792,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             this.#runPriorityOp(
               lc,
               '#syncQueryPipelineSet transforming custom queries',
-              () => customQueryTransformer.transform(connCtx, queries),
+              () =>
+                this.#awaitAPIServer(() =>
+                  customQueryTransformer.transform(connCtx, queries),
+                ),
             ),
           );
 
@@ -4386,7 +4415,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     try {
       let validation: ConnectionValidation | undefined = undefined;
       if (this.#customQueryTransformer) {
-        const response = await this.#customQueryTransformer.validate(connCtx);
+        const transformer = this.#customQueryTransformer;
+        const response = await this.#awaitAPIServer(() =>
+          transformer.validate(connCtx),
+        );
         if (response.kind === 'TransformFailed') {
           throw new ProtocolErrorWithLevel(response, 'warn');
         }

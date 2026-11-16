@@ -86,6 +86,7 @@ async function runSyncer() {
         createdAtMs: Date.now(),
         servedVersion: null,
         servingLagEligible: true,
+        awaitingAPIServer: false,
         pipelineHashes: () => [],
         clientSchemaKey: undefined,
       } as unknown as ViewSyncer & ActivityBasedService;

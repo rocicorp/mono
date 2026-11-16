@@ -84,6 +84,15 @@ export const getBodyPreview = async (
 
 const MAX_ATTEMPTS = 4;
 
+/**
+ * A request to the API server (all attempts included) that takes at least
+ * this long is logged. A view-syncer waits for the response to a transform
+ * or validation request while it holds its client group's lock, so the
+ * client group is not sent changes in the meantime. Without the log, such a
+ * wait only shows up as a gap in the client group's log.
+ */
+export const SLOW_API_REQUEST_MS = 2000;
+
 type ApiFailedReason =
   | typeof ErrorReason.HTTP
   | typeof ErrorReason.Parse
@@ -367,8 +376,17 @@ export async function fetchFromAPIServer<T>(
         result: attemptCount === 0 ? 'config_error' : 'fetch_error',
         attemptCount,
       });
+    const durationMs = performance.now() - requestStart;
     apiRequests().add(1, attrs);
-    apiRequestDuration().recordMs(performance.now() - requestStart, attrs);
+    apiRequestDuration().recordMs(durationMs, attrs);
+    if (durationMs >= SLOW_API_REQUEST_MS) {
+      lc.warn?.('slow fetch from API server', {
+        operation: metricsOpts.operation,
+        result: attrs.result,
+        attemptCount,
+        durationMs,
+      });
+    }
     apiInFlight().add(-1, metricAttrs);
   }
 }

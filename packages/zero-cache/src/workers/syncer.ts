@@ -56,7 +56,8 @@ export type ReplicaReadyState = {
 export type ServingLagViewSyncer = Pick<
   ViewSyncer,
   'createdAtMs' | 'servedVersion' | 'servingLagEligible'
->;
+> &
+  Partial<Pick<ViewSyncer, 'awaitingAPIServer'>>;
 
 export type ServingLagStats = {
   readonly activeClientGroups: number;
@@ -68,9 +69,24 @@ export type ServingLagStats = {
   readonly maxMs: number;
 };
 
-type ServingLagDistribution = ServingLagStats & {
-  readonly lagsMs: readonly number[];
+/**
+ * The part of the serving lag that is not the API server's. A client group
+ * that is waiting for the API server to respond to a transform or validation
+ * request is not sent changes until it does, so it lags for as long as the
+ * API server takes. Because `maxMs` is the lag of the worst client group, a
+ * single such client group makes the whole worker look like it is behind.
+ */
+export type ServingLagAPIWaitStats = {
+  /** The lagging client groups that are waiting for the API server. */
+  readonly laggingClientGroupsAwaitingAPI: number;
+  /** `maxMs` of the client groups that are not waiting for the API server. */
+  readonly maxExcludingAPIWaitMs: number;
 };
+
+type ServingLagDistribution = ServingLagStats &
+  ServingLagAPIWaitStats & {
+    readonly lagsMs: readonly number[];
+  };
 
 export type PipelineDedupViewSyncer = Pick<
   ViewSyncer,
@@ -250,6 +266,8 @@ function computeServingLagDistributionMs(
 ): ServingLagDistribution {
   const lags: number[] = [];
   let laggingClientGroups = 0;
+  let laggingClientGroupsAwaitingAPI = 0;
+  let maxExcludingAPIWaitMs = 0;
   let firstNeededIndex = replicaReadyStates.length;
 
   for (const viewSyncer of viewSyncers) {
@@ -274,6 +292,12 @@ function computeServingLagDistributionMs(
     lags.push(lagMs);
     if (lagMs > 0) {
       laggingClientGroups++;
+      if (viewSyncer.awaitingAPIServer) {
+        laggingClientGroupsAwaitingAPI++;
+      }
+    }
+    if (!viewSyncer.awaitingAPIServer) {
+      maxExcludingAPIWaitMs = Math.max(maxExcludingAPIWaitMs, lagMs);
     }
   }
 
@@ -291,8 +315,20 @@ function computeServingLagDistributionMs(
     p75Ms: percentileNearestRank(lags, 75),
     p99Ms: percentileNearestRank(lags, 99),
     maxMs: lags.at(-1) ?? 0,
+    laggingClientGroupsAwaitingAPI,
+    maxExcludingAPIWaitMs,
     lagsMs: lags,
   };
+}
+
+export function computeServingLagAPIWaitStatsMs(
+  now: number,
+  replicaReadyStates: ReplicaReadyState[],
+  viewSyncers: Iterable<ServingLagViewSyncer>,
+): ServingLagAPIWaitStats {
+  const {laggingClientGroupsAwaitingAPI, maxExcludingAPIWaitMs} =
+    computeServingLagDistributionMs(now, replicaReadyStates, viewSyncers);
+  return {laggingClientGroupsAwaitingAPI, maxExcludingAPIWaitMs};
 }
 
 export function computeServingLagStatsMs(
@@ -590,6 +626,32 @@ export class Syncer implements SingletonService {
       'Number of active client groups with unserved replica changes',
     ).addCallback(result => {
       result.observe(this.#computeServingLagDistribution().laggingClientGroups);
+    });
+
+    getOrCreateGauge('sync', 'serving_lag_excluding_api_wait', {
+      description:
+        'sync.serving_lag of the client groups that are not waiting for the ' +
+        'API server to respond to a transform or validation request. A ' +
+        'client group is not sent changes while it waits, so when ' +
+        'sync.serving_lag is high and this is not, the lag is the API ' +
+        "server's response time, not the view-syncer's.",
+      unit: 'millisecond',
+    }).addCallback(result => {
+      result.observe(
+        this.#computeServingLagDistribution().maxExcludingAPIWaitMs,
+      );
+    });
+
+    getOrCreateGauge(
+      'sync',
+      'serving_lagging_client_groups_awaiting_api',
+      'Number of active client groups with unserved replica changes that ' +
+        'are waiting for the API server to respond to a transform or ' +
+        'validation request',
+    ).addCallback(result => {
+      result.observe(
+        this.#computeServingLagDistribution().laggingClientGroupsAwaitingAPI,
+      );
     });
 
     getOrCreateGauge(
