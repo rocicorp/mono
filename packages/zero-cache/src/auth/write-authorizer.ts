@@ -5,6 +5,7 @@ import type {JWTPayload} from 'jose';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
+import {assignProperty, getOwnProperty} from '../../../shared/src/objects.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {Condition} from '../../../zero-protocol/src/ast.ts';
 import type {
@@ -306,13 +307,15 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     // Extract primary key values from operation value and validate they exist
     const values: Record<string, ReadonlyJSONValue> = {};
     for (const col of columns) {
-      const val = opValue[col];
+      // Only own properties are values: every object inherits a `__proto__`.
+      const val = getOwnProperty(opValue, col);
       if (val === undefined) {
         throw new Error(
           `Primary key column '${col}' is missing from operation value for table ${tableName}`,
         );
       }
-      values[col] = val;
+      // A plain assignment to `__proto__` would not add a property.
+      assignProperty(values, col, val);
     }
 
     return values;
@@ -427,7 +430,10 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     const applicableCellPolicies: Policy[] = [];
     if (cellPolicies) {
       for (const [column, policy] of Object.entries(cellPolicies)) {
-        if (action === 'update' && op.value[column] === undefined) {
+        if (
+          action === 'update' &&
+          getOwnProperty(op.value, column) === undefined
+        ) {
           // If the cell is not being updated, we do not need to check
           // the cell rules.
           continue;

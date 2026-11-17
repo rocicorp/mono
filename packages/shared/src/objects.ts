@@ -39,6 +39,19 @@ export function assignProperty<K extends string | number | symbol, T>(
   object[key] = value;
 }
 
+/**
+ * Reads an own property of `object`, or `undefined` when `object` has no own
+ * property named `key`. A plain `object[key]` also finds inherited
+ * properties, so `object['__proto__']` is `Object.prototype` on an object
+ * with no such property of its own.
+ */
+export function getOwnProperty<T>(
+  object: Readonly<Record<string, T>>,
+  key: string,
+): T | undefined {
+  return Object.hasOwn(object, key) ? object[key] : undefined;
+}
+
 export function mapEntries<T, U>(
   input: Record<string, T>,
   mapper: (key: string, val: T) => [key: string, val: U],

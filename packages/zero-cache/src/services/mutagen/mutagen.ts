@@ -3,6 +3,10 @@ import type {LogContext} from '@rocicorp/logger';
 import type {JWTPayload} from 'jose';
 import postgres from 'postgres';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
+import {
+  assignProperty,
+  getOwnProperty,
+} from '../../../../shared/src/objects.ts';
 import {resolver} from '../../../../shared/src/resolver.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
@@ -435,7 +439,13 @@ function getUpdateSQL(
   const {primaryKey, value} = update;
   const id: Record<string, PrimaryKeyValue> = {};
   for (const key of primaryKey) {
-    id[key] = v.parse(value[key], primaryKeyValueSchema);
+    // A plain assignment to `__proto__` would not add a property, which
+    // would leave that column out of the WHERE clause.
+    assignProperty(
+      id,
+      key,
+      v.parse(getOwnProperty(value, key), primaryKeyValueSchema),
+    );
   }
   return tx`UPDATE ${tx(table)} SET ${tx(value)} WHERE ${Object.entries(
     id,
@@ -455,7 +465,8 @@ function getDeleteSQL(
     if (conditions.length > 0) {
       conditions.push(tx`AND`);
     }
-    conditions.push(tx`${tx(key)} = ${value[key]}`);
+    const keyValue = v.parse(getOwnProperty(value, key), primaryKeyValueSchema);
+    conditions.push(tx`${tx(key)} = ${keyValue}`);
   }
 
   return tx`DELETE FROM ${tx(tableName)} WHERE ${conditions}`;

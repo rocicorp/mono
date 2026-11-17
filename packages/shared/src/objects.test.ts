@@ -1,6 +1,7 @@
 import {expect, test} from 'vitest';
 import {
   assignProperty,
+  getOwnProperty,
   mapAllEntries,
   mapEntries,
   mapValues,
@@ -118,4 +119,21 @@ test('assignProperty safely assigns __proto__ as an own property', () => {
   expect(Object.getPrototypeOf(target)).toBe(Object.prototype);
   expect(Object.hasOwn(target, '__proto__')).toBe(true);
   expect(target.__proto__).toBe('bar');
+});
+
+test('getOwnProperty reads own properties only', () => {
+  const object: Record<string, unknown> = JSON.parse(
+    '{"a": 1, "__proto__": 2, "u": null}',
+  );
+  expect(getOwnProperty(object, 'a')).toBe(1);
+  expect(getOwnProperty(object, '__proto__')).toBe(2);
+  expect(getOwnProperty(object, 'u')).toBe(null);
+  expect(getOwnProperty(object, 'missing')).toBe(undefined);
+
+  const empty: Record<string, unknown> = {};
+  expect(getOwnProperty(empty, '__proto__')).toBe(undefined);
+  expect(getOwnProperty(empty, 'toString')).toBe(undefined);
+  expect(getOwnProperty(Object.create({inherited: 1}), 'inherited')).toBe(
+    undefined,
+  );
 });
