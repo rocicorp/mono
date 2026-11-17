@@ -153,7 +153,7 @@ export function compile(
       FROM (${inner}) ${ZQL_RESULT_TABLE_IDENT}`;
   }
 
-  return sql`SELECT 
+  return sql`SELECT
     ${toJSON(ZQL_RESULT_TABLE_KEY, format?.singular)}::text AS ${ZQL_RESULT_KEY_IDENT}
     FROM (${select(spec, ast, format)}) ${ZQL_RESULT_TABLE_IDENT}`;
 }
@@ -666,15 +666,23 @@ function where(
 
   switch (condition.type) {
     case 'and':
-      return sql`(${sql.join(
-        condition.conditions.map(c => where(spec, c, table)),
-        ' AND ',
-      )})`;
+      if (condition.conditions.length > 0) {
+        return sql`(${sql.join(
+          condition.conditions.map(c => where(spec, c, table)),
+          ' AND ',
+        )})`;
+      } else {
+        return sql`TRUE`;
+      }
     case 'or':
-      return sql`(${sql.join(
-        condition.conditions.map(c => where(spec, c, table)),
-        ' OR ',
-      )})`;
+      if (condition.conditions.length > 0) {
+        return sql`(${sql.join(
+          condition.conditions.map(c => where(spec, c, table)),
+          ' OR ',
+        )})`;
+      } else {
+        return sql`FALSE`;
+      }
     case 'correlatedSubquery':
       // `scalar` is deliberately ignored here. It is a planner hint for the
       // IVM engines, which have no cost-based planner and benefit from
@@ -820,7 +828,7 @@ export function any(
 ): SQLQuery {
   return sql`${condition.op === 'NOT IN' ? sql`NOT` : sql``}
     (
-      ${valueComparison(spec, condition.left, table, condition.right, false)} = ANY 
+      ${valueComparison(spec, condition.left, table, condition.right, false)} = ANY
       (${valueComparison(spec, condition.right, table, condition.left, true)})
     )`;
 }
