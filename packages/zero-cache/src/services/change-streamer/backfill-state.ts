@@ -1,7 +1,10 @@
 import {unreachable} from '../../../../shared/src/asserts.ts';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {deepEqual} from '../../../../shared/src/json.ts';
-import {assignProperty} from '../../../../shared/src/objects.ts';
+import {
+  assignProperty,
+  getOwnProperty,
+} from '../../../../shared/src/objects.ts';
 import {
   acceptBackfill,
   covers,
@@ -256,9 +259,7 @@ export class BackfillState {
     for (const name of [...relation.rowKey.columns, ...columns]) {
       // Not backfill.columns[name], which is Object.prototype for a column
       // named __proto__ that is not being backfilled.
-      const col = Object.hasOwn(backfill.columns, name)
-        ? backfill.columns[name]
-        : undefined;
+      const col = getOwnProperty(backfill.columns, name);
       if (!col) {
         continue;
       }

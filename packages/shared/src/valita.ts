@@ -1,4 +1,5 @@
 import * as v from '@badrap/valita';
+import {getOwnProperty} from './objects.ts';
 
 export * from '@badrap/valita';
 
@@ -483,7 +484,7 @@ export function taggedObjectUnion<K extends string, T extends v.ObjectType[]>(
   }
   const expectedTag = `Expected ${displayList('or', [...tagTypes])}`;
   const tagOf = (value: object): unknown =>
-    Object.hasOwn(value, key) ? (value as Record<K, unknown>)[key] : undefined;
+    getOwnProperty(value as Record<string, unknown>, key);
   const type = v
     .unknown()
     .chain((value, options): v.ValitaResult<Known | UnrecognizedObject<K>> => {

@@ -1,5 +1,8 @@
 import {deepEqual} from '../../../../../shared/src/json.ts';
-import {assignProperty} from '../../../../../shared/src/objects.ts';
+import {
+  assignProperty,
+  getOwnProperty,
+} from '../../../../../shared/src/objects.ts';
 import type {
   BackfillProgressMark,
   BackfillRequest,
@@ -167,7 +170,7 @@ export function getTableSuperset(
   for (const [name, col] of Object.entries(req2.columns)) {
     // Not columns[name], which is Object.prototype for a column named
     // __proto__ that is missing from req1.
-    const exists = Object.hasOwn(columns, name) ? columns[name] : undefined;
+    const exists = getOwnProperty(columns, name);
     if (!exists) {
       assignProperty(columns, name, col);
       continue;

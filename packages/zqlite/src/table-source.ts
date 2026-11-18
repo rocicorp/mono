@@ -4,7 +4,7 @@ import type {LogConfig} from '../../otel/src/log-options.ts';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
 import {getOrInsertComputed} from '../../shared/src/map.ts';
 import {must} from '../../shared/src/must.ts';
-import {assignProperty} from '../../shared/src/objects.ts';
+import {assignProperty, getOwnProperty} from '../../shared/src/objects.ts';
 import type {Writable} from '../../shared/src/writable.ts';
 import type {Condition, Ordering} from '../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../zero-protocol/src/data.ts';
@@ -1169,9 +1169,7 @@ export function rawColumn(
   tableName: string,
 ): RawColumn {
   // Not a column that `valueTypes` merely inherits, e.g. `toString`.
-  const valueType = Object.hasOwn(valueTypes, name)
-    ? valueTypes[name]
-    : undefined;
+  const valueType = getOwnProperty(valueTypes, name);
   if (valueType === undefined) {
     throw invalidColumnError(valueTypes, name, tableName);
   }
