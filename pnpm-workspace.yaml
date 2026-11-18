@@ -37,6 +37,10 @@ auditConfig:
     # fixed in glob 14, a new major. The bypass only affects callers that rely
     # on an AbortSignal to bound a walk.
     - GHSA-3g3m-2fjr-6pw4
+    # picomatch <=4.0.7 (2.x and 4.x via vite, tinyglobby, fdir, micromatch and
+    # other dev tooling). No 4.0.8 on npm yet. The ReDoS needs
+    # attacker-controlled glob patterns.
+    - GHSA-fc5q-39xc-vjpf
 
 minimumReleaseAgeExclude:
   - '@rocicorp/zero-virtual@0.7.0'
