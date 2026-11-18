@@ -1211,6 +1211,8 @@ export function fromSQLiteRawRow(
   return newRow;
 }
 
+const INT64_MIN = -(2n ** 63n);
+
 function fromSQLiteType(
   valueType: ValueType,
   v: SQLiteValue,
@@ -1227,6 +1229,16 @@ function fromSQLiteType(
     case 'string':
     case 'null':
       if (typeof v === 'bigint') {
+        if (v === INT64_MIN) {
+          // Since SQLite check-in 03f699544e (2026-10-21, in zero-sqlite3
+          // 1.2.0), a REAL of exactly -2^63 bound to a column with INTEGER or
+          // NUMERIC affinity is stored as the integer -9223372036854775808,
+          // which safeIntegers(true) reads as a bigint. It used to stay a
+          // REAL, and a double reads back fine. -2^63 is exactly
+          // representable as a double, so converting it loses nothing.
+          // https://sqlite.org/src/info/03f699544e
+          return -(2 ** 63);
+        }
         if (v > Number.MAX_SAFE_INTEGER || v < Number.MIN_SAFE_INTEGER) {
           throw new UnsupportedValueError(
             `value ${v} (in ${tableName}.${column}) is outside of supported bounds`,

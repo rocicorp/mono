@@ -45,8 +45,7 @@ auditConfig:
 minimumReleaseAgeExclude:
   - '@rocicorp/zero-virtual@0.7.0'
   - '@badrap/valita@0.5.5'
-  - '@rocicorp/zero-sqlite3@1.1.5'
-  - '@rocicorp/zero-sqlite3@1.1.7'
+  - '@rocicorp/zero-sqlite3@1.2.0'
   - '@rocicorp/zero@1.12.0'
 
 # docusaurus-plugin-typedoc and typedoc-docusaurus-theme both import typedoc

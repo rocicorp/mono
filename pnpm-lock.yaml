@@ -574,8 +574,8 @@ importers:
         specifier: ^18.2.5
         version: 18.2.5(react-native@0.88.0(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.1))(react@19.3.1)
       '@rocicorp/zero-sqlite3':
-        specifier: ^1.1.7
-        version: 1.1.7
+        specifier: ^1.2.0
+        version: 1.2.0
       '@types/command-line-args':
         specifier: ^5.2.3
         version: 5.2.3
@@ -938,8 +938,8 @@ importers:
         specifier: ^6.1.0
         version: 6.1.0
       '@rocicorp/zero-sqlite3':
-        specifier: ^1.1.7
-        version: 1.1.7
+        specifier: ^1.2.0
+        version: 1.2.0
       '@standard-schema/spec':
         specifier: ^1.1.0
         version: 1.1.0
@@ -1143,8 +1143,8 @@ importers:
         specifier: ^6.1.0
         version: 6.1.0
       '@rocicorp/zero-sqlite3':
-        specifier: ^1.1.7
-        version: 1.1.7
+        specifier: ^1.2.0
+        version: 1.2.0
       '@types/basic-auth':
         specifier: ^1.1.8
         version: 1.1.8
@@ -1688,8 +1688,8 @@ importers:
         specifier: npm:@rocicorp/zero@1.12.0
         version: '@rocicorp/zero@1.12.0(@opentelemetry/core@2.12.0(@opentelemetry/api@1.9.1))'
       '@rocicorp/zero-sqlite3':
-        specifier: ^1.1.7
-        version: 1.1.7
+        specifier: ^1.2.0
+        version: 1.2.0
       '@types/pg':
         specifier: ^8.20.0
         version: 8.20.0
@@ -1757,8 +1757,8 @@ importers:
         specifier: ^6.1.0
         version: 6.1.0
       '@rocicorp/zero-sqlite3':
-        specifier: ^1.1.7
-        version: 1.1.7
+        specifier: ^1.2.0
+        version: 1.2.0
       zql:
         specifier: workspace:*
         version: link:../zql
@@ -5893,9 +5893,9 @@ packages:
   '@rocicorp/logger@6.1.0':
     resolution: {integrity: sha512-4jOOwem9veRxl7uH15PsmT48PRd3OzM7n3umkO8WCMt8M929MJml4kfeqAcga8feZAfUb/+DRjsvl4ySgPWqYQ==}
 
-  '@rocicorp/zero-sqlite3@1.1.7':
-    resolution: {integrity: sha512-aLcgrhws7mlr7pbe7pD/QDie5u4dzOrrkzYZMLdd338nKrE6vqbvIY2hBPyOJ81BAY/aJzZXYpDMxNTMlPl86A==}
-    engines: {bun: '>=1.1.0', node: 22.x || 24.x}
+  '@rocicorp/zero-sqlite3@1.2.0':
+    resolution: {integrity: sha512-Drwcuc+hLJrKL7tBoAGTLsbB8cQ/oVs/JM3T4uhblFZPJQeV/nTl715AKzIMNfDMT8XzCldJb92+M9gitCww7g==}
+    engines: {node: 22.x || 24.x}
     hasBin: true
 
   '@rocicorp/zero-virtual@0.7.0':
@@ -18530,7 +18530,7 @@ snapshots:
 
   '@rocicorp/logger@6.1.0': {}
 
-  '@rocicorp/zero-sqlite3@1.1.7':
+  '@rocicorp/zero-sqlite3@1.2.0':
     dependencies:
       node-gyp-build: 4.8.4
 
@@ -18563,7 +18563,7 @@ snapshots:
       '@postgresql-typed/oids': 0.2.0
       '@rocicorp/lock': 2.0.1
       '@rocicorp/logger': 6.1.0
-      '@rocicorp/zero-sqlite3': 1.1.7
+      '@rocicorp/zero-sqlite3': 1.2.0
       '@standard-schema/spec': 1.1.0
       '@types/basic-auth': 1.1.8
       '@types/ws': 8.18.2

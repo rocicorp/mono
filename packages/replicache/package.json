@@ -79,7 +79,7 @@
   },
   "devDependencies": {
     "@op-engineering/op-sqlite": "^18.2.5",
-    "@rocicorp/zero-sqlite3": "^1.1.7",
+    "@rocicorp/zero-sqlite3": "^1.2.0",
     "@types/command-line-args": "^5.2.3",
     "@types/command-line-usage": "^5.0.4",
     "command-line-args": "^6.0.2",
@@ -100,7 +100,7 @@
   },
   "peerDependencies": {
     "@op-engineering/op-sqlite": "^18.2.5",
-    "@rocicorp/zero-sqlite3": "^1.1.7",
+    "@rocicorp/zero-sqlite3": "^1.2.0",
     "expo-sqlite": "^58.0.13"
   },
   "peerDependenciesMeta": {
