@@ -327,100 +327,28 @@ function getIncrementalMigrations(
 
     // v32: Upgrade the DDL event functions to include the shard's event
     // secret in every ddl event, and install the secret.
-    32: {
-      migrateSchema: async (lc, sql) => {
-        const [{publications}] = await sql<{publications: string[]}[]>`
-          SELECT publications FROM ${sql(shardConfigTable)}`;
-        await setupTriggers(
-          lc,
-          sql,
-          {...shard, publications},
-          installPartialIndexTriggers,
-        );
-        lc.info?.(`Upgraded DDL event triggers`);
-      },
-    },
+    // Superseded by v40.
 
     // v34: Upgrade the DDL event functions to classify a column as an array
     // only if its type is the array type of its element, and to report
     // deferrable unique constraints as non-unique.
-    34: {
-      migrateSchema: async (lc, sql) => {
-        const [{publications}] = await sql<{publications: string[]}[]>`
-          SELECT publications FROM ${sql(shardConfigTable)}`;
-        await setupTriggers(
-          lc,
-          sql,
-          {...shard, publications},
-          installPartialIndexTriggers,
-        );
-        lc.info?.(`Upgraded DDL event triggers`);
-      },
-    },
+    // Superseded by v40.
 
     // v36: Upgrade the DDL event triggers to fire for CREATE TABLE AS and
     // SELECT INTO.
-    36: {
-      migrateSchema: async (lc, sql) => {
-        const [{publications}] = await sql<{publications: string[]}[]>`
-          SELECT publications FROM ${sql(shardConfigTable)}`;
-        await setupTriggers(
-          lc,
-          sql,
-          {...shard, publications},
-          installPartialIndexTriggers,
-        );
-        lc.info?.(`Upgraded DDL event triggers`);
-      },
-    },
+    // Superseded by v40.
 
     // v37: Upgrade the DDL event functions to report the partitions of a
     // partitioned table.
-    37: {
-      migrateSchema: async (lc, sql) => {
-        const [{publications}] = await sql<{publications: string[]}[]>`
-          SELECT publications FROM ${sql(shardConfigTable)}`;
-        await setupTriggers(
-          lc,
-          sql,
-          {...shard, publications},
-          installPartialIndexTriggers,
-        );
-        lc.info?.(`Upgraded DDL event triggers`);
-      },
-    },
+    // Superseded by v40.
 
     // v38: Upgrade the DDL event triggers to fire for the commands that drop
     // the columns of a table with CASCADE, such as DROP TYPE.
-    38: {
-      migrateSchema: async (lc, sql) => {
-        const [{publications}] = await sql<{publications: string[]}[]>`
-          SELECT publications FROM ${sql(shardConfigTable)}`;
-        await setupTriggers(
-          lc,
-          sql,
-          {...shard, publications},
-          installPartialIndexTriggers,
-        );
-        lc.info?.(`Upgraded DDL event triggers`);
-      },
-    },
+    // Superseded by v40.
 
     // v39: Upgrade the DDL event functions to report a unique index as not
     // unique when distinct values of its columns are the same on the replica.
-    39: {
-      migrateSchema: async (lc, sql) => {
-        const [{publications}] = await sql<{publications: string[]}[]>`
-          SELECT publications FROM ${sql(shardConfigTable)}`;
-        await setupTriggers(
-          lc,
-          sql,
-          {...shard, publications},
-          installPartialIndexTriggers,
-        );
-        lc.info?.(`Upgraded DDL event triggers`);
-      },
-    },
+    // Superseded by v40.
 
     // v40: Upgrade the DDL event functions to report no primary key for one
     // with a column that is not published, and set the replica identity of
