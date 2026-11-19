@@ -108,7 +108,7 @@ export type InitialSyncOptions = {
 };
 
 export type ReplicaOptions = {
-  epoch: number;
+  epoch: string;
   backupV5: boolean;
   /**
    * Whether the replica's slot is acked only after transactions are stored in
@@ -133,7 +133,7 @@ export async function initialSync(
   syncOptions: InitialSyncOptions,
   context: ServerContext,
   {epoch, backupV5, pgChangeLog}: ReplicaOptions = {
-    epoch: 0,
+    epoch: '0',
     backupV5: true,
     pgChangeLog: false,
   },

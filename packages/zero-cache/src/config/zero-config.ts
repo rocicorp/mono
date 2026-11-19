@@ -469,7 +469,7 @@ export const zeroOptions = {
     },
 
     pgReplicationEpoch: {
-      type: v.number().optional(() => 0),
+      type: v.string().optional(() => '0'),
       desc: [
         `Replication managers sharing the same epoch attempt to converge on a single`,
         `generation (i.e. the result of an initial-sync); if multiple tasks are started`,
@@ -485,6 +485,7 @@ export const zeroOptions = {
         `new replication manager to wait for it. Incrementing the replication epoch is recommended`,
         `instead.`,
       ],
+      // TODO: Unhide when the db's epoch column is migrated to a text value in v1.14.
       hidden: true,
     },
 

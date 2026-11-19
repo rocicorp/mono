@@ -88,7 +88,7 @@ export async function initializePostgresChangeSource(
     inactiveReplicaGracePeriodMs,
     pgChangeLog,
   }: InitializeOptions = {
-    epoch: 0,
+    epoch: '0',
     slotPerReplica: false,
     backupV5: true,
     inactiveReplicaGracePeriodMs: DEFAULT_INACTIVE_REPLICA_GRACE_PERIOD_MS,
@@ -324,7 +324,7 @@ async function forkOrResumeReplica(
   lc: LogContext,
   sql: PostgresDB,
   shard: ShardID,
-  epoch: number,
+  epoch: string,
   slotFailover: boolean,
   replicaFile: string,
   {litestream, acquirePurgeLock, cleanup}: RestoreOptions,
@@ -501,7 +501,7 @@ export async function getSourceAndDestinationReplicas(
   lc: LogContext,
   sql: PostgresDB,
   shard: ShardID,
-  epoch: number,
+  epoch: string,
   slotFailover: boolean,
   gracePeriodMs: number,
   /**

@@ -350,7 +350,7 @@ export async function createReplicaAndSlot<T>(
   sql: PostgresDB,
   sessionName: string,
   shard: ShardID,
-  epoch: number,
+  epoch: string,
   replicaID: string,
   failover: boolean,
   backupOptions: BackupOptions,
