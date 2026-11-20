@@ -1,5 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
+import {assert} from '../../shared/src/asserts.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
+import {must} from '../../shared/src/must.ts';
 import {getSizeOfEntry} from '../../shared/src/size-of-value.ts';
 import {compareValues} from '../../zql/src/ivm/data.ts';
 import type {Storage} from '../../zql/src/ivm/operator.ts';
@@ -10,6 +12,15 @@ import {Database} from './db.ts';
 export interface ClientGroupStorage {
   /** Creates a {@link Storage} instance for a single operator. */
   createStorage(): Storage;
+
+  /**
+   * Replaces the values of `target`, created by this client group, with those
+   * of `source`, created by any client group of the same storage.
+   *
+   * @returns The number of values copied, or undefined if `source` is not from
+   *          the same storage.
+   */
+  copyStorage(source: object, target: Storage): number | undefined;
 
   /** Deletes all storage for the client group. */
   destroy(): void;
@@ -22,6 +33,7 @@ type Statements = {
   scan: Statement;
   clear: Statement;
   clearOp: Statement;
+  copyOp: Statement;
   commit: Statement;
   begin: Statement;
 };
@@ -160,6 +172,8 @@ export class DatabaseStorage {
   readonly #maxSize: number;
   /** Orders the operators by last use. */
   #clock = 0;
+  /** The operator behind each {@link Storage} handed out. */
+  readonly #ops = new WeakMap<object, OpStorage>();
 
   constructor(db: Database, options: DatabaseStorageOptions = {}) {
     this.#stmts = {
@@ -195,6 +209,10 @@ export class DatabaseStorage {
       `),
       clearOp: db.prepare(`
         DELETE FROM storage WHERE clientGroupID = ? AND op = ?
+      `),
+      copyOp: db.prepare(`
+        INSERT INTO storage (clientGroupID, op, key, val)
+          SELECT ?, ?, key, val FROM storage WHERE clientGroupID = ? AND op = ?
       `),
       commit: db.prepare('COMMIT'),
       begin: db.prepare('BEGIN'),
@@ -357,6 +375,37 @@ export class DatabaseStorage {
     this.#numWrites = 0;
   }
 
+  /**
+   * Replaces the values of `to` with those of `from`. Values are never mutated,
+   * so in memory they are shared, and in SQLite they are copied without being
+   * parsed.
+   */
+  #copy(from: OpStorage, to: OpStorage): number {
+    from.lastUsed = to.lastUsed = ++this.#clock;
+    if (!to.values) {
+      this.#maybeCheckpoint();
+      this.#stmts.clearOp.run(to.cgID, to.opID);
+    }
+    this.#release(to);
+    const {values} = from;
+    if (values) {
+      to.values = new Map(values);
+      to.size = from.size;
+      this.#size += from.size;
+      if (values.size > 0) {
+        this.#inMemory.add(to);
+      }
+      if (this.#size > this.#maxSize) {
+        this.#spillLeastRecentlyUsed();
+      }
+      return values.size;
+    }
+    this.#maybeCheckpoint();
+    to.values = undefined;
+    return this.#stmts.copyOp.run(to.cgID, to.opID, from.cgID, from.opID)
+      .changes;
+  }
+
   *#scan(
     op: OpStorage,
     opts: {prefix: string} = {prefix: ''},
@@ -416,7 +465,7 @@ export class DatabaseStorage {
           this.#options.maxMemoryBytes > 0,
         );
         ops.add(op);
-        return {
+        const storage: Storage = {
           get: (key, def?) => this.#get(op, key, def),
           set: (key, val) => this.#set(op, key, val),
           del: key => this.#del(op, key),
@@ -426,6 +475,18 @@ export class DatabaseStorage {
             ops.delete(op);
           },
         };
+        this.#ops.set(storage, op);
+        return storage;
+      },
+
+      copyStorage: (source, target) => {
+        const from = this.#ops.get(source);
+        const to = must(this.#ops.get(target));
+        assert(
+          ops.has(to),
+          'copyStorage: target is not from this client group',
+        );
+        return from && this.#copy(from, to);
       },
 
       destroy,

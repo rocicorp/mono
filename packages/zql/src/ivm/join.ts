@@ -181,7 +181,7 @@ export class Join implements Input {
     this.#child.destroy();
   }
 
-  get parentIndexForTest(): JoinIndex {
+  get parentIndex(): JoinIndex {
     return this.#parentIndex;
   }
 

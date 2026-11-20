@@ -49,6 +49,27 @@ export class JoinIndex {
     this.#partitionKey = partitionKey;
   }
 
+  /**
+   * Replaces this index's contents with a copy of those of an index built for
+   * the same query, for a pipeline that takes its state from another rather than
+   * by fetching.
+   */
+  copyFrom(other: JoinIndex): void {
+    this.#unpartitioned.clear();
+    this.#partitioned.clear();
+    for (const [joinKey, pks] of other.#unpartitioned) {
+      this.#unpartitioned.set(joinKey, new Set(pks));
+    }
+    for (const [joinKey, partitions] of other.#partitioned) {
+      const copy = new Map<string, Partition>();
+      for (const [key, {constraint, pks}] of partitions) {
+        copy.set(key, {constraint, pks: new Set(pks)});
+      }
+      this.#partitioned.set(joinKey, copy);
+    }
+    this.#size = other.#size;
+  }
+
   /** The number of parent rows in the index. */
   get size(): number {
     return this.#size;
