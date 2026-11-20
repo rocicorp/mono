@@ -42,6 +42,7 @@ import {ensureShardSchema} from './schema/init.ts';
 import * as ReplicaStage from './schema/replica-stage-enum.ts';
 import {InitialSync, Replicate} from './schema/replica-stage-enum.ts';
 import {
+  deleteUninitializedReplica,
   dropShard,
   getActiveReplicas,
   getReplicaAtVersion,
@@ -536,6 +537,18 @@ export async function getSourceAndDestinationReplicas(
   let slotCreateMs: number | undefined;
   // The position that the source replica's slot must reach to be forked.
   let forkLSN: LSN | undefined;
+  // Releases the destination replica's slot and deletes its (uninitialized)
+  // row when the fork is abandoned. Otherwise, the row, which cannot be
+  // restored from, would remain until its slot is dropped by the
+  // replication-slot-cleanup-monitor.
+  const abandonDestination = async () => {
+    if (!destination) {
+      return;
+    }
+    const {initialSession, replica} = destination;
+    await endSession(initialSession);
+    await deleteUninitializedReplica(sql, shard, replica.id);
+  };
   const lastLogged = new Map<string, number>();
   const shouldLog = (key: string, intervalMs: number) => {
     const now = Date.now();
@@ -558,7 +571,7 @@ export async function getSourceAndDestinationReplicas(
       }
       if (replicas.length === 0) {
         lc.info?.(`no suitable replicas to restore from`, {replicas});
-        await endSession(destination?.initialSession);
+        await abandonDestination();
         return undefined;
       }
       for (const replica of replicas) {
@@ -722,7 +735,7 @@ export async function getSourceAndDestinationReplicas(
               lc.info?.(`resuming replica ${replica.id}@${replica.slot}`);
               // If a new replication slot was created in anticipation of forking,
               // cancel it
-              await endSession(destination?.initialSession);
+              await abandonDestination();
               return {
                 restoreFrom: replica,
                 replicateTo: reserved.replica,
@@ -737,7 +750,14 @@ export async function getSourceAndDestinationReplicas(
       }
     }
   } catch (e) {
-    await endSession(destination?.initialSession);
+    try {
+      await abandonDestination();
+    } catch (cleanupErr) {
+      lc.warn?.(
+        `unable to abandon fork destination ${destination?.replica.id}`,
+        cleanupErr,
+      );
+    }
     throw e;
   }
 }

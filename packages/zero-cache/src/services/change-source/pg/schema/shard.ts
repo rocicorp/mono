@@ -384,6 +384,26 @@ export async function initRestoreReplica(
 }
 
 /**
+ * Deletes a replica created for a fork (i.e. in the `Restore` stage) that
+ * was abandoned before being initialized with {@link initRestoreReplica}.
+ * Its slot, once inactive and without a replica, is then dropped by
+ * `dropUnclaimedSlots()` or the replication-slot-cleanup-monitor.
+ *
+ * Only an uninitialized replica (i.e. with an empty `generation`) is deleted.
+ */
+export async function deleteUninitializedReplica(
+  sql: PostgresDB,
+  shard: ShardID,
+  id: string,
+): Promise<void> {
+  const schema = upstreamSchema(shard);
+  await sql`
+    DELETE FROM ${sql(schema)}.replicas
+      WHERE id = ${id} AND "generation" = '';
+  `;
+}
+
+/**
  * Gets at the given version and optional ID. If no ID is specified, gets
  * the latest (i.e. highest rank) replica with that version.
  */
@@ -511,9 +531,17 @@ export async function getRestoreCandidates(
            AND (s."active" OR r."stage" != ${InitialSync})
            AND s.restart_lsn IS NOT NULL
            AND s.wal_status IS DISTINCT FROM 'lost'
+           -- ignore fork destinations not yet initialized from a source
+           -- (see initRestoreReplica()), which cannot be restored from
+           AND r.generation != ''
+           -- ignore inactive replicas without a backup, e.g. a fork
+           -- destination whose task exited before taking over its slot
+           -- (which sets the backupPath), which cannot be restored from
+           AND (s."active" OR r."backupPath" IS NOT NULL)
       )
            AND "epoch"::text = ${epoch}::text AND "backupV5"
            AND (slots.active OR "stage" != ${InitialSync})
+           AND (slots.active OR "backupPath" IS NOT NULL)
            AND slots.restart_lsn IS NOT NULL
            AND slots.wal_status IS DISTINCT FROM 'lost'
 
