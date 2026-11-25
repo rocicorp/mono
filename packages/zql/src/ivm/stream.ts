@@ -173,3 +173,6 @@ function closeAfterError(it: Iterator<unknown> | undefined): void {
     // The first error wins.
   }
 }
+
+/** One 'yield'. Returned for a round of `eachStream` that was reached by one. */
+export const yieldOnce: Stream<'yield'> = Object.freeze(['yield'] as const);

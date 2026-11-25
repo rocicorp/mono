@@ -29,7 +29,7 @@ import {
   type Output,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import {type Stream} from './stream.ts';
+import {andFinally, eachStream, type Stream, yieldOnce} from './stream.ts';
 import {
   isInParentFetch,
   readParentFetchBounds,
@@ -291,78 +291,109 @@ export class Join implements Input {
     }
   }
 
-  *#pushChildChange(childRow: Row, change: Change): Stream<'yield'> {
+  #pushChildChange(childRow: Row, change: Change): Stream<'yield'> {
     this.#inprogressChildChange = change;
     this.#inprogressChildChangePosition = undefined;
     this.#inprogressReachedParents =
       this.#parent.getSchema().sort === undefined ? new Set() : undefined;
+    let s: Stream<'yield'>;
     try {
-      const constraint = buildJoinConstraint(
-        childRow,
-        this.#childKey,
-        this.#parentKey,
-      );
-      if (constraint) {
-        const partitions = this.#parentIndex.lookup(childRow, this.#childKey);
-        let fetchConstraints: Record<string, Value>[];
-        if (partitions) {
-          fetchConstraints = partitions.map(partitionConstraint =>
-            partitionConstraint
-              ? {...constraint, ...partitionConstraint}
-              : constraint,
-          );
-        } else if (change[ChangeIndex.TYPE] === this.#qualifyingChildChange) {
-          fetchConstraints = [constraint];
-        } else {
-          return;
-        }
-
-        if (this.#boundProvider) {
-          this.#inprogressParentFetchBounds = readParentFetchBounds(
-            this.#boundProvider,
-            fetchConstraints,
-          );
-        }
-
-        let parentNodeStream: Stream<Node | 'yield'>;
-        if (fetchConstraints.length === 1) {
-          parentNodeStream = this.#parent.fetch({
-            constraint: fetchConstraints[0],
-          });
-        } else {
-          const streams = fetchConstraints.map(c =>
-            this.#parent.fetch({constraint: c}),
-          );
-          const compare = (a: Node, b: Node) =>
-            this.#schema.compareRows(a.row, b.row);
-          parentNodeStream = mergeSortedStreams(streams, compare);
-        }
-
-        for (const parentNode of parentNodeStream) {
-          if (parentNode === 'yield') {
-            yield parentNode;
-            continue;
-          }
-          this.#inprogressChildChangePosition = parentNode.row;
-          this.#inprogressReachedParents?.add(
-            canonicalKey(parentNode.row, this.#schema.primaryKey),
-          );
-          const childChange = makeChildChange(
-            this.#processParentNode(parentNode.row, parentNode.relationships),
-            {
-              relationshipName: this.#relationshipName,
-              change,
-            },
-          );
-          yield* this.#output.push(childChange, this);
-        }
-      }
-    } finally {
-      this.#inprogressChildChange = undefined;
-      this.#inprogressChildChangePosition = undefined;
-      this.#inprogressReachedParents = undefined;
-      this.#inprogressParentFetchBounds = undefined;
+      s = this.#pushChildChangeToParents(childRow, change);
+    } catch (e) {
+      this.#endChildChange();
+      throw e;
     }
+    return andFinally(s, this.#endChildChange);
+  }
+
+  readonly #endChildChange = (): void => {
+    this.#inprogressChildChange = undefined;
+    this.#inprogressChildChangePosition = undefined;
+    this.#inprogressReachedParents = undefined;
+    this.#inprogressParentFetchBounds = undefined;
+  };
+
+  #pushChildChangeToParents(childRow: Row, change: Change): Stream<'yield'> {
+    const constraint = buildJoinConstraint(
+      childRow,
+      this.#childKey,
+      this.#parentKey,
+    );
+    if (!constraint) {
+      return emptyArray;
+    }
+    const partitions = this.#parentIndex.lookup(childRow, this.#childKey);
+    let fetchConstraints: Record<string, Value>[];
+    if (partitions) {
+      fetchConstraints = partitions.map(partitionConstraint =>
+        partitionConstraint
+          ? {...constraint, ...partitionConstraint}
+          : constraint,
+      );
+    } else if (change[ChangeIndex.TYPE] === this.#qualifyingChildChange) {
+      fetchConstraints = [constraint];
+    } else {
+      return emptyArray;
+    }
+
+    if (this.#boundProvider) {
+      this.#inprogressParentFetchBounds = readParentFetchBounds(
+        this.#boundProvider,
+        fetchConstraints,
+      );
+    }
+
+    let parentNodeStream: Stream<Node | 'yield'>;
+    if (fetchConstraints.length === 1) {
+      parentNodeStream = this.#parent.fetch({
+        constraint: fetchConstraints[0],
+      });
+    } else {
+      const streams = fetchConstraints.map(c =>
+        this.#parent.fetch({constraint: c}),
+      );
+      const compare = (a: Node, b: Node) =>
+        this.#schema.compareRows(a.row, b.row);
+      parentNodeStream = mergeSortedStreams(streams, compare);
+    }
+
+    return this.#pushChildChangeFrom(
+      parentNodeStream[Symbol.iterator](),
+      change,
+    );
+  }
+
+  /**
+   * Pushes the child change to each parent in `it`. Closes `it` if it stops
+   * before the end: on an error, or when the stream returned is not read to
+   * its end.
+   */
+  #pushChildChangeFrom(
+    it: Iterator<Node | 'yield'>,
+    change: Change,
+  ): Stream<'yield'> {
+    return eachStream(() => {
+      const r = it.next();
+      if (r.done) {
+        return undefined;
+      }
+      const parentNode = r.value;
+      if (parentNode === 'yield') {
+        return yieldOnce;
+      }
+      this.#inprogressChildChangePosition = parentNode.row;
+      this.#inprogressReachedParents?.add(
+        canonicalKey(parentNode.row, this.#schema.primaryKey),
+      );
+      const childChange = makeChildChange(
+        this.#processParentNode(parentNode.row, parentNode.relationships),
+        {
+          relationshipName: this.#relationshipName,
+          change,
+        },
+      );
+      return this.#output.push(childChange, this);
+    }, it);
   }
 
   /**
