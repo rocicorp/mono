@@ -17,7 +17,7 @@ import {
   type Storage,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import {type Stream} from './stream.ts';
+import {andThen, type Stream} from './stream.ts';
 import {
   constraintMatchesPartitionKey,
   makePartitionKeyComparator,
@@ -188,10 +188,9 @@ export class Cap implements Operator {
     }
   }
 
-  *push(change: Change): Stream<'yield'> {
+  push(change: Change): Stream<'yield'> {
     if (change[ChangeIndex.TYPE] === ChangeType.EDIT) {
-      yield* this.#pushEditChange(change);
-      return;
+      return this.#pushEditChange(change);
     }
 
     const capStateKey = getCapStateKey(
@@ -200,7 +199,7 @@ export class Cap implements Operator {
     );
     const capState = this.#storage.get(capStateKey);
     if (!capState) {
-      return;
+      return emptyArray;
     }
 
     const pk = serializePK(change[ChangeIndex.NODE].row, this.#primaryKey);
@@ -209,16 +208,15 @@ export class Cap implements Operator {
       if (capState.size < this.#limit) {
         const pks = [...capState.pks, pk];
         this.#storage.set(capStateKey, {size: capState.size + 1, pks});
-        yield* this.#output.push(change, this);
-        return;
+        return this.#output.push(change, this);
       }
       // Full — drop
-      return;
+      return emptyArray;
     } else if (change[ChangeIndex.TYPE] === ChangeType.REMOVE) {
       const pkIndex = capState.pks.indexOf(pk);
       if (pkIndex === -1) {
         // Not in our set — drop
-        return;
+        return emptyArray;
       }
       // Remove from set
       const pks = [...capState.pks];
@@ -236,39 +234,98 @@ export class Cap implements Operator {
           ) as Constraint)
         : undefined;
 
-      let replacement: Node | undefined;
-      for (const node of this.#input.fetch({constraint})) {
-        if (node === 'yield') {
-          yield node;
-          continue;
-        }
-        const nodePK = serializePK(node.row, this.#primaryKey);
-        if (!pkSet.has(nodePK)) {
-          replacement = node;
-          break;
-        }
+      const it = this.#input.fetch({constraint})[Symbol.iterator]();
+      const replacement = this.#readReplacement(it, pkSet);
+      if (replacement === 'yield') {
+        return this.#refillAfterYield(
+          change,
+          capStateKey,
+          pks,
+          newSize,
+          pkSet,
+          it,
+        );
       }
-
       if (replacement) {
-        // Store state WITHOUT replacement during remove forward,
-        // matching Take's pattern of hiding in-flight changes from re-fetches.
-        this.#storage.set(capStateKey, {size: newSize, pks});
-        yield* this.#output.push(change, this);
+        it.return?.();
+      }
+      return this.#pushRemove(change, capStateKey, pks, newSize, replacement);
+    }
+    const pkSet = new Set(capState.pks);
+    return pkSet.has(pk) ? this.#output.push(change, this) : emptyArray;
+  }
+
+  /**
+   * Reads `it` up to the first row that is not tracked, which takes the place
+   * of a removed one. Returns 'yield' if the fetch yields before that, and
+   * `undefined` if the fetch ends.
+   */
+  #readReplacement(
+    it: Iterator<Node | 'yield'>,
+    pkSet: Set<string>,
+  ): Node | 'yield' | undefined {
+    for (;;) {
+      const r = it.next();
+      if (r.done) {
+        return undefined;
+      }
+      const node = r.value;
+      if (
+        node === 'yield' ||
+        !pkSet.has(serializePK(node.row, this.#primaryKey))
+      ) {
+        return node;
+      }
+    }
+  }
+
+  /** The rest of a remove whose fetch for a replacement has yielded. */
+  *#refillAfterYield(
+    change: Change,
+    capStateKey: string,
+    pks: string[],
+    newSize: number,
+    pkSet: Set<string>,
+    it: Iterator<Node | 'yield'>,
+  ): Stream<'yield'> {
+    let replacement: Node | 'yield' | undefined = 'yield';
+    try {
+      while (replacement === 'yield') {
+        yield 'yield';
+        replacement = this.#readReplacement(it, pkSet);
+      }
+    } finally {
+      // Not at its end: a replacement was found, or the consumer stopped
+      // reading at a 'yield'.
+      if (replacement !== undefined) {
+        it.return?.();
+      }
+    }
+    yield* this.#pushRemove(change, capStateKey, pks, newSize, replacement);
+  }
+
+  /** Forwards a remove and, if there is one, the add of its replacement. */
+  #pushRemove(
+    change: Change,
+    capStateKey: string,
+    pks: string[],
+    newSize: number,
+    replacement: Node | undefined,
+  ): Stream<'yield'> {
+    if (replacement) {
+      // Store state WITHOUT replacement during remove forward,
+      // matching Take's pattern of hiding in-flight changes from re-fetches.
+      this.#storage.set(capStateKey, {size: newSize, pks});
+      return andThen(this.#output.push(change, this), () => {
         // Now add replacement to set and forward the add.
         const replacementPK = serializePK(replacement.row, this.#primaryKey);
         pks.push(replacementPK);
         this.#storage.set(capStateKey, {size: newSize + 1, pks});
-        yield* this.#output.push(makeAddChange(replacement), this);
-      } else {
-        this.#storage.set(capStateKey, {size: newSize, pks});
-        yield* this.#output.push(change, this);
-      }
-    } else if (change[ChangeIndex.TYPE] === ChangeType.CHILD) {
-      const pkSet = new Set(capState.pks);
-      if (pkSet.has(pk)) {
-        yield* this.#output.push(change, this);
-      }
+        return this.#output.push(makeAddChange(replacement), this);
+      });
     }
+    this.#storage.set(capStateKey, {size: newSize, pks});
+    return this.#output.push(change, this);
   }
 
   #pushEditChange(change: EditChange): Stream<'yield'> {
