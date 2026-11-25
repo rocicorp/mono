@@ -1,4 +1,5 @@
 import {makeEmptyIteratorWithReturn} from '../../../shared/src/iterables.ts';
+import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {BuilderDelegate} from '../builder/builder.ts';
 import type {NoSubqueryCondition} from '../builder/filter.ts';
 import type {Change} from './change.ts';
@@ -98,10 +99,8 @@ export class FilterStart implements FilterInput, Output {
     return this.#output.push(change, this);
   }
 
-  *reconcile(_pusher: InputBase): Stream<'yield'> {
-    if (this.#output.reconcile) {
-      yield* this.#output.reconcile(this);
-    }
+  reconcile(_pusher: InputBase): Stream<'yield'> {
+    return this.#output.reconcile ? this.#output.reconcile(this) : emptyArray;
   }
 
   *fetch(req: FetchRequest): Stream<Node | 'yield'> {
@@ -179,10 +178,8 @@ export class FilterEnd implements Input, FilterOutput {
     return this.#output.push(change, this);
   }
 
-  *reconcile(_pusher: InputBase): Stream<'yield'> {
-    if (this.#output.reconcile) {
-      yield* this.#output.reconcile(this);
-    }
+  reconcile(_pusher: InputBase): Stream<'yield'> {
+    return this.#output.reconcile ? this.#output.reconcile(this) : emptyArray;
   }
 }
 

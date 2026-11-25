@@ -1,5 +1,6 @@
 import {areEqual} from '../../../shared/src/arrays.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
@@ -113,10 +114,8 @@ export class Exists implements FilterOperator {
     return this.#input.getSchema();
   }
 
-  *reconcile(_pusher: InputBase): Stream<'yield'> {
-    if (this.#output.reconcile) {
-      yield* this.#output.reconcile(this);
-    }
+  reconcile(_pusher: InputBase): Stream<'yield'> {
+    return this.#output.reconcile ? this.#output.reconcile(this) : emptyArray;
   }
 
   *push(change: Change): Stream<'yield'> {

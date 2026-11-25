@@ -1,4 +1,5 @@
 import {unreachable} from '../../../shared/src/asserts.ts';
+import {emptyArray} from '../../../shared/src/sentinels.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import type {Change} from './change.ts';
@@ -92,9 +93,7 @@ export class JoinIndexTap implements Operator {
     return this.#output.push(change, this);
   }
 
-  *reconcile(_pusher: InputBase): Stream<'yield'> {
-    if (this.#output.reconcile) {
-      yield* this.#output.reconcile(this);
-    }
+  reconcile(_pusher: InputBase): Stream<'yield'> {
+    return this.#output.reconcile ? this.#output.reconcile(this) : emptyArray;
   }
 }

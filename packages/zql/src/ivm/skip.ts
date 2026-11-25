@@ -1,4 +1,5 @@
 import {assert} from '../../../shared/src/asserts.ts';
+import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
@@ -86,29 +87,25 @@ export class Skip implements Operator {
     return cmp < 0 || (cmp === 0 && !this.#bound.exclusive);
   }
 
-  *push(change: Change): Stream<'yield'> {
-    const shouldBePresent = (row: Row) => this.#shouldBePresent(row);
+  push(change: Change): Stream<'yield'> {
     if (change[ChangeIndex.TYPE] === ChangeType.EDIT) {
-      yield* maybeSplitAndPushEditChange(
+      return maybeSplitAndPushEditChange(
         change,
-        shouldBePresent,
+        row => this.#shouldBePresent(row),
         this.#output,
         this,
       );
-      return;
     }
 
     change satisfies AddChange | RemoveChange | ChildChange;
 
-    if (shouldBePresent(change[ChangeIndex.NODE].row)) {
-      yield* this.#output.push(change, this);
-    }
+    return this.#shouldBePresent(change[ChangeIndex.NODE].row)
+      ? this.#output.push(change, this)
+      : emptyArray;
   }
 
-  *reconcile(_pusher: InputBase): Stream<'yield'> {
-    if (this.#output.reconcile) {
-      yield* this.#output.reconcile(this);
-    }
+  reconcile(_pusher: InputBase): Stream<'yield'> {
+    return this.#output.reconcile ? this.#output.reconcile(this) : emptyArray;
   }
 
   #getStart(req: FetchRequest): Start | undefined | 'empty' {

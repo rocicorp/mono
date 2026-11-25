@@ -1,4 +1,5 @@
 import {assert} from '../../../shared/src/asserts.ts';
+import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Change} from './change.ts';
 import {constraintMatchesRow, type Constraint} from './constraint.ts';
@@ -125,14 +126,12 @@ export class TakeGate implements Operator, TakeBoundProvider {
     this.#input.destroy();
   }
 
-  *push(change: Change, _pusher: InputBase): Stream<'yield'> {
-    yield* this.#output.push(change, this);
+  push(change: Change, _pusher: InputBase): Stream<'yield'> {
+    return this.#output.push(change, this);
   }
 
-  *reconcile(_pusher: InputBase): Stream<'yield'> {
-    if (this.#output.reconcile) {
-      yield* this.#output.reconcile(this);
-    }
+  reconcile(_pusher: InputBase): Stream<'yield'> {
+    return this.#output.reconcile ? this.#output.reconcile(this) : emptyArray;
   }
 
   *fetch(req: FetchRequest): Stream<Node | 'yield'> {

@@ -1,4 +1,5 @@
 import {makeEmptyIteratorWithReturn} from '../../../shared/src/iterables.ts';
+import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Change} from './change.ts';
 import {type Node} from './data.ts';
@@ -61,10 +62,8 @@ export class Filter implements FilterOperator {
     return filterPush(change, this.#output, this, this.#predicate);
   }
 
-  *reconcile(_pusher: InputBase): Stream<'yield'> {
-    if (this.#output.reconcile) {
-      yield* this.#output.reconcile(this);
-    }
+  reconcile(_pusher: InputBase): Stream<'yield'> {
+    return this.#output.reconcile ? this.#output.reconcile(this) : emptyArray;
   }
 }
 

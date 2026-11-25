@@ -100,12 +100,10 @@ export class FanIn implements FilterOperator {
     return emptyArray;
   }
 
-  *fanOutDoneReconciling(): Stream<'yield'> {
+  fanOutDoneReconciling(): Stream<'yield'> {
     if (this.#inputs.length === 0) {
-      return;
+      return emptyArray;
     }
-    if (this.#output.reconcile) {
-      yield* this.#output.reconcile(this);
-    }
+    return this.#output.reconcile ? this.#output.reconcile(this) : emptyArray;
   }
 }
