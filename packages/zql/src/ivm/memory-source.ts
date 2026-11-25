@@ -64,6 +64,7 @@ import {
   andFinally,
   andThen,
   consume,
+  doneResult,
   eachStream,
   type Stream,
 } from './stream.ts';
@@ -391,7 +392,7 @@ export class MemorySource implements Source {
     return [...this.#indexes.keys()];
   }
 
-  *#fetch(req: FetchRequest, conn: Connection): Stream<Node | 'yield'> {
+  #fetch(req: FetchRequest, conn: Connection): Stream<Node | 'yield'> {
     // multiConstraints is handled by driving sub-fetches off the first
     // entry's values and post-filtering matches against any remaining
     // entries. TableSource implements multi-IN natively via SQL `AND` of
@@ -402,8 +403,7 @@ export class MemorySource implements Source {
       req.multiConstraints &&
       req.multiConstraints.some(mc => mc.length > 0)
     ) {
-      yield* this.#fetchMulti(req, conn);
-      return;
+      return this.#fetchMulti(req, conn);
     }
     const requestedSort = must(conn.sort);
     const {compareRows} = conn;
@@ -518,17 +518,11 @@ export class MemorySource implements Source {
     const overlayActive =
       this.#overlay && conn.lastPushedEpoch >= this.#overlay.epoch;
     if (!overlayActive && !req.start && !pkConstraint) {
-      const {constraint} = req;
-      for (const row of rowsIterable) {
-        if (constraint && !constraintMatchesRow(constraint, row)) {
-          break;
-        }
-        if (mergedFilterPredicate && !mergedFilterPredicate(row)) {
-          continue;
-        }
-        yield {row, relationships: {}};
-      }
-      return;
+      return new SourceNodes(
+        rowsIterable,
+        req.constraint,
+        mergedFilterPredicate,
+      );
     }
 
     const withOverlay = generateWithOverlay(
@@ -571,7 +565,7 @@ export class MemorySource implements Source {
       req.constraint,
     );
 
-    yield* mergedFilterPredicate
+    return mergedFilterPredicate
       ? generateWithFilter(withConstraint, mergedFilterPredicate)
       : withConstraint;
   }
@@ -754,6 +748,70 @@ function mergePredicates(
     return reqPredicate;
   }
   return row => connPredicate(row) && reqPredicate(row);
+}
+
+/**
+ * The fast path of `#fetch`: walks rows from the scan start, stops once the
+ * constraint no longer matches, drops the rows the filter rejects and wraps
+ * the rest as Nodes. An iterator rather than a generator, see `mapNodes` in
+ * stream.ts.
+ */
+class SourceNodes implements IterableIterator<Node> {
+  readonly #rows: Iterator<Row>;
+  readonly #constraint: Constraint | undefined;
+  readonly #predicate: ((row: Row) => boolean) | undefined;
+  #done = false;
+
+  constructor(
+    rows: Iterator<Row>,
+    constraint: Constraint | undefined,
+    predicate: ((row: Row) => boolean) | undefined,
+  ) {
+    this.#rows = rows;
+    this.#constraint = constraint;
+    this.#predicate = predicate;
+  }
+
+  [Symbol.iterator](): this {
+    return this;
+  }
+
+  next(): IteratorResult<Node> {
+    if (this.#done) {
+      return doneResult;
+    }
+    const constraint = this.#constraint;
+    const predicate = this.#predicate;
+    for (;;) {
+      let row: Row;
+      let matches: boolean;
+      try {
+        const r = this.#rows.next();
+        if (r.done) {
+          this.#done = true;
+          return doneResult;
+        }
+        row = r.value;
+        if (constraint && !constraintMatchesRow(constraint, row)) {
+          this.#done = true;
+          return doneResult;
+        }
+        matches = !predicate || predicate(row);
+      } catch (e) {
+        // A fetch that threw is over, as a generator's is.
+        this.#done = true;
+        throw e;
+      }
+      if (matches) {
+        return {value: {row, relationships: {}}, done: false};
+      }
+    }
+  }
+
+  return(): IteratorResult<Node> {
+    this.#done = true;
+    return doneResult;
+  }
 }
 
 function* generateWithConstraint(

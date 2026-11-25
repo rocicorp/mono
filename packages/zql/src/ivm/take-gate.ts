@@ -13,7 +13,7 @@ import {
   type Output,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import type {Stream} from './stream.ts';
+import {nodesWhile, type Stream} from './stream.ts';
 
 export interface TakeBoundProvider {
   getBound(constraint?: Constraint): Row | undefined;
@@ -134,27 +134,20 @@ export class TakeGate implements Operator, TakeBoundProvider {
     return this.#output.reconcile ? this.#output.reconcile(this) : emptyArray;
   }
 
-  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
+  fetch(req: FetchRequest): Stream<Node | 'yield'> {
     if (this.#openDepth > 0 || req.reverse) {
-      yield* this.#input.fetch(req);
-      return;
+      return this.#input.fetch(req);
     }
 
     const bound = this.#boundProvider?.getBound(req.constraint);
     if (!bound) {
-      yield* this.#input.fetch(req);
-      return;
+      return this.#input.fetch(req);
     }
 
-    for (const node of this.#input.fetch(req)) {
-      if (node === 'yield') {
-        yield 'yield';
-        continue;
-      }
-      if (this.#comparator(node.row, bound) > 0) {
-        return;
-      }
-      yield node;
-    }
+    const comparator = this.#comparator;
+    return nodesWhile(
+      this.#input.fetch(req),
+      node => comparator(node.row, bound) <= 0,
+    );
   }
 }

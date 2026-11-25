@@ -1,4 +1,5 @@
 import {emptyArray} from '../../../shared/src/sentinels.ts';
+import type {Node} from './data.ts';
 
 /**
  * streams are lazy forward-only iterables.
@@ -176,3 +177,199 @@ function closeAfterError(it: Iterator<unknown> | undefined): void {
 
 /** One 'yield'. Returned for a round of `eachStream` that was reached by one. */
 export const yieldOnce: Stream<'yield'> = Object.freeze(['yield'] as const);
+
+// The per-row steps of a fetch are iterators rather than generators, as
+// `SkipYieldsStream` is: resuming a generator costs several times what a call
+// to `next()` does, and a fetch pays it per row for each operator the row
+// passes through. Each one is both the iterable and the iterator, passes
+// 'yield' through, hands on the inner iterator's result object where the value
+// is unchanged, and closes the inner iterator when it stops early or its
+// callback throws, as a generator's `for...of` would.
+
+type NodeResult = IteratorResult<Node | 'yield'>;
+
+export const doneResult: IteratorReturnResult<undefined> = Object.freeze({
+  value: undefined,
+  done: true,
+});
+
+class MappedNodes implements IterableIterator<Node | 'yield'> {
+  readonly #it: Iterator<Node | 'yield'>;
+  readonly #fn: (node: Node) => Node;
+  #done = false;
+
+  constructor(it: Iterator<Node | 'yield'>, fn: (node: Node) => Node) {
+    this.#it = it;
+    this.#fn = fn;
+  }
+
+  [Symbol.iterator](): this {
+    return this;
+  }
+
+  next(): NodeResult {
+    if (this.#done) {
+      return doneResult;
+    }
+    let r: NodeResult;
+    try {
+      r = this.#it.next();
+    } catch (e) {
+      // A fetch that threw is over, as a generator's is.
+      this.#done = true;
+      throw e;
+    }
+    if (r.done) {
+      this.#done = true;
+      return r;
+    }
+    if (r.value === 'yield') {
+      return r;
+    }
+    let node: Node;
+    try {
+      node = this.#fn(r.value);
+    } catch (e) {
+      this.#done = true;
+      closeAfterError(this.#it);
+      throw e;
+    }
+    return {value: node, done: false};
+  }
+
+  return(): NodeResult {
+    if (!this.#done) {
+      this.#done = true;
+      this.#it.return?.();
+    }
+    return doneResult;
+  }
+}
+
+/** Yields `fn(node)` for each node of `stream`. */
+export function mapNodes(
+  stream: Stream<Node | 'yield'>,
+  fn: (node: Node) => Node,
+): Stream<Node | 'yield'> {
+  return new MappedNodes(stream[Symbol.iterator](), fn);
+}
+
+class TappedNodes implements IterableIterator<Node | 'yield'> {
+  readonly #it: Iterator<Node | 'yield'>;
+  readonly #fn: (node: Node) => void;
+  #done = false;
+
+  constructor(it: Iterator<Node | 'yield'>, fn: (node: Node) => void) {
+    this.#it = it;
+    this.#fn = fn;
+  }
+
+  [Symbol.iterator](): this {
+    return this;
+  }
+
+  next(): NodeResult {
+    if (this.#done) {
+      return doneResult;
+    }
+    let r: NodeResult;
+    try {
+      r = this.#it.next();
+    } catch (e) {
+      // A fetch that threw is over, as a generator's is.
+      this.#done = true;
+      throw e;
+    }
+    if (r.done) {
+      this.#done = true;
+    } else if (r.value !== 'yield') {
+      try {
+        this.#fn(r.value);
+      } catch (e) {
+        this.#done = true;
+        closeAfterError(this.#it);
+        throw e;
+      }
+    }
+    return r;
+  }
+
+  return(): NodeResult {
+    if (!this.#done) {
+      this.#done = true;
+      this.#it.return?.();
+    }
+    return doneResult;
+  }
+}
+
+/** Yields the nodes of `stream`, calling `fn` on each as it goes by. */
+export function tapNodes(
+  stream: Stream<Node | 'yield'>,
+  fn: (node: Node) => void,
+): Stream<Node | 'yield'> {
+  return new TappedNodes(stream[Symbol.iterator](), fn);
+}
+
+class NodesWhile implements IterableIterator<Node | 'yield'> {
+  readonly #it: Iterator<Node | 'yield'>;
+  readonly #fn: (node: Node) => boolean;
+  #done = false;
+
+  constructor(it: Iterator<Node | 'yield'>, fn: (node: Node) => boolean) {
+    this.#it = it;
+    this.#fn = fn;
+  }
+
+  [Symbol.iterator](): this {
+    return this;
+  }
+
+  next(): NodeResult {
+    if (this.#done) {
+      return doneResult;
+    }
+    let r: NodeResult;
+    try {
+      r = this.#it.next();
+    } catch (e) {
+      // A fetch that threw is over, as a generator's is.
+      this.#done = true;
+      throw e;
+    }
+    if (r.done) {
+      this.#done = true;
+      return r;
+    }
+    if (r.value !== 'yield') {
+      let passes: boolean;
+      try {
+        passes = this.#fn(r.value);
+      } catch (e) {
+        this.#done = true;
+        closeAfterError(this.#it);
+        throw e;
+      }
+      if (!passes) {
+        return this.return();
+      }
+    }
+    return r;
+  }
+
+  return(): NodeResult {
+    if (!this.#done) {
+      this.#done = true;
+      this.#it.return?.();
+    }
+    return doneResult;
+  }
+}
+
+/** Yields the nodes of `stream` up to the first for which `fn` is false. */
+export function nodesWhile(
+  stream: Stream<Node | 'yield'>,
+  fn: (node: Node) => boolean,
+): Stream<Node | 'yield'> {
+  return new NodesWhile(stream[Symbol.iterator](), fn);
+}

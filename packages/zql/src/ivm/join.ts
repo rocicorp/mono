@@ -29,7 +29,13 @@ import {
   type Output,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import {andFinally, eachStream, type Stream, yieldOnce} from './stream.ts';
+import {
+  andFinally,
+  eachStream,
+  mapNodes,
+  type Stream,
+  yieldOnce,
+} from './stream.ts';
 import {
   isInParentFetch,
   readParentFetchBounds,
@@ -192,16 +198,14 @@ export class Join implements Input {
     return this.#schema;
   }
 
-  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
-    for (const parentNode of this.#parent.fetch(req)) {
-      if (parentNode === 'yield') {
-        yield parentNode;
-        continue;
-      }
-      this.#indexParentRow(parentNode.row);
-      yield this.#processParentNode(parentNode.row, parentNode.relationships);
-    }
+  fetch(req: FetchRequest): Stream<Node | 'yield'> {
+    return mapNodes(this.#parent.fetch(req), this.#fetchParentNode);
   }
+
+  readonly #fetchParentNode = (parentNode: Node): Node => {
+    this.#indexParentRow(parentNode.row);
+    return this.#processParentNode(parentNode.row, parentNode.relationships);
+  };
 
   #pushParent(change: Change): Stream<'yield'> {
     switch (change[ChangeIndex.TYPE]) {

@@ -14,7 +14,7 @@ import {
   type Output,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import type {Stream} from './stream.ts';
+import {type Stream, tapNodes} from './stream.ts';
 
 /**
  * Keeps the parent indexes of a pipeline's EXISTS joins equal to the rows
@@ -56,16 +56,15 @@ export class JoinIndexTap implements Operator {
     this.#input.destroy();
   }
 
-  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
-    for (const node of this.#input.fetch(req)) {
-      if (node !== 'yield') {
-        for (const index of this.#indexes) {
-          index.add(node.row);
-        }
-      }
-      yield node;
-    }
+  fetch(req: FetchRequest): Stream<Node | 'yield'> {
+    return tapNodes(this.#input.fetch(req), this.#indexNode);
   }
+
+  readonly #indexNode = (node: Node): void => {
+    for (const index of this.#indexes) {
+      index.add(node.row);
+    }
+  };
 
   push(change: Change): Stream<'yield'> {
     switch (change[ChangeIndex.TYPE]) {
