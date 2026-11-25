@@ -8,6 +8,7 @@ import {
   sortByNaturalRuns,
 } from '../../../shared/src/natural-runs.ts';
 import {assignProperty} from '../../../shared/src/objects.ts';
+import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {
   Condition,
   Ordering,
@@ -59,7 +60,13 @@ import type {
   SourceInput,
 } from './source.ts';
 import {makeSourceChangeAdd, makeSourceChangeRemove} from './source.ts';
-import {consume, type Stream} from './stream.ts';
+import {
+  andFinally,
+  andThen,
+  consume,
+  eachStream,
+  type Stream,
+} from './stream.ts';
 
 export type Overlay = {
   epoch: number;
@@ -661,12 +668,20 @@ export class MemorySource implements Source {
     index.data = BTreeSet.fromSorted(comparator, sorted);
   }
 
-  *push(change: SourceChange): Stream<'yield'> {
-    for (const result of this.genPush(change)) {
-      if (result === 'yield') {
-        yield result;
-      }
-    }
+  push(change: SourceChange): Stream<'yield'> {
+    const primaryIndex = this.#getPrimaryIndex();
+    const {data} = primaryIndex;
+    const exists = (row: Row) => data.has(row);
+    const setOverlay = (o: Overlay | undefined) => (this.#overlay = o);
+    const writeChange = (c: SourceChange) => this.#writeChange(c);
+    return pushAndWriteWithSplitEdit(
+      this.#connections,
+      change,
+      exists,
+      setOverlay,
+      writeChange,
+      () => ++this.#pushEpoch,
+    );
   }
 
   genPush(change: SourceChange) {
@@ -769,26 +784,7 @@ export function* genPushAndWriteWithSplitEdit(
   writeChange: (c: SourceChange) => void,
   getNextEpoch: () => number,
 ) {
-  let shouldSplitEdit = false;
-  if (change[SourceChangeIndex.TYPE] === ChangeType.EDIT) {
-    for (const {splitEditKeys} of connections) {
-      if (splitEditKeys) {
-        for (const key of splitEditKeys) {
-          if (
-            !valuesEqual(
-              change[SourceChangeIndex.ROW][key],
-              change[SourceChangeIndex.OLD_ROW][key],
-            )
-          ) {
-            shouldSplitEdit = true;
-            break;
-          }
-        }
-      }
-    }
-  }
-
-  if (change[SourceChangeIndex.TYPE] === ChangeType.EDIT && shouldSplitEdit) {
+  if (mustSplitEdit(connections, change)) {
     yield* genPushAndWrite(
       connections,
       makeSourceChangeRemove(change[SourceChangeIndex.OLD_ROW]),
@@ -838,53 +834,19 @@ function* genPush(
   setOverlay: (o: Overlay | undefined) => void,
   pushEpoch: number,
 ) {
-  if (exists) {
-    switch (change[SourceChangeIndex.TYPE]) {
-      case ChangeType.ADD:
-        assert(
-          !exists(change[SourceChangeIndex.ROW]),
-          () => `Row already exists ${stringify(change)}`,
-        );
-        break;
-      case ChangeType.REMOVE:
-        assert(
-          exists(change[SourceChangeIndex.ROW]),
-          () => `Row not found ${stringify(change)}`,
-        );
-        break;
-      case ChangeType.EDIT:
-        assert(
-          exists(change[SourceChangeIndex.OLD_ROW]),
-          () => `Row not found ${stringify(change)}`,
-        );
-        break;
-      default:
-        unreachable(change);
-    }
-  }
-
+  assertCanPush(change, exists);
   setOverlay({epoch: pushEpoch, change});
   try {
     for (const conn of connections) {
       const {output, filters, input} = conn;
       if (output) {
         conn.lastPushedEpoch = pushEpoch;
-        const outputChange: Change =
-          change[SourceChangeIndex.TYPE] === ChangeType.EDIT
-            ? makeEditChange(
-                {row: change[SourceChangeIndex.ROW], relationships: {}},
-                {row: change[SourceChangeIndex.OLD_ROW], relationships: {}},
-              )
-            : change[SourceChangeIndex.TYPE] === ChangeType.ADD
-              ? makeAddChange({
-                  row: change[SourceChangeIndex.ROW],
-                  relationships: {},
-                })
-              : makeRemoveChange({
-                  row: change[SourceChangeIndex.ROW],
-                  relationships: {},
-                });
-        yield* filterPush(outputChange, output, input, filters?.predicate);
+        yield* filterPush(
+          toOutputChange(change),
+          output,
+          input,
+          filters?.predicate,
+        );
         yield undefined;
       }
     }
@@ -899,6 +861,194 @@ function* genPush(
   } finally {
     setOverlay(undefined);
   }
+}
+
+/**
+ * Whether `change` is an edit of a column that one of the connections splits
+ * edits on, and so is pushed as a remove and an add.
+ */
+function mustSplitEdit(
+  connections: readonly Connection[],
+  change: SourceChange,
+): change is SourceChangeEdit {
+  if (change[SourceChangeIndex.TYPE] !== ChangeType.EDIT) {
+    return false;
+  }
+  for (const {splitEditKeys} of connections) {
+    if (splitEditKeys) {
+      for (const key of splitEditKeys) {
+        if (
+          !valuesEqual(
+            change[SourceChangeIndex.ROW][key],
+            change[SourceChangeIndex.OLD_ROW][key],
+          )
+        ) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function assertCanPush(
+  change: SourceChange,
+  exists: ((row: Row) => boolean) | undefined,
+): void {
+  if (!exists) {
+    return;
+  }
+  switch (change[SourceChangeIndex.TYPE]) {
+    case ChangeType.ADD:
+      assert(
+        !exists(change[SourceChangeIndex.ROW]),
+        () => `Row already exists ${stringify(change)}`,
+      );
+      break;
+    case ChangeType.REMOVE:
+      assert(
+        exists(change[SourceChangeIndex.ROW]),
+        () => `Row not found ${stringify(change)}`,
+      );
+      break;
+    case ChangeType.EDIT:
+      assert(
+        exists(change[SourceChangeIndex.OLD_ROW]),
+        () => `Row not found ${stringify(change)}`,
+      );
+      break;
+    default:
+      unreachable(change);
+  }
+}
+
+/** The change a connection's output gets for a change to the source. */
+function toOutputChange(change: SourceChange): Change {
+  return change[SourceChangeIndex.TYPE] === ChangeType.EDIT
+    ? makeEditChange(
+        {row: change[SourceChangeIndex.ROW], relationships: {}},
+        {row: change[SourceChangeIndex.OLD_ROW], relationships: {}},
+      )
+    : change[SourceChangeIndex.TYPE] === ChangeType.ADD
+      ? makeAddChange({
+          row: change[SourceChangeIndex.ROW],
+          relationships: {},
+        })
+      : makeRemoveChange({
+          row: change[SourceChangeIndex.ROW],
+          relationships: {},
+        });
+}
+
+// `genPushAndWriteWithSplitEdit` and the two generators it uses, for
+// `MemorySource.push`: run without a generator for as long as nothing yields
+// (see `andThen` in stream.ts), and without the `undefined` the generators
+// yield after each connection, which `push` drops. `genPush` keeps the
+// generators for callers that step through a push connection by connection.
+function pushAndWriteWithSplitEdit(
+  connections: readonly Connection[],
+  change: SourceChange,
+  exists: ((row: Row) => boolean) | undefined,
+  setOverlay: (o: Overlay | undefined) => Overlay | undefined,
+  writeChange: (c: SourceChange) => void,
+  getNextEpoch: () => number,
+): Stream<'yield'> {
+  if (mustSplitEdit(connections, change)) {
+    return andThen(
+      pushAndWrite(
+        connections,
+        makeSourceChangeRemove(change[SourceChangeIndex.OLD_ROW]),
+        exists,
+        setOverlay,
+        writeChange,
+        getNextEpoch(),
+      ),
+      () =>
+        pushAndWrite(
+          connections,
+          makeSourceChangeAdd(change[SourceChangeIndex.ROW]),
+          exists,
+          setOverlay,
+          writeChange,
+          getNextEpoch(),
+        ),
+    );
+  }
+  return pushAndWrite(
+    connections,
+    change,
+    exists,
+    setOverlay,
+    writeChange,
+    getNextEpoch(),
+  );
+}
+
+function pushAndWrite(
+  connections: readonly Connection[],
+  change: SourceChangeAdd | SourceChangeRemove | SourceChangeEdit,
+  exists: ((row: Row) => boolean) | undefined,
+  setOverlay: (o: Overlay | undefined) => Overlay | undefined,
+  writeChange: (c: SourceChange) => void,
+  pushEpoch: number,
+): Stream<'yield'> {
+  assertCanPush(change, exists);
+  setOverlay({epoch: pushEpoch, change});
+  let s: Stream<'yield'>;
+  try {
+    s = pushToConnections(connections, change, pushEpoch);
+  } catch (e) {
+    setOverlay(undefined);
+    throw e;
+  }
+  if (s === emptyArray) {
+    setOverlay(undefined);
+    writeChange(change);
+    return emptyArray;
+  }
+  return andThen(
+    andFinally(s, () => setOverlay(undefined)),
+    () => {
+      writeChange(change);
+      return emptyArray;
+    },
+  );
+}
+
+/** Pushes `change` to each connection, then reconciles each. */
+function pushToConnections(
+  connections: readonly Connection[],
+  change: SourceChange,
+  pushEpoch: number,
+): Stream<'yield'> {
+  let i = 0;
+  let reconciling = false;
+  return eachStream(() => {
+    if (!reconciling) {
+      while (i < connections.length) {
+        const conn = connections[i++];
+        const {output, filters, input} = conn;
+        if (output) {
+          conn.lastPushedEpoch = pushEpoch;
+          return filterPush(
+            toOutputChange(change),
+            output,
+            input,
+            filters?.predicate,
+          );
+        }
+      }
+      reconciling = true;
+      i = 0;
+    }
+    while (i < connections.length) {
+      const {output, input} = connections[i++];
+      if (output?.reconcile) {
+        return output.reconcile(input);
+      }
+    }
+    return undefined;
+  });
 }
 
 export function* generateWithStart(
