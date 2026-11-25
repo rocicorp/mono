@@ -24,7 +24,13 @@ import {
   type Storage,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import {andFinally, andThen, eachStream, type Stream} from './stream.ts';
+import {
+  andFinally,
+  andThen,
+  doneResult,
+  eachStream,
+  type Stream,
+} from './stream.ts';
 import type {TakeBoundProvider, TakeGate} from './take-gate.ts';
 
 type TakeState = {
@@ -138,7 +144,7 @@ export class Take implements Operator, TakeBoundProvider {
     return takeState.bound;
   }
 
-  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
+  fetch(req: FetchRequest): Stream<Node | 'yield'> {
     assert(
       !this.#partitionKey ||
         (req.constraint !== undefined &&
@@ -150,38 +156,24 @@ export class Take implements Operator, TakeBoundProvider {
     const takeState = this.#storage.get(takeStateKey);
     if (!takeState) {
       if (constraintMatchesPartitionKey(req.constraint, this.#partitionKey)) {
-        yield* this.#initialFetch(req, takeStateKey);
+        return this.#initialFetch(req, takeStateKey);
       }
-      return;
+      return emptyArray;
     }
     if (takeState.bound === undefined) {
-      return;
+      return emptyArray;
     }
-    let count = 0;
-    for (const inputNode of this.#input.fetch(req)) {
-      if (inputNode === 'yield') {
-        yield inputNode;
-        continue;
-      }
-      if (this.getSchema().compareRows(takeState.bound, inputNode.row) < 0) {
-        return;
-      }
-      if (
-        this.#rowHiddenFromFetch &&
-        this.getSchema().compareRows(
-          this.#rowHiddenFromFetch,
-          inputNode.row,
-        ) === 0
-      ) {
-        continue;
-      }
-      yield inputNode;
-      count++;
-      if (count >= this.#limit) {
-        return;
-      }
-    }
+    return new TakeNodes(
+      this.#input.fetch(req)[Symbol.iterator](),
+      this.getSchema().compareRows,
+      takeState.bound,
+      this.#limit,
+      this.#getRowHiddenFromFetch,
+    );
   }
+
+  readonly #getRowHiddenFromFetch = (): Row | undefined =>
+    this.#rowHiddenFromFetch;
 
   *#initialFetch(
     req: FetchRequest,
@@ -799,6 +791,101 @@ export class Take implements Operator, TakeBoundProvider {
         });
       },
     );
+  }
+}
+
+/**
+ * The rows of a hydrated Take: its input up to the bound or the limit. An
+ * iterator rather than a generator, see `mapNodes` in stream.ts.
+ */
+class TakeNodes implements IterableIterator<Node | 'yield'> {
+  readonly #it: Iterator<Node | 'yield'>;
+  readonly #compareRows: Comparator;
+  readonly #bound: Row;
+  readonly #limit: number;
+  readonly #getHidden: () => Row | undefined;
+  #count = 0;
+  #done = false;
+
+  constructor(
+    it: Iterator<Node | 'yield'>,
+    compareRows: Comparator,
+    bound: Row,
+    limit: number,
+    getHidden: () => Row | undefined,
+  ) {
+    this.#it = it;
+    this.#compareRows = compareRows;
+    this.#bound = bound;
+    this.#limit = limit;
+    this.#getHidden = getHidden;
+  }
+
+  [Symbol.iterator](): this {
+    return this;
+  }
+
+  next(): IteratorResult<Node | 'yield'> {
+    if (this.#done) {
+      return doneResult;
+    }
+    if (this.#count >= this.#limit) {
+      return this.return();
+    }
+    for (;;) {
+      let r: IteratorResult<Node | 'yield'>;
+      try {
+        r = this.#it.next();
+      } catch (e) {
+        // A fetch that threw is over, as a generator's is.
+        this.#done = true;
+        throw e;
+      }
+      if (r.done) {
+        this.#done = true;
+        return r;
+      }
+      const node = r.value;
+      if (node === 'yield') {
+        return r;
+      }
+      let past: boolean;
+      let hidden: boolean;
+      try {
+        past = this.#compareRows(this.#bound, node.row) < 0;
+        const hiddenRow = this.#getHidden();
+        hidden =
+          !past &&
+          hiddenRow !== undefined &&
+          this.#compareRows(hiddenRow, node.row) === 0;
+      } catch (e) {
+        // As a `for...of` does when its body throws: close the input, and
+        // report this error rather than one from closing it.
+        this.#done = true;
+        try {
+          this.#it.return?.();
+        } catch {
+          // The first error wins.
+        }
+        throw e;
+      }
+      if (past) {
+        return this.return();
+      }
+      if (hidden) {
+        continue;
+      }
+      this.#count++;
+      return r;
+    }
+  }
+
+  return(): IteratorResult<Node | 'yield'> {
+    if (!this.#done) {
+      this.#done = true;
+      this.#it.return?.();
+    }
+    return doneResult;
   }
 }
 

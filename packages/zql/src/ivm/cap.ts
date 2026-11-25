@@ -17,7 +17,7 @@ import {
   type Storage,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import {andThen, type Stream} from './stream.ts';
+import {andThen, doneResult, type Stream} from './stream.ts';
 import {
   constraintMatchesPartitionKey,
   makePartitionKeyComparator,
@@ -87,7 +87,7 @@ export class Cap implements Operator {
     return this.#input.getSchema();
   }
 
-  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
+  fetch(req: FetchRequest): Stream<Node | 'yield'> {
     assert(!req.start, 'Cap does not support start');
     assert(!req.reverse, 'Cap does not support reverse');
 
@@ -105,35 +105,22 @@ export class Cap implements Operator {
     const capStateKey = getCapStateKey(this.#partitionKey, req.constraint);
     const capState = this.#storage.get(capStateKey);
     if (!capState) {
-      yield* this.#initialFetch(req, capStateKey);
-      return;
+      return this.#initialFetch(req, capStateKey);
     }
     if (capState.size === 0) {
-      return;
+      return emptyArray;
     }
     if (req.countOnly) {
-      for (let i = 0; i < capState.size; i++) {
-        yield placeholderNode;
-      }
-      return;
+      return placeholderNodes(capState.size);
     }
     // PK-based point lookups: fetch each tracked row by its PK directly,
     // rather than scanning the partition and filtering.
-    for (const pk of capState.pks) {
-      const pkConstraint = deserializePKToConstraint(pk, this.#primaryKey);
-      // Preserve req.constraint (the partition key) so upstream partitioned
-      // operators (e.g. Take) retain their partition scope and do not throw.
-      const constraint = req.constraint
-        ? {...req.constraint, ...pkConstraint}
-        : pkConstraint;
-      for (const inputNode of this.#input.fetch({constraint})) {
-        if (inputNode === 'yield') {
-          yield inputNode;
-          continue;
-        }
-        yield inputNode;
-      }
-    }
+    return new CapNodes(
+      this.#input,
+      capState.pks,
+      this.#primaryKey,
+      req.constraint,
+    );
   }
 
   *#initialFetch(
@@ -372,6 +359,81 @@ export class Cap implements Operator {
   reconcile(_pusher: InputBase): Stream<'yield'> {
     return this.#output.reconcile ? this.#output.reconcile(this) : emptyArray;
   }
+}
+
+/**
+ * The tracked rows of a Cap, each fetched by its primary key. An iterator
+ * rather than a generator, see `mapNodes` in stream.ts.
+ */
+class CapNodes implements IterableIterator<Node | 'yield'> {
+  readonly #input: Input;
+  readonly #pks: readonly string[];
+  readonly #primaryKey: PrimaryKey;
+  readonly #constraint: Constraint | undefined;
+  #next = 0;
+  #it: Iterator<Node | 'yield'> | undefined = undefined;
+
+  constructor(
+    input: Input,
+    pks: readonly string[],
+    primaryKey: PrimaryKey,
+    constraint: Constraint | undefined,
+  ) {
+    this.#input = input;
+    this.#pks = pks;
+    this.#primaryKey = primaryKey;
+    this.#constraint = constraint;
+  }
+
+  [Symbol.iterator](): this {
+    return this;
+  }
+
+  next(): IteratorResult<Node | 'yield'> {
+    try {
+      for (;;) {
+        if (this.#it !== undefined) {
+          const r = this.#it.next();
+          if (!r.done) {
+            return r;
+          }
+          this.#it = undefined;
+        }
+        if (this.#next >= this.#pks.length) {
+          return doneResult;
+        }
+        const pkConstraint = deserializePKToConstraint(
+          this.#pks[this.#next++],
+          this.#primaryKey,
+        );
+        // Preserve req.constraint (the partition key) so upstream partitioned
+        // operators (e.g. Take) retain their partition scope and do not throw.
+        const constraint = this.#constraint
+          ? {...this.#constraint, ...pkConstraint}
+          : pkConstraint;
+        this.#it = this.#input.fetch({constraint})[Symbol.iterator]();
+      }
+    } catch (e) {
+      // A fetch that threw is over, as a generator's is: it does not go on
+      // to the next row.
+      this.#it = undefined;
+      this.#next = this.#pks.length;
+      throw e;
+    }
+  }
+
+  return(): IteratorResult<Node | 'yield'> {
+    const it = this.#it;
+    this.#it = undefined;
+    this.#next = this.#pks.length;
+    it?.return?.();
+    return doneResult;
+  }
+}
+
+/** `size` placeholder nodes, for a countOnly fetch. */
+function placeholderNodes(size: number): Node[] {
+  return Array.from<Node>({length: size}).fill(placeholderNode);
 }
 
 // Yielded for each tracked row of a countOnly fetch.
