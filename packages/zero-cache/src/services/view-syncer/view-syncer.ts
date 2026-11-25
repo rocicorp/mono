@@ -4362,27 +4362,27 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         await attemptRetransform(backgroundConnCtx);
         return;
       } catch (e) {
-        if (isProtocolError(e)) {
-          if (isAuthErrorBody(e.errorBody)) {
-            lc.warn?.(
-              'Background retransform auth failed; failing connection and searching for replacement',
-              {
-                clientID: backgroundConnCtx.clientID,
-                message: e.message,
-              },
-            );
-            this.#failMaintenanceConnection(backgroundConnCtx, e);
-          } else if (isTransformFailedError(e)) {
-            lc.warn?.(
-              'Background retransform failed; deferring auth maintenance',
-              {
-                clientID: backgroundConnCtx.clientID,
-                message: e.message,
-              },
-            );
-            this.connContextManager.deferMaintenance('retransform');
-            return;
-          }
+        // Only an auth failure can be recovered by selecting another connection.
+        // In particular, a CVR version mismatch must escape the group lock.
+        if (isProtocolError(e) && isAuthErrorBody(e.errorBody)) {
+          lc.warn?.(
+            'Background retransform auth failed; failing connection and searching for replacement',
+            {
+              clientID: backgroundConnCtx.clientID,
+              message: e.message,
+            },
+          );
+          this.#failMaintenanceConnection(backgroundConnCtx, e);
+        } else if (isProtocolError(e) && isTransformFailedError(e)) {
+          lc.warn?.(
+            'Background retransform failed; deferring auth maintenance',
+            {
+              clientID: backgroundConnCtx.clientID,
+              message: e.message,
+            },
+          );
+          this.connContextManager.deferMaintenance('retransform');
+          return;
         } else {
           throw e;
         }
