@@ -13,7 +13,7 @@ import {
 import type {Node} from './data.ts';
 import type {InputBase, Output} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import type {Stream} from './stream.ts';
+import {andThen, eachStream, type Stream} from './stream.ts';
 
 /**
  * # pushAccumulatedChanges
@@ -84,7 +84,7 @@ import type {Stream} from './stream.ts';
  * If an edit enters and is converted to only add or only remove, it exits as that change.
  * If an edit enters and exits as edits only, it exits as a single edit.
  */
-export function* pushAccumulatedChanges(
+export function pushAccumulatedChanges(
   accumulatedPushes: Change[],
   output: Output,
   pusher: InputBase,
@@ -98,7 +98,7 @@ export function* pushAccumulatedChanges(
   if (accumulatedPushes.length === 0) {
     // It is possible for no forks to pass along the push.
     // E.g., if no filters match in any fork.
-    return;
+    return emptyArray;
   }
 
   // A union nested in a branch keeps the row but reports its witness changes
@@ -152,24 +152,37 @@ export function* pushAccumulatedChanges(
     candidatesToPush.size > 0,
     'Fan-in: witness changes without a change for their row',
   );
-  for (const change of witnessesLeft) {
-    yield* output.push(change, pusher);
+  const collapsed = () =>
+    pushCollapsed(
+      candidatesToPush,
+      output,
+      pusher,
+      fanOutChangeType,
+      mergeRelationships,
+      addEmptyRelationships,
+      isBranchRel,
+    );
+  if (witnessesLeft.length === 0 && witnessesEntered.length === 0) {
+    return collapsed();
   }
-  yield* pushCollapsed(
-    candidatesToPush,
-    output,
-    pusher,
-    fanOutChangeType,
-    mergeRelationships,
-    addEmptyRelationships,
-    isBranchRel,
+  return andThen(pushAll(witnessesLeft, output, pusher), () =>
+    andThen(collapsed(), () => pushAll(witnessesEntered, output, pusher)),
   );
-  for (const change of witnessesEntered) {
-    yield* output.push(change, pusher);
-  }
 }
 
-function* pushCollapsed(
+/** Pushes `changes`, one after the other. */
+function pushAll(
+  changes: readonly Change[],
+  output: Output,
+  pusher: InputBase,
+): Stream<'yield'> {
+  let i = 0;
+  return eachStream(() =>
+    i === changes.length ? undefined : output.push(changes[i++], pusher),
+  );
+}
+
+function pushCollapsed(
   candidatesToPush: Map<ChangeType, Change>,
   output: Output,
   pusher: InputBase,
@@ -195,21 +208,19 @@ function* pushCollapsed(
         types.length === 1 && types[0] === ChangeType.REMOVE,
         'Fan-in:remove expected all removes',
       );
-      yield* output.push(
+      return output.push(
         addEmptyRelationships(must(candidatesToPush.get(ChangeType.REMOVE))),
         pusher,
       );
-      return;
     case ChangeType.ADD:
       assert(
         types.length === 1 && types[0] === ChangeType.ADD,
         'Fan-in:add expected all adds',
       );
-      yield* output.push(
+      return output.push(
         addEmptyRelationships(must(candidatesToPush.get(ChangeType.ADD))),
         pusher,
       );
-      return;
     case ChangeType.EDIT: {
       assert(
         types.every(
@@ -229,41 +240,47 @@ function* pushCollapsed(
       // them; branches it entered bring theirs. An edit syncs one row, so
       // those must travel as child changes around it.
       if (isBranchRel && (editChange || (addChange && removeChange))) {
-        if (removeChange) {
-          yield* pushWitnessDeltas(
-            removeChange[ChangeIndex.NODE],
-            ChangeType.REMOVE,
-            isBranchRel,
-            output,
-            pusher,
-          );
-        }
         const strip = (n: Node): Node => ({
           row: n.row,
           relationships: Object.fromEntries(
             Object.entries(n.relationships).filter(([k]) => !isBranchRel(k)),
           ),
         });
-        yield* output.push(
-          addEmptyRelationships(
-            editChange ??
-              makeEditChange(
-                strip(must(addChange)[ChangeIndex.NODE]),
-                strip(must(removeChange)[ChangeIndex.NODE]),
+        const edit = editChange;
+        return andThen(
+          removeChange
+            ? pushWitnessDeltas(
+                removeChange[ChangeIndex.NODE],
+                ChangeType.REMOVE,
+                isBranchRel,
+                output,
+                pusher,
+              )
+            : emptyArray,
+          () =>
+            andThen(
+              output.push(
+                addEmptyRelationships(
+                  edit ??
+                    makeEditChange(
+                      strip(must(addChange)[ChangeIndex.NODE]),
+                      strip(must(removeChange)[ChangeIndex.NODE]),
+                    ),
+                ),
+                pusher,
               ),
-          ),
-          pusher,
+              () =>
+                addChange
+                  ? pushWitnessDeltas(
+                      addChange[ChangeIndex.NODE],
+                      ChangeType.ADD,
+                      isBranchRel,
+                      output,
+                      pusher,
+                    )
+                  : emptyArray,
+            ),
         );
-        if (addChange) {
-          yield* pushWitnessDeltas(
-            addChange[ChangeIndex.NODE],
-            ChangeType.ADD,
-            isBranchRel,
-            output,
-            pusher,
-          );
-        }
-        return;
       }
 
       // If an `edit` is present, it supersedes `add` and `remove`
@@ -275,8 +292,7 @@ function* pushCollapsed(
         if (removeChange) {
           editChange = mergeRelationships(editChange, removeChange);
         }
-        yield* output.push(addEmptyRelationships(editChange), pusher);
-        return;
+        return output.push(addEmptyRelationships(editChange), pusher);
       }
 
       // If `edit` didn't make it through but both `add` and `remove` did,
@@ -297,7 +313,7 @@ function* pushCollapsed(
       // The left filter converts the edit into a remove.
       // The right filter converts the edit into an add.
       if (addChange && removeChange) {
-        yield* output.push(
+        return output.push(
           addEmptyRelationships(
             makeEditChange(
               addChange[ChangeIndex.NODE],
@@ -306,14 +322,12 @@ function* pushCollapsed(
           ),
           pusher,
         );
-        return;
       }
 
-      yield* output.push(
+      return output.push(
         addEmptyRelationships(must(addChange ?? removeChange)),
         pusher,
       );
-      return;
     }
     case ChangeType.CHILD: {
       assert(
@@ -335,26 +349,32 @@ function* pushCollapsed(
       if (childChange) {
         const left = candidatesToPush.get(ChangeType.REMOVE);
         const entered = candidatesToPush.get(ChangeType.ADD);
-        if (isBranchRel && left) {
-          yield* pushWitnessDeltas(
-            left[ChangeIndex.NODE],
-            ChangeType.REMOVE,
-            isBranchRel,
-            output,
-            pusher,
-          );
+        if (!isBranchRel) {
+          return output.push(childChange, pusher);
         }
-        yield* output.push(childChange, pusher);
-        if (isBranchRel && entered) {
-          yield* pushWitnessDeltas(
-            entered[ChangeIndex.NODE],
-            ChangeType.ADD,
-            isBranchRel,
-            output,
-            pusher,
-          );
-        }
-        return;
+        return andThen(
+          left
+            ? pushWitnessDeltas(
+                left[ChangeIndex.NODE],
+                ChangeType.REMOVE,
+                isBranchRel,
+                output,
+                pusher,
+              )
+            : emptyArray,
+          () =>
+            andThen(output.push(childChange, pusher), () =>
+              entered
+                ? pushWitnessDeltas(
+                    entered[ChangeIndex.NODE],
+                    ChangeType.ADD,
+                    isBranchRel,
+                    output,
+                    pusher,
+                  )
+                : emptyArray,
+            ),
+        );
       }
 
       const addChange = candidatesToPush.get(ChangeType.ADD);
@@ -365,15 +385,15 @@ function* pushCollapsed(
         'Fan-in:child expected either add or remove, not both',
       );
 
-      yield* output.push(
+      return output.push(
         addEmptyRelationships(must(addChange ?? removeChange)),
         pusher,
       );
-      return;
     }
     default:
       fanOutChangeType satisfies never;
   }
+  return emptyArray;
 }
 
 /**

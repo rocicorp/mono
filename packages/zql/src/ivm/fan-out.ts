@@ -1,4 +1,6 @@
+import {makeEmptyIteratorWithReturn} from '../../../shared/src/iterables.ts';
 import {must} from '../../../shared/src/must.ts';
+import {emptyArray} from '../../../shared/src/sentinels.ts';
 import {ChangeIndex} from './change-index.ts';
 import type {Change} from './change.ts';
 import type {Node} from './data.ts';
@@ -9,7 +11,7 @@ import type {
   FilterOutput,
 } from './filter-operators.ts';
 import type {InputBase} from './operator.ts';
-import type {Stream} from './stream.ts';
+import {andThen, eachStream, type Stream} from './stream.ts';
 
 /**
  * Forks a stream into multiple streams.
@@ -62,35 +64,89 @@ export class FanOut implements FilterOperator {
     }
   }
 
-  *filter(node: Node): IterableIterator<'yield', boolean> {
-    let result = false;
-    for (const output of this.#outputs) {
-      result = (yield* output.filter(node)) || result;
-      if (result) {
+  filter(node: Node): IterableIterator<'yield', boolean> {
+    const outputs = this.#outputs;
+    for (let i = 0; i < outputs.length; i++) {
+      const it = outputs[i].filter(node);
+      const r = it.next();
+      if (!r.done) {
+        // A branch yielded: the rest is read lazily.
+        return this.#filterRest(node, i, it);
+      }
+      if (r.value) {
+        return emptyIteratorReturnTrue;
+      }
+    }
+    return emptyIteratorReturnFalse;
+  }
+
+  /** filter() from the branch `i`, whose answer `it` has just yielded. */
+  *#filterRest(
+    node: Node,
+    i: number,
+    it: Iterator<'yield', boolean>,
+  ): IterableIterator<'yield', boolean> {
+    let answered = false;
+    try {
+      yield 'yield';
+      for (;;) {
+        const r = it.next();
+        if (r.done) {
+          answered = true;
+          if (r.value) {
+            return true;
+          }
+          break;
+        }
+        yield r.value;
+      }
+    } finally {
+      // The consumer stopped reading while the branch was yielding.
+      if (!answered) {
+        it.return?.();
+      }
+    }
+    const outputs = this.#outputs;
+    for (i++; i < outputs.length; i++) {
+      if (yield* outputs[i].filter(node)) {
         return true;
       }
     }
-    return result;
+    return false;
   }
 
-  *push(change: Change) {
-    for (const out of this.#outputs) {
-      yield* out.push(change, this);
-    }
-    yield* must(
-      this.#fanIn,
-      'fan-out must have a corresponding fan-in set!',
-    ).fanOutDonePushingToAllBranches(change[ChangeIndex.TYPE]);
+  push(change: Change): Stream<'yield'> {
+    const outputs = this.#outputs;
+    let i = 0;
+    return andThen(
+      eachStream(() =>
+        i === outputs.length ? undefined : outputs[i++].push(change, this),
+      ),
+      () =>
+        must(
+          this.#fanIn,
+          'fan-out must have a corresponding fan-in set!',
+        ).fanOutDonePushingToAllBranches(change[ChangeIndex.TYPE]),
+    );
   }
 
-  *reconcile(_pusher: InputBase): Stream<'yield'> {
-    for (const output of this.#outputs) {
-      if (output.reconcile) {
-        yield* output.reconcile(this);
-      }
-    }
-    if (this.#fanIn) {
-      yield* this.#fanIn.fanOutDoneReconciling();
-    }
+  reconcile(_pusher: InputBase): Stream<'yield'> {
+    const outputs = this.#outputs;
+    let i = 0;
+    return andThen(
+      eachStream(() => {
+        while (i < outputs.length) {
+          const output = outputs[i++];
+          if (output.reconcile) {
+            return output.reconcile(this);
+          }
+        }
+        return undefined;
+      }),
+      () => (this.#fanIn ? this.#fanIn.fanOutDoneReconciling() : emptyArray),
+    );
   }
 }
+
+const emptyIteratorReturnTrue = makeEmptyIteratorWithReturn(true);
+const emptyIteratorReturnFalse = makeEmptyIteratorWithReturn(false);
