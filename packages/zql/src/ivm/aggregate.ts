@@ -719,9 +719,9 @@ export class Aggregate implements Operator {
 
 /**
  * Orders the values a min/max reduces. A JSON path's leaves can be numbers or
- * strings, decided per value; numbers order before strings, as in JS and
- * SQLite (z2s compiles the same rule rather than Postgres's jsonb ordering,
- * which puts strings first). Otherwise it is {@link compareValues}.
+ * strings, decided per value; strings order before numbers, as in Postgres's
+ * jsonb ordering and in rindle (z2s compiles the same rule). Otherwise it is
+ * {@link compareValues}.
  */
 function compareAggregateValues(
   a: NormalizedValue,
@@ -734,7 +734,7 @@ function compareAggregateValues(
     (typeof a === 'number' || typeof a === 'string') &&
     (typeof b === 'number' || typeof b === 'string')
   ) {
-    return typeof a === 'number' ? -1 : 1;
+    return typeof a === 'string' ? -1 : 1;
   }
   return compareValues(a, b);
 }

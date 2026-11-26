@@ -594,8 +594,8 @@ export type Aggregate = {
 /**
  * The value an aggregate reduces for `row`: the `field` column itself, or, with
  * a `path`, the JSON leaf at that path when it is one the aggregate takes: a
- * number for `sum`/`avg`, a number or a string for `min`/`max` (numbers order
- * before strings, see `compareAggregateValues`). Any other leaf, or a missing
+ * number for `sum`/`avg`, a number or a string for `min`/`max` (strings order
+ * before numbers, see `compareAggregateValues`). Any other leaf, or a missing
  * one, is `null`, which aggregates skip. Shared by the IVM operator, the
  * junction lift and the client's optimistic delta so the rule cannot drift.
  */

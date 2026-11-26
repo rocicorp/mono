@@ -847,8 +847,8 @@ export interface Query<
   >;
   /**
    * The minimum of the number and string leaves at a path inside a `json()`
-   * column. Numbers order before strings (as in JS and SQLite), so a path
-   * holding both yields its smallest number. Other leaves are skipped.
+   * column. Strings order before numbers (as in Postgres's jsonb), so a path
+   * holding both yields its smallest string. Other leaves are skipped.
    */
   min<TColumnType, const P extends readonly (string | number)[]>(
     selector: (
@@ -877,8 +877,8 @@ export interface Query<
   >;
   /**
    * The maximum of the number and string leaves at a path inside a `json()`
-   * column. Numbers order before strings, so a path holding both yields its
-   * largest string. Other leaves are skipped.
+   * column. Strings order before numbers, so a path holding both yields its
+   * largest number. Other leaves are skipped.
    */
   max<TColumnType, const P extends readonly (string | number)[]>(
     selector: (

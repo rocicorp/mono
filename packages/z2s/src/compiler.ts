@@ -276,9 +276,9 @@ function aggregateExpr(spec: Spec, zqlTable: string, agg: Aggregate): SQLQuery {
  * (skipped) rather than a cast error.
  *
  * `min`/`max` reduce numbers and strings separately and combine them with the
- * client's cross-type order, numbers before strings (`compareAggregateValues`),
- * instead of Postgres's jsonb order, which puts strings first. The result is
- * jsonb so either type comes back as itself.
+ * client's cross-type order, strings before numbers (`compareAggregateValues`),
+ * which is also Postgres's jsonb order. The result is jsonb so either type
+ * comes back as itself.
  */
 function jsonAggregateExpr(
   spec: Spec,
@@ -301,16 +301,18 @@ function jsonAggregateExpr(
     path,
   );
   const num = sql`(CASE WHEN ${jsonType} = 'number' THEN ${raw}::float8 END)`;
-  const str = sql`(CASE WHEN ${jsonType} = 'string' THEN ${raw} END)`;
+  // The client compares strings by their UTF-8 bytes, not the database's
+  // collation.
+  const str = sql`(CASE WHEN ${jsonType} = 'string' THEN ${raw} END) COLLATE "C"`;
   switch (fn) {
     case 'sum':
       return sql`SUM(${num})::float8`;
     case 'avg':
       return sql`AVG(${num})::float8`;
     case 'min':
-      return sql`COALESCE(to_jsonb(MIN(${num})), to_jsonb(MIN(${str})))`;
+      return sql`COALESCE(to_jsonb(MIN(${str})), to_jsonb(MIN(${num})))`;
     case 'max':
-      return sql`COALESCE(to_jsonb(MAX(${str})), to_jsonb(MAX(${num})))`;
+      return sql`COALESCE(to_jsonb(MAX(${num})), to_jsonb(MAX(${str})))`;
     case 'count':
       throw new Error('count() takes no JSON path');
     default:
