@@ -1,11 +1,10 @@
+import type {LogContext} from '@rocicorp/logger';
 import {
-  assert,
   assertNumber,
   assertObject,
   assertString,
 } from '../../../shared/src/asserts.ts';
 import {getBrowserGlobal} from '../../../shared/src/browser-env.ts';
-import {deepFreeze} from '../frozen-json.ts';
 import type {CreateStore, Read, Store} from '../kv/store.ts';
 import {withRead, withWrite} from '../with-transactions.ts';
 import {getIDBDatabasesDBName} from './idb-databases-store-db-name.ts';
@@ -30,20 +29,6 @@ export type IndexedDBDatabaseRecord = {
   readonly [name: IndexedDBName]: IndexedDBDatabase;
 };
 
-function assertIndexedDBDatabaseRecord(
-  value: unknown,
-): asserts value is IndexedDBDatabaseRecord {
-  assertObject(value);
-  for (const [name, db] of Object.entries(value)) {
-    assertString(name);
-    assertIndexedDBDatabase(db);
-    assert(
-      name === db.name,
-      () => `Expected record key "${name}" to match db.name "${db.name}"`,
-    );
-  }
-}
-
 function assertIndexedDBDatabase(
   value: unknown,
 ): asserts value is IndexedDBDatabase {
@@ -57,11 +42,22 @@ function assertIndexedDBDatabase(
   }
 }
 
+function isIndexedDBDatabase(value: unknown): value is IndexedDBDatabase {
+  try {
+    assertIndexedDBDatabase(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export class IDBDatabasesStore {
   readonly #kvStore: Store;
+  readonly #lc: LogContext | undefined;
 
-  constructor(createKVStore: CreateStore) {
+  constructor(createKVStore: CreateStore, lc?: LogContext | undefined) {
     this.#kvStore = createKVStore(getIDBDatabasesDBName());
+    this.#lc = lc;
   }
 
   putDatabase(db: IndexedDBDatabase): Promise<IndexedDBDatabaseRecord> {
@@ -76,7 +72,7 @@ export class IDBDatabasesStore {
 
   #putDatabase(db: IndexedDBDatabase): Promise<IndexedDBDatabaseRecord> {
     return withWrite(this.#kvStore, async write => {
-      const oldDbRecord = await getDatabases(write);
+      const oldDbRecord = await getDatabases(write, this.#lc);
       const dbRecord = {
         ...oldDbRecord,
         [db.name]: db,
@@ -92,7 +88,7 @@ export class IDBDatabasesStore {
 
   deleteDatabases(names: Iterable<IndexedDBName>): Promise<void> {
     return withWrite(this.#kvStore, async write => {
-      const oldDbRecord = await getDatabases(write);
+      const oldDbRecord = await getDatabases(write, this.#lc);
       const dbRecord = {
         ...oldDbRecord,
       };
@@ -104,7 +100,7 @@ export class IDBDatabasesStore {
   }
 
   getDatabases(): Promise<IndexedDBDatabaseRecord> {
-    return withRead(this.#kvStore, getDatabases);
+    return withRead(this.#kvStore, read => getDatabases(read, this.#lc));
   }
 
   close(): Promise<void> {
@@ -137,11 +133,44 @@ export class IDBDatabasesStore {
   }
 }
 
-async function getDatabases(read: Read): Promise<IndexedDBDatabaseRecord> {
-  let dbRecord = await read.get(DBS_KEY);
-  if (!dbRecord) {
-    dbRecord = deepFreeze({});
+const EMPTY_RECORD: IndexedDBDatabaseRecord = Object.freeze({});
+
+/**
+ * Reads the registry, leaving out any entry that is not a valid database
+ * record (or whose key is not its name), and reading a record that is not an
+ * object as empty. Every open and every drop reads through here, so one
+ * malformed entry must not make them all fail; `putDatabase` and
+ * `deleteDatabases` write the record back without it, which repairs the
+ * registry. A database whose entry is left out is no longer collected, and
+ * nothing could reach it while the entry failed to read either.
+ */
+async function getDatabases(
+  read: Read,
+  lc: LogContext | undefined,
+): Promise<IndexedDBDatabaseRecord> {
+  const dbRecord = await read.get(DBS_KEY);
+  if (dbRecord === undefined) {
+    return EMPTY_RECORD;
   }
-  assertIndexedDBDatabaseRecord(dbRecord);
-  return dbRecord;
+  if (
+    typeof dbRecord !== 'object' ||
+    dbRecord === null ||
+    Array.isArray(dbRecord)
+  ) {
+    lc?.warn?.('Ignoring the databases registry: it is not an object.');
+    return EMPTY_RECORD;
+  }
+  const valid: Record<IndexedDBName, IndexedDBDatabase> = {};
+  let malformed = false;
+  for (const [name, db] of Object.entries(dbRecord)) {
+    if (isIndexedDBDatabase(db) && db.name === name) {
+      valid[name] = db;
+    } else {
+      malformed = true;
+      lc?.warn?.(
+        `Ignoring malformed entry "${name}" in the databases registry.`,
+      );
+    }
+  }
+  return malformed ? valid : (dbRecord as IndexedDBDatabaseRecord);
 }
