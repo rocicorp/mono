@@ -34,7 +34,7 @@ export async function analyzeQuery(
   auth?: JWTAuth,
   joinPlans = false,
 ): Promise<AnalyzeQueryResult> {
-  using db = new Database(lc, config.replica.file);
+  using db = new Database(lc, config.replica.file, {readonly: true});
   const fullTables = new Map<string, LiteTableSpec>();
   const tableSpecs = new Map<string, LiteAndZqlSpec>();
   const tables = new Map<string, TableSource>();

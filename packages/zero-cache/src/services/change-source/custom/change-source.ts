@@ -80,7 +80,8 @@ export async function initializeCustomChangeSource(
 
   const replica = new Database(lc, replicaDbFile);
   const subscriptionState = getSubscriptionState(new StatementRunner(replica));
-  replica.close();
+  // The replica's statistics are maintained by the replicator.
+  replica.close({optimize: false});
 
   if (shard.publications.length) {
     // Verify that the publications match what has been synced.

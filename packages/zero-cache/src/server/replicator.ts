@@ -168,7 +168,7 @@ export default async function runWorker(
   // Create the write worker for async SQLite writes. Enable write-path
   // checkpoint backpressure only for the backup replicator on litestream v5,
   // which owns the replica litestream backs up.
-  const pragmas = getPragmaConfig();
+  const pragmas = getPragmaConfig(config.replica.analysisLimit);
   const checkpoint: ForceCheckpointConfig | null =
     mode === 'backup' &&
     config.litestream.backupURL &&
