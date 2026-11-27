@@ -18,6 +18,12 @@ export type ConnectParams = {
   readonly debugPerf: boolean;
   readonly auth: string | undefined;
   readonly userID: string | undefined;
+  /**
+   * Which connections should share a sync worker. An explicit key lets connections
+   * with no user, or with different ones, be placed together. Used only for
+   * placement, so it is not validated.
+   */
+  readonly affinityKey?: string | undefined;
   readonly initConnectionMsg: InitConnectionMessage | undefined;
   readonly httpCookie: string | undefined;
   readonly origin: string | undefined;
@@ -67,6 +73,7 @@ export function getConnectParams(
     const lmID = params.getInteger('lmid', true);
     const wsID = params.get('wsid', false) ?? '';
     const userID = params.get('userID', false) ?? undefined;
+    const affinityKey = params.get('affinityKey', false) ?? userID;
     const debugPerf = params.getBoolean('debugPerf');
     const {initConnectionMessage, authToken} = decodeSecProtocols(
       must(headers['sec-websocket-protocol']),
@@ -86,6 +93,7 @@ export function getConnectParams(
         initConnectionMsg: initConnectionMessage,
         auth: authToken,
         userID,
+        affinityKey,
         httpCookie: headers.cookie,
         origin: headers.origin,
         requestHeaders: normalizeHeaders(headers),

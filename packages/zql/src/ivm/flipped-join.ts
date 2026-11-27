@@ -194,7 +194,7 @@ export class FlippedJoin implements Input {
     this.#parent.destroy();
   }
 
-  get parentIndexForTest(): JoinIndex {
+  get parentIndex(): JoinIndex {
     return this.#parentIndex;
   }
 
